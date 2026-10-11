@@ -97,3 +97,11 @@ assert(newCss.includes('.marrow-cards.marrow-review-mode .marrow-review-scroll')
 assert(newCss.includes('overflow-y: auto'), 'Review content must be vertically scrollable');
 assert(newCss.includes('grid-template-columns: repeat(3, minmax(0, 1fr))'), 'Three action buttons must fit side by side');
 console.log('Review layout and flip-back behavior checks passed.');
+
+
+assert(src.includes('async cleanPilotArtifacts()'), 'Pilot reset function missing');
+assert(src.includes('RETIRED_CARD_IDS'), 'Pilot event reset list missing');
+assert(src.includes('PILOT_RESET_FILE'), 'Synced reset marker missing');
+assert(src.includes('this.pilotResetBefore'), 'Post-reset future review protection missing');
+assert(!src.includes('Install two DEMO cards'), 'Demo install button should be gone');
+console.log('Pilot reset code checks passed.');
