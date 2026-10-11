@@ -50,6 +50,14 @@ function validatePack(pack) {
   }
   return pack;
 }
+
+function compareVersions(a, b) {
+  const parse = s => String(s || '0.0.0').split('.').slice(0,3).map(x => Number(x) || 0);
+  const x = parse(a), y = parse(b);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+}
+
 function tally(events) {
   const result = new Map();
   const eventIds = new Set();
@@ -159,6 +167,70 @@ class MarrowCardsPlugin extends Plugin {
     this.writeQueue = this.writeQueue.catch(() => {}).then(save);
     return this.writeQueue;
   }
+
+  async importLocalBundle(file) {
+    if (!file || typeof file.text !== 'function') throw new Error('Select a Marrow Cards .json bundle.');
+    if (file.size > 40 * 1024 * 1024) throw new Error('The selected bundle is too large (40 MB limit).');
+    const data = JSON.parse(await file.text());
+    if (!data || data.format !== 'marrow-cards-bundle' || data.schemaVersion !== 1) throw new Error('Not a supported Marrow Cards bundle.');
+    const pack = validatePack(data.pack);
+    if (!Array.isArray(data.media)) throw new Error('Bundle has no media list.');
+    const supplied = new Map();
+    const decoded = new Map();
+    for (const item of data.media) {
+      if (!item || !safePath(item.filename) || item.filename.includes('/') || !ALLOWED_IMAGE.test(item.filename) ||
+          typeof item.dataBase64 !== 'string' || !/^[A-Za-z0-9+/=\s]+$/.test(item.dataBase64) ||
+          typeof item.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.sha256) || supplied.has(item.filename)) {
+        throw new Error('Invalid media entry in bundle.');
+      }
+      const binary = base64ToArrayBuffer(item.dataBase64.replace(/\s/g, ''));
+      if (binary.byteLength < 10 || binary.byteLength > 15 * 1024 * 1024) throw new Error('Invalid image byte length: ' + item.filename);
+      const sha = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', binary))).map(b => b.toString(16).padStart(2, '0')).join('');
+      if (sha !== item.sha256) throw new Error('Image checksum mismatch: ' + item.filename);
+      supplied.set(item.filename, true);
+      decoded.set(item.filename, binary);
+    }
+    const used = new Set(pack.cards.flatMap(c => c.images || []));
+    for (const image of used) if (!supplied.has(image)) throw new Error('Image missing from bundle: ' + image);
+    for (const image of supplied.keys()) if (!used.has(image)) throw new Error('Unused image: ' + image);
+    const path = PACKS + '/' + pack.packId + '.json';
+    const existingFile = this.app.vault.getAbstractFileByPath(path);
+    if (existingFile) {
+      const existing = validatePack(JSON.parse(await this.app.vault.read(existingFile)));
+      if (compareVersions(pack.version, existing.version) < 0) throw new Error('Cannot replace a newer installed pack with an older bundle.');
+    }
+    for (const f of this.app.vault.getFiles().filter(x => x.path.startsWith(PACKS + '/') && x.path !== path && x.extension === 'json')) {
+      const other = validatePack(JSON.parse(await this.app.vault.read(f)));
+      const ids = new Set(other.cards.map(c => c.id));
+      for (const c of pack.cards) if (ids.has(c.id)) throw new Error('Card ID already belongs to another pack: ' + c.id);
+    }
+    await this.ensureDirectories();
+    for (const [name, binary] of decoded) {
+      const mediaPath = MEDIA + '/' + name;
+      const file = this.app.vault.getAbstractFileByPath(mediaPath);
+      if (file) {
+        const old = await this.app.vault.readBinary(file);
+        const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', old))).map(b => b.toString(16).padStart(2, '0')).join('');
+        const expected = data.media.find(m => m.filename === name).sha256;
+        if (hash !== expected) throw new Error('A different image already exists with this filename: ' + name);
+      } else await this.app.vault.createBinary(mediaPath, binary);
+    }
+    await this.writeJson(path, pack);
+    await this.refreshOpenViews();
+    new Notice('Imported ' + pack.cards.length + ' approved card(s) with ' + supplied.size + ' original image(s).');
+  }
+  chooseLocalBundle() {
+    const picker = document.createElement('input');
+    picker.type = 'file'; picker.accept = '.json,application/json'; picker.style.display = 'none';
+    document.body.appendChild(picker);
+    picker.addEventListener('change', async () => {
+      try { if (picker.files && picker.files[0]) await this.importLocalBundle(picker.files[0]); }
+      catch (err) { console.error('[Marrow Cards] import failed', err); new Notice('Import failed: ' + (err.message || String(err)), 9000); }
+      finally { picker.remove(); }
+    }, { once: true });
+    picker.click();
+  }
+
   async installDemo() {
     const demoPath = PACKS + '/demo.json';
     if (await this.app.vault.adapter.exists(demoPath)) { new Notice('Demo pack already exists'); return; }
@@ -216,7 +288,7 @@ class MarrowCardsPlugin extends Plugin {
         const existingFile = this.app.vault.getAbstractFileByPath(dest);
         if (existingFile) {
           try { const existing = JSON.parse(await this.app.vault.read(existingFile));
-            if (existing.version === info.version) continue;
+            if (compareVersions(existing.version, info.version) >= 0) continue;
           } catch (e) { /* overwrite malformed local pack only after successful remote validation */ }
         }
         const pack = validatePack(JSON.parse(await this.fetchGithub(info.path)));
@@ -281,6 +353,8 @@ class MarrowCardsView extends ItemView {
     const header = el.createDiv({ cls: 'marrow-header' });
     header.createEl('h2', { text: 'MBBS Flashcards' });
     const toolbar = header.createDiv({ cls: 'marrow-toolbar' });
+    const importButton = toolbar.createEl('button', { text: 'Import approved bundle' });
+    importButton.addEventListener('click', () => this.plugin.chooseLocalBundle());
     const refresh = toolbar.createEl('button', { text: 'Refresh local' });
     refresh.addEventListener('click', () => this.refresh());
     const sync = toolbar.createEl('button', { text: 'Check GitHub' });
@@ -391,6 +465,8 @@ class MarrowCardsView extends ItemView {
     const bar = header.createDiv({ cls: 'marrow-toolbar' });
     const library = bar.createEl('button', { text: '← MBBS library' });
     library.addEventListener('click', () => this.goLibrary('subjects'));
+    const importButton = bar.createEl('button', { text: 'Import bundle' });
+    importButton.addEventListener('click', () => this.plugin.chooseLocalBundle());
     const refresh = bar.createEl('button', { text: 'Refresh local' });
     refresh.addEventListener('click', () => this.refresh());
     const sync = bar.createEl('button', { text: 'Check GitHub' });
