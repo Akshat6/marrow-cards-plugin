@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "packs": [
+    {
+      "id": "pilot-example",
+      "path": "packs/pilot-example.json",
+      "version": "1.0.0"
+    }
+  ]
+}
