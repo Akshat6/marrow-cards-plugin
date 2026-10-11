@@ -37,7 +37,7 @@ When an approved index has images, ChatGPT can prepare one `.marrowpack.json` fi
 
 No GitHub media upload, GitHub access token, app reinstall, or folder extraction is required for this operation. **Do not upload this bundle to a public repository**; it may contain proprietary question-bank material.
 
-Note: the current integration cannot publish raw image files from this chat directly into GitHub. The bundle method avoids manual *uploading*, but does still require one local file selection per prepared batch. Future no-touch distribution would require a binary-capable publishing bridge.
+The normal publishing process now uses an automated, checksum-verified binary bridge to publish original image bytes to the **private** data repository. You do **not** need to download/upload/import files for routine approved indexes. The local bundle importer is a fallback for outages or offline recovery. See [media publishing playbook](docs/publishing-approved-cards.md).
 
 ## Connect the private approved-card collection
 
