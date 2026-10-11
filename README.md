@@ -1,106 +1,76 @@
-# Marrow Cards — Obsidian plugin
+# Marrow Cards — Obsidian plugin for indexed MBBS review
 
-Offline-first Obsidian flashcard reviewer for **user-approved** medical PYQs and personal facts. Cards, images, and review history are stored in the vault and synchronized between Android devices with Syncthing.
+An offline-first Obsidian flashcard reviewer for **user-approved** MBBS PYQs and personal facts. The public repository contains the **plugin code and instructions**. Approved cards and original images live in the separate, **private** `Akshat6/marrow-cards-data` repository. Android phone/tablet review logs are maintained per device and can sync through Syncthing.
 
-**Version:** 0.1.6 — Android cold-start reliability; remove obsolete reset cleanup while preserving approved flashcards.n-slate reset: preserve MBBS subject/index catalog and remove the old pilot cards, images and review attempts on each device.nd flip-back controls. Android UI refinement awaiting user verification. The public plugin contains no proprietary PYQs; approved PYQs live in the private data repository.
+## New ChatGPT conversation? Start here
 
-## Install with BRAT
+**[AGENTS.md — read first](AGENTS.md)** · **[Complete flashcard workflow](docs/flashcard-workflow.md)** · **[Original-image publishing procedure](docs/publishing-approved-cards.md)**
 
-1. Open your dedicated `Marrow Cards` vault.
-2. Install and enable the Obsidian community plugin **BRAT**.
-3. BRAT → **Add beta plugin** → enter `Akshat6/marrow-cards-plugin`.
-4. BRAT should find the [current beta release](https://github.com/Akshat6/marrow-cards-plugin/releases/tag/0.1.4) with its `main.js`, `manifest.json` and `styles.css` assets.
-5. Settings → Community plugins → enable **Marrow Cards**.
-6. Use the layers icon or Command Palette → **Marrow Cards: Open reviewer**.
-7. The reviewer opens at **MBBS**. Use **Check GitHub** to load the subject/index catalog; no demonstration cards are installed.nd mark Right/Wrong, then repeat a round. The image is a generated circle, **not an original PYQ**.
+The workflow explains how to look up an index in the live Google Sheets tracker, retrieve exact PYQ text/options/answers and original figures from user-provided PDFs, show cards for approval, publish *only approved cards* to the private repository, update the manifest, and verify the cards in Obsidian.
 
-The plugin supports **multiple index selection**, Right/Wrong grading, question images, full explanation text, and local Seen/Right/Wrong/Accuracy counters. `Ever wrong` and `Never seen` practice filters are included.
+Suggested first message in a new chat:
 
-## Android startup reliability (0.1.6)
+> Read https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md and the linked workflow. Prepare cards for [subject + index ID], using my live PYQ mapping and source PDFs. Show every card for my approval before publishing anything.
 
-Obsidian now registers Marrow Cards' reviewer, commands and settings **before** asynchronous local storage initialization. The obsolete one-time 0.1.5 pilot reset migration has been removed, so it cannot run at every app launch.
+**GitHub files are not automatically loaded into every new ChatGPT conversation.** Include that entry-point link or explicitly ask the new chat to read it. The instructions are designed not to require this conversation once loaded.
 
-Your approved OPH-04 flashcards, synced packs, images, review logs and indexes remain unchanged by the plugin update. The data repository currently contains four approved OPH-04 personal fact cards. You do not need to reinstall the plugin to install new card packs.
+## What the plugin does
 
-## Mobile review controls (0.1.4)
+- Navigate **MBBS → Subject → Index → Review** across the current index catalog.
+- Select **one or more indexes** to practise together, including personal `fact` cards and mapped `pyq` cards.
+- Review question/option/source image → flip to answer/explanation → flip back to question or grade **Wrong**/**Right**.
+- Scroll long questions and explanations independently of the docked action buttons on mobile.
+- Filter **All**, **Ever wrong**, or **Never seen**; show Seen/Right/Wrong counts from per-device JSONL event logs.
+- Download approved card packs and original image files from the private repository, caching locally for offline access.
+- Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
-- The question and explanation use an **independently scrollable** area.
-- The review actions remain **docked above Obsidian's bottom toolbar**, not at the end of the long question.
-- Front: **Flip to answer**.
-- Back: **Show question**, **Wrong**, **Right**. Tapping Show question flips back without recording another Seen event or grading the card; flip to answer again to mark Right or Wrong.
-- Updates change only app code, not `MarrowCards/packs/`, `MarrowCards/media/`, or `MarrowCards/reviews/`.
+## Current approved content (re-check the live private repository)
 
-## MBBS subject / index hierarchy
+On 2026-10-11, the private manifest lists:
+- `mbbs-index-catalog`: MBBS index names and IDs, not flashcards.
+- `oph04-personal-facts`: **four approved personal fact cards** for `OPH-04 / Ophthalmology / Anatomy of Retina`.
 
-The reviewer now opens at **MBBS → Subjects → Indexes → Review**. Choose **MBBS**, then a subject (such as Ophthalmology), then an index (such as **Anatomy of Retina / OPH-04**). You may select multiple indexes to review together.
+The live spreadsheet maps **zero PYQs** to OPH-04. The different index `OPH-32 / Anatomy and Investigations of Retina` has three mapped PYQ codes, but the previous pilot PYQ cards are **not** active and must not be restored without a new approval. Catalog mappings and pack counts can change; the connected sheet and live `manifest.json` take precedence over this snapshot.
 
-The private data repository currently contains only the **metadata-only** index catalog (19 subjects, 1,314 index IDs), and **no active cards or media**. The index tracker now maps all three former OPH-04 pilot PYQs to **OPH-32 — Anatomy and Investigations of Retina**; OPH-04 remains listed, with zero linked questions. All indexes still show **Awaiting approved cards** until approved packs are published.
+## Install or update via BRAT (phone and tablet)
 
-To receive the catalog: configure a read-only token for `Akshat6/marrow-cards-data` on the phone (see below), then select **Check GitHub** and **Refresh local**. Sync the vault to the tablet through Syncthing.
+1. Open the dedicated `Marrow Cards` Obsidian vault.
+2. Install/enable the **BRAT** community plugin.
+3. Add beta repository `Akshat6/marrow-cards-plugin`.
+4. Enable **Marrow Cards** under **Settings → Community plugins → Installed plugins**.
+5. Open via the layers ribbon icon or the Command Palette action **Marrow Cards: Open reviewer**.
+6. For *plugin-code changes*, use **BRAT → Check for updates**, then restart Obsidian if needed. See [GitHub releases](https://github.com/Akshat6/marrow-cards-plugin/releases).
 
-## Import a complete approved pack without uploading images to GitHub
+If it is listed as installed but its settings entry disappears after a restart, check whether it remains enabled or has a startup error. Newer versions register plugin settings before asynchronous vault initialization. **Never delete review data to fix a plugin activation issue.**
 
-When an approved index has images, ChatGPT can prepare one `.marrowpack.json` file containing the exact original images, card text, answer options, explanations and SHA-256 checksums.
+## Connect the private card database (phone)
 
-1. Download the single `.marrowpack.json` bundle from the conversation to the phone.
-2. Open Marrow Cards (anywhere in the MBBS library).
-3. Tap **Import approved bundle**, then choose that downloaded JSON file.
-4. The plugin validates the card format and all image checksums, writes the images into `MarrowCards/media/`, and writes the card pack into `MarrowCards/packs/`.
-5. Open **MBBS → Ophthalmology → Anatomy of Retina** and review the imported cards.
-6. Syncthing carries the images, card text, and later review history to the tablet without needing a second import.
+1. Create a fine-grained GitHub token scoped to **only** `Akshat6/marrow-cards-data`, with repository **Contents: Read-only** permission.
+2. Under **Obsidian → Settings → Marrow Cards**, paste it in **Read-only GitHub token** and tap **Save token locally**.
+3. Open **Marrow Cards → Check GitHub → Refresh local**. Select **MBBS → Subject → Index**.
+4. For a *card-data-only update*, repeat Check GitHub and Refresh local. **Do not reinstall the plugin or use BRAT** for new card packs.
 
-No GitHub media upload, GitHub access token, app reinstall, or folder extraction is required for this operation. **Do not upload this bundle to a public repository**; it may contain proprietary question-bank material.
+Keep the token on-device only; never share it in chat, logs, or the vault. A 404 from `manifest.json` on a private repository can mean the token lacks access to the **data** repo.
 
-The normal publishing process now uses an automated, checksum-verified binary bridge to publish original image bytes to the **private** data repository. You do **not** need to download/upload/import files for routine approved indexes. The local bundle importer is a fallback for outages or offline recovery. See [media publishing playbook](docs/publishing-approved-cards.md).
+## Syncthing and storage
 
-## Connect the private approved-card collection
+- Sync the dedicated vault folders `MarrowCards/packs/`, `MarrowCards/media/`, and `MarrowCards/reviews/` between Android devices.
+- **Exclude `.obsidian`** from Syncthing on both devices. Each device should have its own local plugin installation, token policy, settings, and review-log device ID.
+- Review log path: `MarrowCards/reviews/<device-id>/YYYY-MM.jsonl`. Don't merge files by overwriting one device's log with another.
+- On the tablet, install BRAT/Marrow Cards independently but rely on Syncthing for already downloaded approved content. Tap **Refresh local** after sync.
+- Use backups or Syncthing versioning; synchronization alone is not a backup.
 
-The question-pack repository is **private**: `Akshat6/marrow-cards-data`.
+## Repository boundaries
 
-On your **phone only**:
+**Public code:** `Akshat6/marrow-cards-plugin` — `main.js`, `manifest.json`, `styles.css`, source tests, workflow docs.
 
-1. In GitHub: Settings → Developer settings → Personal access tokens → Fine-grained tokens.
-2. Create a token scoped only to **Akshat6/marrow-cards-data**, with **Contents → Read-only** permission, and set a reasonable expiration.
-3. In Obsidian: Settings → Community plugins → Marrow Cards settings → **Read-only GitHub token** → paste token locally → **Save token locally**.
-4. Open reviewer → **Check GitHub**. It downloads the MBBS index catalog (no active cards). If Ophthalmology and other subjects appear, private authentication is working.
-5. Never send tokens to chat, place tokens in GitHub code, or store tokens in the vault. This plugin stores the token in Obsidian's local SecretStorage.
+**Private approved data:** `Akshat6/marrow-cards-data` — `manifest.json`, `packs/*.json`, `media/*`.
 
-Auto-checks run on startup and every 30 minutes **while Obsidian is running and has internet connectivity**. After a pack is installed the reviewer works offline.
+Approved card IDs are stable, pack versions increase when edited, and only approved cards appear in the app. Never commit proprietary source images, question-bank text, answer keys, private review history or credentials to the public repository.
 
-## Syncthing setup
+## Development and maintenance
 
-- Synchronize the dedicated `Marrow Cards` vault between phone and tablet.
-- On **both devices**, exclude `/.obsidian` in Syncthing Ignore Patterns. This keeps plugin settings, the token, and each device's unique review-log ID separate.
-- Install BRAT and Marrow Cards independently on the tablet. **Do not** enter the GitHub token there; let Syncthing deliver `MarrowCards/packs/` and `MarrowCards/media/`.
-- Review logs are device-separated: `MarrowCards/reviews/<device-id>/YYYY-MM.jsonl`. When Syncthing finishes, press **Refresh local** to reload merged totals.
-- Enable Syncthing file versioning or another backup. Sync alone is not a backup.
-
-## Card data model
-
-The [private data repository](https://github.com/Akshat6/marrow-cards-data) now contains only:
-
-```text
-manifest.json
-packs/mbbs-index-catalog.json
-```
-
-There are no active questions or question images in the database.
-
-The approved card's ID stays stable, even if its explanation changes. Cards can link to several indexes through `indexIds`. Supported types: `pyq` (options and images) and `fact` (simple question/answer). The app displays only approved cards and saves event logs separately from card text. Remote image imports accept JPG, PNG, WebP and GIF. They are cached locally.
-
-Every index will first be prepared for your inspection. A PYQ is published to the private data repository **only after you confirm its exact text, options, original images, answer and explanation**. Incomplete/rejected questions remain unpublished.
-
-## Limitations of the pilot
-
-- Physical Android and actual Syncthing tests are still required.
-- Rich equation/HTML support, editing inside the app, full visual review timeline, and resuming mid-queue are not yet implemented.
-- The plugin does not perform PDF extraction or AI generation; ChatGPT prepares and publishes user-approved packs.
-- No live database file is synchronized; per-device JSONL review logs avoid shared SQLite concurrency issues.
-
-## Developer notes
-
-The root `main.js`, `manifest.json`, and `styles.css` are the published plugin files; GitHub Actions packages these into a prerelease when the `manifest.json` version is incremented. Tests: `node tests/smoke.js`.
-
-See [first-device pilot test](docs/first-device-test.md) for the complete checklist.
-
-This public repository contains only plugin code and dummy examples. Keep question-bank content, media, and review history out of it.
+- Run `node tests/smoke.js` for syntax, data-model, reviewer controls and non-blocking startup regression checks.
+- For plugin-code changes, update `main.js` / `styles.css` as needed, bump `manifest.json` version, and confirm GitHub Actions released assets `main.js`, `manifest.json`, `styles.css`.
+- For **new approved cards**, update **only the private data repository** per [the workflow](docs/flashcard-workflow.md); do not bump the public plugin version.
+- See [first-device pilot test checklist](docs/first-device-test.md) for optional regression checks and [media publishing procedure](docs/publishing-approved-cards.md) for binary-image uploads.
