@@ -2,19 +2,27 @@
 
 Offline-first Obsidian flashcard reviewer for **user-approved** medical PYQs and personal facts. Cards, images, and review history are stored in the vault and synchronized between Android devices with Syncthing.
 
-**Version:** 0.1.3 — MBBS hierarchy technical pilot, not yet field-tested on physical Android devices. **No real PYQs are included.**
+**Version:** 0.1.4 — mobile reviewer dock and flip-back controls. Android UI refinement awaiting user verification. The public plugin contains no proprietary PYQs; approved PYQs live in the private data repository.
 
 ## Install with BRAT
 
 1. Open your dedicated `Marrow Cards` vault.
 2. Install and enable the Obsidian community plugin **BRAT**.
 3. BRAT → **Add beta plugin** → enter `Akshat6/marrow-cards-plugin`.
-4. BRAT should find [release 0.1.0](https://github.com/Akshat6/marrow-cards-plugin/releases/tag/0.1.0) with its `main.js`, `manifest.json` and `styles.css` assets.
+4. BRAT should find the [current beta release](https://github.com/Akshat6/marrow-cards-plugin/releases/tag/0.1.4) with its `main.js`, `manifest.json` and `styles.css` assets.
 5. Settings → Community plugins → enable **Marrow Cards**.
 6. Use the layers icon or Command Palette → **Marrow Cards: Open reviewer**.
 7. Press **Install two DEMO cards**, flip and mark Right/Wrong, then repeat a round. The image is a generated circle, **not an original PYQ**.
 
 The plugin supports **multiple index selection**, Right/Wrong grading, question images, full explanation text, and local Seen/Right/Wrong/Accuracy counters. `Ever wrong` and `Never seen` practice filters are included.
+
+## Mobile review controls (0.1.4)
+
+- The question and explanation use an **independently scrollable** area.
+- The review actions remain **docked above Obsidian's bottom toolbar**, not at the end of the long question.
+- Front: **Flip to answer**.
+- Back: **Show question**, **Wrong**, **Right**. Tapping Show question flips back without recording another Seen event or grading the card; flip to answer again to mark Right or Wrong.
+- Updates change only app code, not `MarrowCards/packs/`, `MarrowCards/media/`, or `MarrowCards/reviews/`.
 
 ## MBBS subject / index hierarchy
 
