@@ -458,9 +458,15 @@ class MarrowCardsView extends ItemView {
   }
   draw() {
     const el = this.contentEl;
-    el.empty(); el.addClass('marrow-cards');
+    el.empty();
+    el.addClass('marrow-cards');
+    el.removeClass('marrow-review-mode');
     if (this.screen !== 'review') { this.drawHierarchy(el); return; }
-    const header = el.createDiv({ cls: 'marrow-header' });
+    el.addClass('marrow-review-mode');
+    // Keep the review body independently scrollable. The footer stays docked
+    // above Obsidian's mobile toolbar, rather than appearing below long content.
+    const scroll = el.createDiv({ cls: 'marrow-review-scroll' });
+    const header = scroll.createDiv({ cls: 'marrow-header' });
     header.createEl('h2', { text: 'Marrow Cards' });
     const bar = header.createDiv({ cls: 'marrow-toolbar' });
     const library = bar.createEl('button', { text: '← MBBS library' });
@@ -471,7 +477,7 @@ class MarrowCardsView extends ItemView {
     refresh.addEventListener('click', () => this.refresh());
     const sync = bar.createEl('button', { text: 'Check GitHub' });
     sync.addEventListener('click', () => this.plugin.syncPacks());
-    const controls = el.createDiv({ cls: 'marrow-controls' });
+    const controls = scroll.createDiv({ cls: 'marrow-controls' });
     controls.createEl('strong', { text: 'Reviewing ' + this.selected.size + (this.selected.size === 1 ? ' index' : ' indexes') });
     controls.createEl('p', { cls: 'marrow-hint', text: this.plugin.indexes.filter(i => this.selected.has(i.id)).map(i => i.title).join(' · ') || 'All installed cards' });
     const row = controls.createDiv({ cls: 'marrow-toolbar' });
@@ -483,19 +489,19 @@ class MarrowCardsView extends ItemView {
     select.addEventListener('change', () => { this.mode = select.value; this.resetQueue(); });
     const card = this.queue[this.cursor];
     if (!this.plugin.cards.length) {
-      el.createEl('p', { text: 'No approved cards installed. Use the demo button below, then review the two test cards.' });
-      const demo = el.createEl('button', { text: 'Install two DEMO cards' });
+      scroll.createEl('p', { text: 'No approved cards installed. Use the demo button below, then review the two test cards.' });
+      const demo = scroll.createEl('button', { text: 'Install two DEMO cards' });
       demo.addEventListener('click', () => this.plugin.installDemo());
       return;
     }
     if (!card) {
-      el.createEl('p', { text: 'No more cards in this selection. Change the filters or restart.' });
-      const restart = el.createEl('button', { text: 'Practice again' });
+      scroll.createEl('p', { text: 'No more cards in this selection. Change the filters or restart.' });
+      const restart = scroll.createEl('button', { text: 'Practice again' });
       restart.addEventListener('click', () => this.resetQueue());
       return;
     }
-    el.createEl('p', { cls: 'marrow-position', text: 'Card ' + (this.cursor + 1) + ' of ' + this.queue.length + ' · ' + card.id });
-    const panel = el.createDiv({ cls: 'marrow-panel' });
+    scroll.createEl('p', { cls: 'marrow-position', text: 'Card ' + (this.cursor + 1) + ' of ' + this.queue.length + ' · ' + card.id });
+    const panel = scroll.createDiv({ cls: 'marrow-panel' });
     panel.createEl('div', { cls: 'marrow-side', text: this.flipped ? 'ANSWER' : 'QUESTION' });
     if (!this.flipped) {
       panel.createEl('div', { cls: 'marrow-question', text: getQuestion(card) });
@@ -515,14 +521,17 @@ class MarrowCardsView extends ItemView {
       }
     }
     const s = this.plugin.stats.get(card.id) || { seen: 0, right: 0, wrong: 0 };
-    el.createEl('p', { cls: 'marrow-stats', text: 'Seen: ' + s.seen + '    Right: ' + s.right + '    Wrong: ' + s.wrong + '    Accuracy: ' + ((s.right + s.wrong) ? Math.round(100 * s.right / (s.right + s.wrong)) + '%' : '—') });
-    const actions = el.createDiv({ cls: 'marrow-actions' });
+    scroll.createEl('p', { cls: 'marrow-stats', text: 'Seen: ' + s.seen + '    Right: ' + s.right + '    Wrong: ' + s.wrong + '    Accuracy: ' + ((s.right + s.wrong) ? Math.round(100 * s.right / (s.right + s.wrong)) + '%' : '—') });
+    const actions = el.createDiv({ cls: 'marrow-actions', attr: { role: 'group', 'aria-label': 'Card review actions' } });
     if (!this.flipped) {
       const flip = actions.createEl('button', { text: 'Flip to answer', cls: 'mod-cta' });
       flip.addEventListener('click', () => { this.flipped = true; this.draw(); });
     } else {
+      const showQuestion = actions.createEl('button', { text: 'Show question', cls: 'marrow-flip-back' });
       const wrong = actions.createEl('button', { text: 'Wrong', cls: 'marrow-wrong' });
       const right = actions.createEl('button', { text: 'Right', cls: 'marrow-right' });
+      // Going back to the question is not a new review attempt.
+      showQuestion.addEventListener('click', () => { this.flipped = false; this.draw(); });
       wrong.addEventListener('click', () => this.grade('wrong'));
       right.addEventListener('click', () => this.grade('right'));
     }
