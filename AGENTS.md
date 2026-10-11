@@ -1,0 +1,40 @@
+# Marrow Cards — instructions for a new ChatGPT session
+
+**Start here whenever a user asks to extract, draft, approve, publish, correct, or review Marrow Cards flashcards.** This file is the GitHub entry point, not a card database.
+
+## Required first steps
+
+1. Read **[docs/flashcard-workflow.md](docs/flashcard-workflow.md)** in full. It is the canonical end-to-end workflow. For PYQs with embedded figures, also read **[docs/publishing-approved-cards.md](docs/publishing-approved-cards.md)**.
+2. Use the connected **Google Drive** tools to read the current index/PYQ mapping; use the connected **GitHub** tools to read the private card-data repository. Do **not** rely on previously seen mappings, screenshots, or remembered card counts.
+3. Check **`Akshat6/marrow-cards-data/manifest.json`**, **`packs/mbbs-index-catalog.json`**, and relevant live packs before proposing IDs or edits. Treat the private repository and current spreadsheet as the source of truth.
+4. Confirm which index the user is studying by **stable index ID**, subject, and title. Gather linked PYQs from the live mapping, then verify their question/answer contents against available original source PDFs.
+5. **Prepare a preview and seek explicit approval of the exact front/back and any original images before publishing.** A request merely to “create cards” is *not* permission to auto-publish without review unless the user clearly provides explicit approval for the final content.
+6. After approval, publish *only* approved content to the **private** data repository and update its manifest **last**. Verify by reading the live files back. Existing active cards, indexes, and review history must be preserved.
+
+## Architectural boundaries
+
+| Place | Role | Safety |
+| --- | --- | --- |
+| `Akshat6/marrow-cards-plugin` (this public repo) | Obsidian plugin source, tests, workflow documents, BRAT release assets | **Never** commit private PYQ text, answer keys, proprietary PDF pages/images, credentials, or review logs here |
+| `Akshat6/marrow-cards-data` (private) | Approved card packs and original image assets; `manifest.json` is the download index | Keep private; no direct manual uploads expected of user |
+| Connected Google Sheet “Marrow PYQ Index Master” | Latest PYQ code → index ID → canonical PDF page | Read before extracting PYQs; mapping can change |
+| Connected Google Sheet “PYQ Index Lookup” | Quick index-wise PYQ list | Cross-check against the master |
+| Project source PDFs | Original question/options/answers/explanations and embedded source images | Read user-provided source; don't invent missing detail |
+| Local Obsidian vault `MarrowCards/` | Offline downloaded packs/media and per-device JSONL review logs | Never delete/rewrite to reset without specific request |
+
+**Do not re-add the retired test PYQs to OPH-04.** As last verified 2026-10-11, OPH-04 “Anatomy of Retina” has **zero mapped PYQs** in the spreadsheet but **four user-approved personal fact cards** in its active pack. The three formerly tested Retina PYQs map instead to **OPH-32 “Anatomy and Investigations of Retina”** and are *not* currently approved cards. Re-check live sources in every new session.
+
+## Working conventions
+
+- `fact`: Personal user-supplied question/answer. Preserve the **approved** spelling, capitalization, and wording. Do not silently rewrite after approval.
+- `pyq`: Genuine mapped previous-year question. Keep exact question, **all** options, verified answer, explanation and source images, as available; flag gaps to user, never substitute fabricated text.
+- Preview one index at a time unless the user explicitly asks to combine indexes.
+- IDs are stable and unique. Never overwrite another pack or create duplicate IDs.
+- Publishing packs **does not** require a plugin version bump. BRAT releases are only for plugin code changes.
+- The phone may download via **Check GitHub → Refresh local**. Syncthing delivers `MarrowCards/packs`, `MarrowCards/media`, and `MarrowCards/reviews` to the tablet. Obsidian's `.obsidian` directory stays device-local.
+
+## New-chat user prompt
+
+“Read `https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md` and its linked flashcard workflow. Then prepare cards for **[subject / index ID / index name]** from my live index mapping and available PDFs. Show me the exact cards for approval; do not publish until I approve.”
+
+A new generic ChatGPT chat is **not guaranteed to load GitHub files automatically**. It needs this entry-point link or equivalent instruction. Once read, this file and the linked workflow replace dependence on any prior conversation.
