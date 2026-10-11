@@ -99,9 +99,12 @@ assert(newCss.includes('grid-template-columns: repeat(3, minmax(0, 1fr))'), 'Thr
 console.log('Review layout and flip-back behavior checks passed.');
 
 
-assert(src.includes('async cleanPilotArtifacts()'), 'Pilot reset function missing');
-assert(src.includes('RETIRED_CARD_IDS'), 'Pilot event reset list missing');
-assert(src.includes('PILOT_RESET_FILE'), 'Synced reset marker missing');
-assert(src.includes('this.pilotResetBefore'), 'Post-reset future review protection missing');
-assert(!src.includes('Install two DEMO cards'), 'Demo install button should be gone');
-console.log('Pilot reset code checks passed.');
+assert(!src.includes('cleanPilotArtifacts'), 'Obsolete pilot cleanup must not run again');
+assert(!src.includes('RETIRED_CARD_IDS'), 'Old test-card filter must not affect future reviews');
+const onloadCode = src.slice(src.indexOf('  onload() {'), src.indexOf('  onunload() {'));
+assert(onloadCode.includes('this.addSettingTab('), 'Plugin settings must register');
+assert(onloadCode.indexOf('this.addSettingTab(') < onloadCode.indexOf('this.initPromise = this.initializeRuntime()'),
+  'Register settings before loading vault files');
+assert(src.includes('async initializeRuntime()'), 'Asynchronous settings initialization missing');
+assert(src.includes('if (this.initPromise) await this.initPromise'), 'Review startup must await local initialization');
+console.log('Non-blocking startup checks passed.');
