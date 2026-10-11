@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minAppVersion": "1.11.4",
-  "description": "Offline-first flashcard review for approved PYQs and personal facts with Syncthing-friendly local review logs.",
+  "description": "Offline-first MBBS → subject → index flashcard reviewer with local Syncthing-friendly tracking.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
