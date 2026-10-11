@@ -2,7 +2,7 @@
 
 Offline-first Obsidian flashcard reviewer for **user-approved** medical PYQs and personal facts. Cards, images, and review history are stored in the vault and synchronized between Android devices with Syncthing.
 
-**Version:** 0.1.4 — mobile reviewer dock and flip-back controls. Android UI refinement awaiting user verification. The public plugin contains no proprietary PYQs; approved PYQs live in the private data repository.
+**Version:** 0.1.5 — clean-slate reset: preserve MBBS subject/index catalog and remove the old pilot cards, images and review attempts on each device.nd flip-back controls. Android UI refinement awaiting user verification. The public plugin contains no proprietary PYQs; approved PYQs live in the private data repository.
 
 ## Install with BRAT
 
@@ -12,9 +12,21 @@ Offline-first Obsidian flashcard reviewer for **user-approved** medical PYQs and
 4. BRAT should find the [current beta release](https://github.com/Akshat6/marrow-cards-plugin/releases/tag/0.1.4) with its `main.js`, `manifest.json` and `styles.css` assets.
 5. Settings → Community plugins → enable **Marrow Cards**.
 6. Use the layers icon or Command Palette → **Marrow Cards: Open reviewer**.
-7. Press **Install two DEMO cards**, flip and mark Right/Wrong, then repeat a round. The image is a generated circle, **not an original PYQ**.
+7. The reviewer opens at **MBBS**. Use **Check GitHub** to load the subject/index catalog; no demonstration cards are installed.nd mark Right/Wrong, then repeat a round. The image is a generated circle, **not an original PYQ**.
 
 The plugin supports **multiple index selection**, Right/Wrong grading, question images, full explanation text, and local Seen/Right/Wrong/Accuracy counters. `Ever wrong` and `Never seen` practice filters are included.
+
+## Clean-slate reset (0.1.5)
+
+**After updating BRAT to 0.1.5**, the plugin automatically cleans the old pilot's downloaded packs, four demo card IDs, three Retina PYQ IDs, associated images, and all related review events recorded before the synced reset marker. It preserves the MBBS index catalog and unrelated future study records.
+
+- Update **both** phone and tablet plugins; device-local plugin code is excluded from Syncthing.
+- Syncthing syncs `MarrowCards/pilot-reset.json`, so each device uses the same cutoff when it cleans stale old review files.
+- On each device, reopen Marrow Cards, select **Check GitHub**, then **Refresh local**.
+- The retired test cards cannot be reinstalled by the plugin's earlier demo button, which is now removed.
+- New OPH-32 cards will only appear when the user later approves them again.
+
+Git commit history and Syncthing versioned backups can still contain earlier test material; deleting the active files does **not** rewrite those histories.
 
 ## Mobile review controls (0.1.4)
 
@@ -28,7 +40,7 @@ The plugin supports **multiple index selection**, Right/Wrong grading, question 
 
 The reviewer now opens at **MBBS → Subjects → Indexes → Review**. Choose **MBBS**, then a subject (such as Ophthalmology), then an index (such as **Anatomy of Retina / OPH-04**). You may select multiple indexes to review together.
 
-The private data repository includes a **metadata-only** catalog copied from the existing index tracker (19 subjects, 1,314 index IDs). It does **not** include real PYQ questions. Indexes with zero approved cards are shown as **Awaiting approved cards** and cannot be reviewed yet.
+The private data repository currently contains only the **metadata-only** index catalog (19 subjects, 1,314 index IDs), and **no active cards or media**. The index tracker now maps all three former OPH-04 pilot PYQs to **OPH-32 — Anatomy and Investigations of Retina**; OPH-04 remains listed, with zero linked questions. All indexes still show **Awaiting approved cards** until approved packs are published.
 
 To receive the catalog: configure a read-only token for `Akshat6/marrow-cards-data` on the phone (see below), then select **Check GitHub** and **Refresh local**. Sync the vault to the tablet through Syncthing.
 
