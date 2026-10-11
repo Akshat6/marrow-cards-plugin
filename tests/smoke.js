@@ -1,0 +1,20 @@
+// Smoke test: syntax and pack/data invariants.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const src = fs.readFileSync('main.js','utf8');
+new vm.Script(src, {filename:'main.js'});
+const manifest = JSON.parse(fs.readFileSync('manifest.json','utf8'));
+assert.equal(manifest.id,'marrow-cards');
+assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
+assert.equal(manifest.isDesktopOnly,false);
+const pack=JSON.parse(fs.readFileSync('examples/pilot-example.json','utf8'));
+assert.equal(pack.schemaVersion,1);
+assert.equal(pack.cards.length,2);
+assert(pack.cards.every(c=>c.status==='approved'));
+assert(pack.cards.every(c=>c.id&&c.question&&c.answer&&c.indexIds.length));
+const imageUse=src.includes('createBinary')&&src.includes('getResourcePath');
+assert(imageUse,'Missing image import/display implementation');
+const logs=src.includes('jsonl')&&src.includes("event.action === 'right'");
+assert(logs,'Missing review-event log implementation');
+console.log('Pilot smoke checks passed: manifest, source syntax, dummy cards, image handling and review-log code.');
