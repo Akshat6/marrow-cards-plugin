@@ -66,7 +66,8 @@ const mockObsidian = {
 vm.runInNewContext(src + '\nmodule.exports.ReviewerForTest = MarrowCardsView;', {
   module: stubModule, exports: stubModule.exports,
   require(name) { if (name === 'obsidian') return mockObsidian; throw new Error('Unexpected module ' + name); },
-  console
+  console,
+  window: { setInterval: () => 1 }
 }, { filename: 'main.js' });
 const Reviewer = stubModule.exports.ReviewerForTest;
 const card = { id: 'TEST-001', type: 'pyq', status: 'approved', indexIds: ['OPH-04'],
@@ -108,3 +109,18 @@ assert(onloadCode.indexOf('this.addSettingTab(') < onloadCode.indexOf('this.init
 assert(src.includes('async initializeRuntime()'), 'Asynchronous settings initialization missing');
 assert(src.includes('if (this.initPromise) await this.initPromise'), 'Review startup must await local initialization');
 console.log('Non-blocking startup checks passed.');
+
+const startupCalls = [];
+const instance = new stubModule.exports();
+instance.app = { workspace: { onLayoutReady: () => {} }, secretStorage: { getSecret: () => null } };
+instance.loadData = () => new Promise(() => {});
+instance.registerView = () => startupCalls.push('view');
+instance.addRibbonIcon = () => startupCalls.push('ribbon');
+instance.addCommand = () => startupCalls.push('command');
+instance.addSettingTab = () => startupCalls.push('settings');
+instance.registerInterval = () => startupCalls.push('interval');
+const resultOfLoad = instance.onload();
+assert.equal(resultOfLoad, undefined, 'Startup should not block plugin registration');
+assert(startupCalls.includes('settings') && startupCalls.includes('view'),
+  'Views and settings must register despite a stuck settings-data read');
+console.log('Android cold-start regression check passed.');
