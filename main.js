@@ -1,0 +1,409 @@
+'use strict';
+
+const { Plugin, ItemView, Notice, PluginSettingTab, Setting, requestUrl, base64ToArrayBuffer, normalizePath } = require('obsidian');
+
+const VIEW_TYPE = 'marrow-cards-reviewer';
+const ROOT = 'MarrowCards';
+const PACKS = ROOT + '/packs';
+const MEDIA = ROOT + '/media';
+const REVIEWS = ROOT + '/reviews';
+const TOKEN_KEY = 'marrow-cards-github-token';
+const REPO = 'Akshat6/marrow-cards-data';
+const ALLOWED_IMAGE = /\.(png|jpe?g|webp|gif)$/i;
+
+function safeId(value) { return typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value); }
+function safePath(value) {
+  return typeof value === 'string' && value.length < 240 && !value.startsWith('/') &&
+    !value.split('/').some((s) => !s || s === '.' || s === '..') && /^[A-Za-z0-9_./-]+$/.test(value);
+}
+function uniqueId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+}
+function getQuestion(card) { return card.question || card.front || ''; }
+function isCard(card) {
+  return card && safeId(card.id) && ['pyq', 'fact'].includes(card.type) &&
+    typeof getQuestion(card) === 'string' && getQuestion(card).trim().length > 0 &&
+    typeof card.answer === 'string' && card.answer.trim().length > 0 &&
+    Array.isArray(card.indexIds) && card.indexIds.length > 0 && card.indexIds.every(safeId) &&
+    (!card.options || (Array.isArray(card.options) && card.options.every((s) => typeof s === 'string'))) &&
+    (!card.images || (Array.isArray(card.images) && card.images.every((s) => typeof s === 'string' && safePath(s) && !s.includes('/')))) &&
+    (!card.explanation || typeof card.explanation === 'string') && card.status === 'approved';
+}
+function validatePack(pack) {
+  if (!pack || pack.schemaVersion !== 1 || !safeId(pack.packId) ||
+      typeof pack.version !== 'string' || !Array.isArray(pack.indexes) || !Array.isArray(pack.cards)) {
+    throw new Error('Invalid card pack header. Required: schemaVersion, packId, version, indexes, cards.');
+  }
+  const ids = new Set();
+  const indexIds = new Set();
+  for (const idx of pack.indexes) {
+    if (!idx || !safeId(idx.id) || typeof idx.title !== 'string') throw new Error('Invalid index in ' + pack.packId);
+    if (indexIds.has(idx.id)) throw new Error('Duplicate index ID: ' + idx.id);
+    indexIds.add(idx.id);
+  }
+  for (const card of pack.cards) {
+    if (!isCard(card)) throw new Error('Unapproved or malformed card in ' + pack.packId);
+    if (ids.has(card.id)) throw new Error('Duplicate card ID: ' + card.id);
+    for (const id of card.indexIds) if (!indexIds.has(id)) throw new Error('Unknown index ' + id + ' in ' + card.id);
+    ids.add(card.id);
+  }
+  return pack;
+}
+function tally(events) {
+  const result = new Map();
+  const eventIds = new Set();
+  for (const event of events) {
+    if (!event || typeof event.id !== 'string' || eventIds.has(event.id) || !safeId(event.cardId)) continue;
+    eventIds.add(event.id);
+    const stats = result.get(event.cardId) || { seen: 0, right: 0, wrong: 0, last: '' };
+    if (event.action === 'seen') stats.seen += 1;
+    if (event.action === 'right') stats.right += 1;
+    if (event.action === 'wrong') stats.wrong += 1;
+    if (['right', 'wrong'].includes(event.action) && typeof event.at === 'string' && event.at > stats.last) stats.last = event.at;
+    result.set(event.cardId, stats);
+  }
+  return result;
+}
+
+class MarrowCardsPlugin extends Plugin {
+  async onload() {
+    this.settings = Object.assign({ deviceId: uniqueId(), autoSync: true }, await this.loadData() || {});
+    if (!safeId(this.settings.deviceId)) this.settings.deviceId = uniqueId().replace(/[^A-Za-z0-9_-]/g, '');
+    await this.saveData(this.settings);
+    await this.ensureDirectories();
+    this.cards = [];
+    this.indexes = [];
+    this.stats = new Map();
+    this.writeQueue = Promise.resolve();
+    this.registerView(VIEW_TYPE, (leaf) => new MarrowCardsView(leaf, this));
+    this.addRibbonIcon('layers', 'Open Marrow Cards', () => this.activateView());
+    this.addCommand({ id: 'open-marrow-cards', name: 'Open reviewer', callback: () => this.activateView() });
+    this.addCommand({ id: 'sync-marrow-card-packs', name: 'Check for approved card packs', callback: () => this.syncPacks() });
+    this.addSettingTab(new MarrowSettingsTab(this.app, this));
+    this.syncing = false;
+    this.registerInterval(window.setInterval(() => {
+      if (this.settings.autoSync && this.app.secretStorage.getSecret(TOKEN_KEY)) void this.syncPacks(true);
+    }, 30 * 60 * 1000));
+    this.app.workspace.onLayoutReady(() => {
+      if (this.settings.autoSync && this.app.secretStorage.getSecret(TOKEN_KEY)) void this.syncPacks(true);
+    });
+  }
+  onunload() { this.app.workspace.detachLeavesOfType(VIEW_TYPE); }
+  async activateView() {
+    let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0];
+    if (!leaf) leaf = this.app.workspace.getLeaf('tab');
+    await leaf.setViewState({ type: VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+  async ensureFolder(path) {
+    const parts = path.split('/');
+    for (let i = 1; i <= parts.length; i++) {
+      const segment = normalizePath(parts.slice(0, i).join('/'));
+      if (!(await this.app.vault.adapter.exists(segment))) await this.app.vault.createFolder(segment);
+    }
+  }
+  async ensureDirectories() {
+    for (const path of [PACKS, MEDIA, REVIEWS, REVIEWS + '/' + this.settings.deviceId]) await this.ensureFolder(path);
+  }
+  async writeJson(path, data) {
+    const content = JSON.stringify(data, null, 2) + '\n';
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (file) await this.app.vault.modify(file, content);
+    else await this.app.vault.create(path, content);
+  }
+  async loadCollection() {
+    const cards = new Map();
+    const indexes = new Map();
+    const files = this.app.vault.getFiles().filter((f) => f.path.startsWith(PACKS + '/') && f.extension === 'json');
+    for (const file of files) {
+      try {
+        const pack = validatePack(JSON.parse(await this.app.vault.read(file)));
+        for (const card of pack.cards) if (cards.has(card.id)) throw new Error('Duplicate card ID across packs: ' + card.id);
+        for (const item of pack.indexes) indexes.set(item.id, item);
+        for (const card of pack.cards) cards.set(card.id, card);
+      } catch (err) { console.error('[Marrow Cards] skipped pack', file.path, err); new Notice('Invalid pack: ' + file.name); }
+    }
+    this.cards = [...cards.values()].sort((a, b) => a.id.localeCompare(b.id));
+    this.indexes = [...indexes.values()].sort((a, b) => (a.subject || '').localeCompare(b.subject || '') || a.title.localeCompare(b.title));
+    await this.loadStats();
+  }
+  async loadStats() {
+    const events = [];
+    const files = this.app.vault.getFiles().filter((f) => f.path.startsWith(REVIEWS + '/') && f.extension === 'jsonl');
+    for (const file of files) {
+      const text = await this.app.vault.read(file);
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue;
+        try { events.push(JSON.parse(line)); } catch (err) { console.warn('[Marrow Cards] malformed event line', file.path, err); }
+      }
+    }
+    this.stats = tally(events);
+  }
+  async recordEvent(cardId, action) {
+    if (!['seen', 'right', 'wrong'].includes(action) || !safeId(cardId)) throw new Error('Invalid review event');
+    const event = { id: uniqueId(), cardId, action, at: new Date().toISOString(), deviceId: this.settings.deviceId };
+    const month = event.at.slice(0, 7);
+    const path = REVIEWS + '/' + this.settings.deviceId + '/' + month + '.jsonl';
+    const save = async () => {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (file) await this.app.vault.modify(file, (await this.app.vault.read(file)) + JSON.stringify(event) + '\n');
+      else await this.app.vault.create(path, JSON.stringify(event) + '\n');
+      const stats = this.stats.get(cardId) || { seen: 0, right: 0, wrong: 0, last: '' };
+      if (action === 'seen') stats.seen += 1;
+      if (action === 'right') stats.right += 1;
+      if (action === 'wrong') stats.wrong += 1;
+      if (action !== 'seen') stats.last = event.at;
+      this.stats.set(cardId, stats);
+    };
+    this.writeQueue = this.writeQueue.catch(() => {}).then(save);
+    return this.writeQueue;
+  }
+  async installDemo() {
+    const demoPath = PACKS + '/demo.json';
+    if (await this.app.vault.adapter.exists(demoPath)) { new Notice('Demo pack already exists'); return; }
+    const pack = {
+      schemaVersion: 1, packId: 'demo', version: '0.1.0',
+      indexes: [{ id: 'DEMO-INDEX', title: 'Demo index (not a real PYQ)', subject: 'Pilot' }],
+      cards: [
+        { id: 'DEMO-Q001', type: 'pyq', status: 'approved', indexIds: ['DEMO-INDEX'],
+          question: 'DEMO ONLY: Which geometric shape is in the picture?',
+          options: ['A. Triangle', 'B. Circle', 'C. Square', 'D. Hexagon'], images: ['demo-circle.svg'],
+          answer: 'B. Circle', explanation: 'This is a generated test graphic. It is not from your PYQ PDF.' },
+        { id: 'DEMO-F001', type: 'fact', status: 'approved', indexIds: ['DEMO-INDEX'],
+          question: 'What happens when I mark a card Right or Wrong?', answer: 'A dated review event is saved to the local vault.',
+          explanation: 'Events live in per-device monthly JSONL files and sync through Syncthing.' }
+      ]
+    };
+    validatePack(pack);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160"><rect width="240" height="160" fill="#f4f4f4"/><circle cx="120" cy="80" r="53" fill="#94b8ef" stroke="#2f5e9d" stroke-width="5"/></svg>';
+    if (!(await this.app.vault.adapter.exists(MEDIA + '/demo-circle.svg'))) await this.app.vault.create(MEDIA + '/demo-circle.svg', svg);
+    await this.writeJson(demoPath, pack);
+    new Notice('Two demo cards installed. No real PYQs added.');
+    await this.refreshOpenViews();
+  }
+  async refreshOpenViews() {
+    await this.loadCollection();
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) await leaf.view.refresh();
+  }
+  async fetchGithub(path, asBinary = false) {
+    if (!safePath(path)) throw new Error('Unsafe GitHub file path: ' + path);
+    const token = this.app.secretStorage.getSecret(TOKEN_KEY);
+    if (!token) throw new Error('Add a read-only GitHub token in Marrow Cards settings on this device.');
+    const url = 'https://api.github.com/repos/' + REPO + '/contents/' + path;
+    const response = await requestUrl({
+      url, method: 'GET', throw: false,
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }
+    });
+    if (response.status !== 200) throw new Error('GitHub returned HTTP ' + response.status + ' for ' + path);
+    const data = response.json;
+    if (!data || data.encoding !== 'base64' || !data.content) throw new Error('Unsupported GitHub content size/encoding: ' + path);
+    const decoded = base64ToArrayBuffer(data.content.replace(/\s/g, ''));
+    return asBinary ? decoded : new TextDecoder().decode(decoded);
+  }
+  async syncPacks(silent = false) {
+    if (this.syncing) return;
+    this.syncing = true;
+    try {
+      await this.ensureDirectories();
+      const manifest = JSON.parse(await this.fetchGithub('manifest.json'));
+      if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.packs)) throw new Error('Bad data repository manifest');
+      let downloaded = 0;
+      for (const info of manifest.packs) {
+        if (!info || !safeId(info.id) || !safePath(info.path) || typeof info.version !== 'string' ||
+            !info.path.startsWith('packs/')) throw new Error('Unsafe pack manifest entry');
+        const dest = PACKS + '/' + info.id + '.json';
+        const existingFile = this.app.vault.getAbstractFileByPath(dest);
+        if (existingFile) {
+          try { const existing = JSON.parse(await this.app.vault.read(existingFile));
+            if (existing.version === info.version) continue;
+          } catch (e) { /* overwrite malformed local pack only after successful remote validation */ }
+        }
+        const pack = validatePack(JSON.parse(await this.fetchGithub(info.path)));
+        if (pack.packId !== info.id || pack.version !== info.version) throw new Error('Pack ID/version mismatch: ' + info.id);
+        const otherIds = new Set();
+        for (const file of this.app.vault.getFiles().filter((f) => f.path.startsWith(PACKS + '/') && f.path !== dest && f.extension === 'json')) {
+          const otherPack = validatePack(JSON.parse(await this.app.vault.read(file)));
+          for (const other of otherPack.cards) otherIds.add(other.id);
+        }
+        for (const card of pack.cards) if (otherIds.has(card.id)) throw new Error('Duplicate card ID across packs: ' + card.id);
+        for (const card of pack.cards) {
+          for (const filename of card.images || []) {
+            if (!safePath(filename) || filename.includes('/') || !ALLOWED_IMAGE.test(filename)) throw new Error('Unsafe image filename: ' + filename);
+            const local = MEDIA + '/' + filename;
+            if (!(await this.app.vault.adapter.exists(local))) {
+              const binary = await this.fetchGithub('media/' + filename, true);
+              await this.app.vault.createBinary(local, binary);
+            }
+          }
+        }
+        await this.writeJson(dest, pack);
+        downloaded += 1;
+      }
+      await this.refreshOpenViews();
+      if (!silent || downloaded) new Notice(downloaded ? downloaded + ' card pack(s) installed or updated.' : 'Card packs are already up to date.');
+    } catch (error) {
+      console.error('[Marrow Cards] download failed', error);
+      if (!silent) new Notice('Card update failed: ' + (error.message || String(error)));
+    } finally { this.syncing = false; }
+  }
+}
+
+class MarrowCardsView extends ItemView {
+  constructor(leaf, plugin) {
+    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = [];
+  }
+  getViewType() { return VIEW_TYPE; }
+  getDisplayText() { return 'Marrow Cards'; }
+  getIcon() { return 'layers'; }
+  async onOpen() { await this.refresh(); }
+  async refresh() {
+    await this.plugin.loadCollection();
+    this.selected = new Set([...this.selected].filter((id) => this.plugin.indexes.some((idx) => idx.id === id)));
+    await this.resetQueue();
+  }
+  filterCards() {
+    return this.plugin.cards.filter((c) => {
+      if (this.selected.size && !c.indexIds.some((id) => this.selected.has(id))) return false;
+      const s = this.plugin.stats.get(c.id) || { seen: 0, right: 0, wrong: 0 };
+      if (this.mode === 'wrong' && s.wrong === 0) return false;
+      if (this.mode === 'unseen' && s.seen > 0) return false;
+      return true;
+    });
+  }
+  async resetQueue() { this.queue = this.filterCards(); this.cursor = 0; this.flipped = false; await this.present(); }
+  async present() {
+    const card = this.queue[this.cursor];
+    this.flipped = false;
+    if (card) {
+      try { await this.plugin.recordEvent(card.id, 'seen'); } catch (e) { console.error(e); new Notice('Could not record view: ' + e.message); }
+    }
+    this.draw();
+    const next = this.queue[this.cursor + 1];
+    if (next) for (const image of next.images || []) {
+      const f = this.app.vault.getAbstractFileByPath(MEDIA + '/' + image);
+      if (f) { const img = new Image(); img.src = this.app.vault.getResourcePath(f); }
+    }
+  }
+  async grade(action) {
+    const card = this.queue[this.cursor];
+    if (!this.flipped || !card || this.busy) return;
+    this.busy = true;
+    try {
+      await this.plugin.recordEvent(card.id, action);
+      this.cursor += 1;
+      await this.present();
+    } catch (e) { new Notice('Review not saved: ' + e.message); this.draw(); }
+    finally { this.busy = false; }
+  }
+  draw() {
+    const el = this.contentEl;
+    el.empty(); el.addClass('marrow-cards');
+    const header = el.createDiv({ cls: 'marrow-header' });
+    header.createEl('h2', { text: 'Marrow Cards' });
+    const bar = header.createDiv({ cls: 'marrow-toolbar' });
+    const refresh = bar.createEl('button', { text: 'Refresh local' });
+    refresh.addEventListener('click', () => this.refresh());
+    const sync = bar.createEl('button', { text: 'Check GitHub' });
+    sync.addEventListener('click', () => this.plugin.syncPacks());
+    const controls = el.createDiv({ cls: 'marrow-controls' });
+    controls.createEl('strong', { text: 'Indexes (select multiple, or leave all unchecked for all)' });
+    const indexList = controls.createDiv({ cls: 'marrow-index-list' });
+    for (const idx of this.plugin.indexes) {
+      const label = indexList.createEl('label', { cls: 'marrow-index' });
+      const check = label.createEl('input', { type: 'checkbox' });
+      check.checked = this.selected.has(idx.id);
+      label.createSpan({ text: ' ' + (idx.subject ? idx.subject + ' · ' : '') + idx.title });
+      check.addEventListener('change', () => {
+        if (check.checked) this.selected.add(idx.id); else this.selected.delete(idx.id);
+        this.resetQueue();
+      });
+    }
+    const row = controls.createDiv({ cls: 'marrow-toolbar' });
+    row.createSpan({ text: 'Practice: ' });
+    const select = row.createEl('select');
+    for (const [value, title] of [['all','All cards'],['wrong','Ever wrong'],['unseen','Never seen']]) {
+      const opt = select.createEl('option', { text: title }); opt.value = value; opt.selected = value === this.mode;
+    }
+    select.addEventListener('change', () => { this.mode = select.value; this.resetQueue(); });
+    const card = this.queue[this.cursor];
+    if (!this.plugin.cards.length) {
+      el.createEl('p', { text: 'No approved cards installed. Use the demo button below, then review the two test cards.' });
+      const demo = el.createEl('button', { text: 'Install two DEMO cards' });
+      demo.addEventListener('click', () => this.plugin.installDemo());
+      return;
+    }
+    if (!card) {
+      el.createEl('p', { text: 'No more cards in this selection. Change the filters or restart.' });
+      const restart = el.createEl('button', { text: 'Practice again' });
+      restart.addEventListener('click', () => this.resetQueue());
+      return;
+    }
+    el.createEl('p', { cls: 'marrow-position', text: 'Card ' + (this.cursor + 1) + ' of ' + this.queue.length + ' · ' + card.id });
+    const panel = el.createDiv({ cls: 'marrow-panel' });
+    panel.createEl('div', { cls: 'marrow-side', text: this.flipped ? 'ANSWER' : 'QUESTION' });
+    if (!this.flipped) {
+      panel.createEl('div', { cls: 'marrow-question', text: getQuestion(card) });
+      for (const filename of card.images || []) {
+        const f = this.app.vault.getAbstractFileByPath(MEDIA + '/' + filename);
+        if (!f) { panel.createEl('p', { text: 'Missing image: ' + filename, cls: 'marrow-missing' }); continue; }
+        const img = panel.createEl('img', { cls: 'marrow-image', attr: { alt: 'Question image for ' + card.id } });
+        img.src = this.app.vault.getResourcePath(f);
+        img.loading = 'eager';
+      }
+      for (const option of card.options || []) panel.createEl('div', { cls: 'marrow-option', text: option });
+    } else {
+      panel.createEl('div', { cls: 'marrow-answer', text: card.answer });
+      if (card.explanation) {
+        panel.createEl('h4', { text: 'Explanation' });
+        panel.createEl('div', { cls: 'marrow-explanation', text: card.explanation });
+      }
+    }
+    const s = this.plugin.stats.get(card.id) || { seen: 0, right: 0, wrong: 0 };
+    el.createEl('p', { cls: 'marrow-stats', text: 'Seen: ' + s.seen + '    Right: ' + s.right + '    Wrong: ' + s.wrong + '    Accuracy: ' + ((s.right + s.wrong) ? Math.round(100 * s.right / (s.right + s.wrong)) + '%' : '—') });
+    const actions = el.createDiv({ cls: 'marrow-actions' });
+    if (!this.flipped) {
+      const flip = actions.createEl('button', { text: 'Flip to answer', cls: 'mod-cta' });
+      flip.addEventListener('click', () => { this.flipped = true; this.draw(); });
+    } else {
+      const wrong = actions.createEl('button', { text: 'Wrong', cls: 'marrow-wrong' });
+      const right = actions.createEl('button', { text: 'Right', cls: 'marrow-right' });
+      wrong.addEventListener('click', () => this.grade('wrong'));
+      right.addEventListener('click', () => this.grade('right'));
+    }
+  }
+}
+
+class MarrowSettingsTab extends PluginSettingTab {
+  constructor(app, plugin) { super(app, plugin); this.plugin = plugin; }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl('h2', { text: 'Marrow Cards settings' });
+    containerEl.createEl('p', { text: 'Cards and review history are saved under MarrowCards/ in this vault. Keep your .obsidian folder device-local for a unique device ID on each phone or tablet.' });
+    new Setting(containerEl).setName('Current device ID').setDesc(this.plugin.settings.deviceId);
+    new Setting(containerEl).setName('Data source').setDesc('Private GitHub repository: ' + REPO + '. Token is only needed on the device that downloads packs.');
+    new Setting(containerEl).setName('Automatic pack checks').setDesc('Check on startup and every 30 minutes while Obsidian is open, if a token is set.')
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.autoSync).onChange(async (value) => {
+        this.plugin.settings.autoSync = value; await this.plugin.saveData(this.plugin.settings);
+      }));
+    let pending = '';
+    new Setting(containerEl)
+      .setName('Read-only GitHub token')
+      .setDesc('Fine-grained token: this repository only, Contents read permission. Stored locally in Obsidian SecretStorage, never in the synced card files.')
+      .addText((input) => { input.inputEl.type = 'password'; input.setPlaceholder('Paste token locally (not into chat)').onChange((v) => { pending = v.trim(); }); })
+      .addButton((button) => button.setButtonText('Save token locally').onClick(() => {
+        if (!pending) { new Notice('Paste a token first.'); return; }
+        this.app.secretStorage.setSecret(TOKEN_KEY, pending);
+        pending = '';
+        new Notice('Read-only GitHub token saved on this device.');
+        this.display();
+      }));
+    new Setting(containerEl).setName('Delete stored token').setDesc('Clears the local token; it does not delete cards or statistics.')
+      .addButton((button) => button.setButtonText('Clear').onClick(() => { this.app.secretStorage.setSecret(TOKEN_KEY, ''); new Notice('Token cleared.'); }));
+    new Setting(containerEl).setName('Download approved packs').setDesc('Checks private GitHub manifest.json and downloads new/updated card packs and images.')
+      .addButton((button) => button.setButtonText('Check now').onClick(() => this.plugin.syncPacks()));
+  }
+}
+
+module.exports = MarrowCardsPlugin;
