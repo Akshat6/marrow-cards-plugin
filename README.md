@@ -2,7 +2,7 @@
 
 Offline-first Obsidian flashcard reviewer for **user-approved** medical PYQs and personal facts. Cards, images, and review history are stored in the vault and synchronized between Android devices with Syncthing.
 
-**Version:** 0.1.5 — clean-slate reset: preserve MBBS subject/index catalog and remove the old pilot cards, images and review attempts on each device.nd flip-back controls. Android UI refinement awaiting user verification. The public plugin contains no proprietary PYQs; approved PYQs live in the private data repository.
+**Version:** 0.1.6 — Android cold-start reliability; remove obsolete reset cleanup while preserving approved flashcards.n-slate reset: preserve MBBS subject/index catalog and remove the old pilot cards, images and review attempts on each device.nd flip-back controls. Android UI refinement awaiting user verification. The public plugin contains no proprietary PYQs; approved PYQs live in the private data repository.
 
 ## Install with BRAT
 
@@ -16,17 +16,11 @@ Offline-first Obsidian flashcard reviewer for **user-approved** medical PYQs and
 
 The plugin supports **multiple index selection**, Right/Wrong grading, question images, full explanation text, and local Seen/Right/Wrong/Accuracy counters. `Ever wrong` and `Never seen` practice filters are included.
 
-## Clean-slate reset (0.1.5)
+## Android startup reliability (0.1.6)
 
-**After updating BRAT to 0.1.5**, the plugin automatically cleans the old pilot's downloaded packs, four demo card IDs, three Retina PYQ IDs, associated images, and all related review events recorded before the synced reset marker. It preserves the MBBS index catalog and unrelated future study records.
+Obsidian now registers Marrow Cards' reviewer, commands and settings **before** asynchronous local storage initialization. The obsolete one-time 0.1.5 pilot reset migration has been removed, so it cannot run at every app launch.
 
-- Update **both** phone and tablet plugins; device-local plugin code is excluded from Syncthing.
-- Syncthing syncs `MarrowCards/pilot-reset.json`, so each device uses the same cutoff when it cleans stale old review files.
-- On each device, reopen Marrow Cards, select **Check GitHub**, then **Refresh local**.
-- The retired test cards cannot be reinstalled by the plugin's earlier demo button, which is now removed.
-- New OPH-32 cards will only appear when the user later approves them again.
-
-Git commit history and Syncthing versioned backups can still contain earlier test material; deleting the active files does **not** rewrite those histories.
+Your approved OPH-04 flashcards, synced packs, images, review logs and indexes remain unchanged by the plugin update. The data repository currently contains four approved OPH-04 personal fact cards. You do not need to reinstall the plugin to install new card packs.
 
 ## Mobile review controls (0.1.4)
 
