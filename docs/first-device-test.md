@@ -1,27 +1,37 @@
-# First-device pilot test
+# Marrow Cards — phone/tablet regression checklist
 
-**Scope:** technical dummy cards only. Real PYQs require user approval before entry.
+This supersedes the **retired** first-device dummy-card pilot. The old "Install two DEMO cards" feature and `pilot-example` data were removed on 2026-10-11; **do not re-add them**.
 
-1. Open the **Marrow Cards** vault on the phone.
-2. Install BRAT and add `Akshat6/marrow-cards-plugin` after a GitHub release exists, then enable **Marrow Cards**.
-3. Use the plugin ribbon icon or command **Marrow Cards: Open reviewer**.
-4. Tap **Install two DEMO cards**. Check the question, generated circle graphic, four options, answer and explanation.
-5. Flip and grade one **Right** and one **Wrong**. Open the same cards again using **Practice again**. Confirm the right/wrong counts rise and persist on reopening Obsidian.
-6. In GitHub, create a **fine-grained personal access token** with read-only **Contents** permission for the single private repository `Akshat6/marrow-cards-data`.
-7. In plugin settings on the **phone only**, paste and save the token through **Read-only GitHub token**. **Never send the token to ChatGPT or put it inside the vault.**
-8. Press **Check GitHub**. The private dummy pack (and its PNG image) should download automatically. Confirm the additional `Technical test · Imported example pack` index appears.
-9. Confirm the local files `MarrowCards/packs/pilot-example.json` and `MarrowCards/media/pilot-circle.png` exist.
-10. On the tablet, after Syncthing finishes, refresh the plugin reviewer and confirm the imported questions and PNG display **without a GitHub token**.
-11. Check that two distinct `MarrowCards/reviews/<device-id>/` folders exist after grading on both devices. Check both devices' counts match after sync and a **Refresh local** action.
-12. Switch on Syncthing versioning or make independent backups before real data.
+For flashcard extraction and publication, use **[AGENTS.md](../AGENTS.md)** and **[flashcard-workflow.md](flashcard-workflow.md)**.
 
-### Critical Syncthing rule
+## First install / restart checks
 
-Exclude `/.obsidian` on **both devices** so their plugin settings and per-device identifiers are not shared. Install the plugin independently on each device. This avoids both installations writing to the same active review log.
+1. Open the correct `Marrow Cards` Obsidian vault on the phone.
+2. Install/enable BRAT and `Akshat6/marrow-cards-plugin`. Confirm Obsidian's **Settings → Community plugins → Installed plugins** lists **Marrow Cards** as enabled.
+3. Confirm the separate **Marrow Cards** settings entry and **Open reviewer** command exist.
+4. Remove Obsidian from Recent Apps completely and reopen the same vault. Verify the plugin **stays enabled**, its command/settings persist, and it does not need reinstalling.
+5. If the plugin is installed but inactive, troubleshoot activation/startup before reinstalling; don't delete the vault or card data.
 
-### Known pilot limitations
+## Private database and cards
 
-- Physical Android devices not tested by the developer.
-- Resuming at a specific card after quitting mid-session is not implemented.
-- Card-by-card review timeline UI and rich scientific typesetting are not implemented yet.
-- The plugin supports questions and explanations from pre-approved JSON packs; it does not extract PYQs by itself.
+1. On the phone, configure a locally saved GitHub fine-grained token with **Contents: Read-only** for `Akshat6/marrow-cards-data`. Never paste the token into chat or into the vault.
+2. Open the plugin, tap **Check GitHub → Refresh local**.
+3. Confirm the MBBS subject/index hierarchy appears.
+4. As of 2026-10-11, navigate to **MBBS → Ophthalmology → OPH-04 / Anatomy of Retina**: expect **four personal fact cards**, not the retired three-PYQ test pack.
+5. Open a card: the question and explanation areas scroll; footer buttons remain visible. Tap **Flip to answer → Show question → Flip to answer**, and confirm neither flip-back nor scroll creates a new Right/Wrong mark. Grade **Right** or **Wrong** once.
+6. Close and reopen Obsidian. Verify approved cards and the most recent review counts persist. Repeat on another day to verify local event logs.
+
+## Syncthing phone/tablet
+
+1. Sync the dedicated vault's `MarrowCards/packs/`, `MarrowCards/media/`, and `MarrowCards/reviews/`.
+2. **Exclude `.obsidian`** on both devices; plugin code and settings stay device-local.
+3. Install the plugin on the tablet independently. The tablet should receive already-downloaded card packs and images via Syncthing, normally without a GitHub token.
+4. Tap **Refresh local** after Syncthing finishes, and verify counts include both devices' reviews, stored under distinct `MarrowCards/reviews/<device-id>/` folders.
+5. Enable independent backups or Syncthing file versioning. Sync is not a backup.
+
+## Regression cautions
+
+- This is a manual device checklist, not proof of physical-device behavior.
+- The plugin itself does **not** extract PYQ PDFs; the separate ChatGPT approval workflow prepares and publishes JSON packs.
+- Adding approved data to the private repository should not require updating BRAT. BRAT updates are for plugin code.
+- Preserve existing packs and review logs; do not run old pilot resets, restore deleted test cards or change mapped index IDs without explicit instruction.
