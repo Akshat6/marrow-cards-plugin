@@ -1,0 +1,37 @@
+name: Publish BRAT pilot release
+on:
+  push:
+    branches: [main]
+    paths:
+      - main.js
+      - manifest.json
+      - styles.css
+      - .github/workflows/release.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate plugin assets
+        run: |
+          set -euo pipefail
+          node --check main.js
+          node tests/smoke.js
+          node -e "const m=require('./manifest.json');if(!/^\\d+\\.\\d+\\.\\d+$/.test(m.version)||m.id!=='marrow-cards')process.exit(1)"
+          test -s styles.css
+      - name: Create release if this version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./manifest.json').version")
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION exists. Bump manifest version for later updates."
+            exit 0
+          fi
+          gh release create "$VERSION" main.js manifest.json styles.css \
+            --title "$VERSION" --target "$GITHUB_SHA" --prerelease \
+            --notes "Marrow Cards technical pilot. Test dummy cards on Android before adding real PYQs."
