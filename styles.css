@@ -2,25 +2,9 @@
 
 
 
-/* v0.1.1: On Obsidian mobile the bottom floating navigation can obscure review controls.
-   Keep the actions above it, and give the page enough scroll clearance for long cards. */
-.is-mobile .marrow-cards {
-  padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px));
-}
-.is-mobile .marrow-actions {
-  position: sticky;
-  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
-  z-index: 20;
-  padding: 10px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 12px;
-  background: var(--background-primary);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-}
-.is-mobile .marrow-actions button {
-  min-height: 48px;
-  touch-action: manipulation;
-}
+/* Mobile review action bar is now a docked FLEX SIBLING of the independent
+   scrollable card content. The old position:sticky rule was unreliable in
+   Obsidian's nested scroll containers. */
 
 /* v0.1.2: MBBS / subject / index mobile library */
 .marrow-breadcrumb { margin: 18px 0 8px; color: var(--text-muted); display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
@@ -37,3 +21,74 @@
 .marrow-start-selected { display: block; width: 100%; min-height: 50px; margin: 18px 0; }
 .is-mobile .marrow-tree-tile, .is-mobile .marrow-index-tile { touch-action: manipulation; }
 .is-mobile .marrow-start-selected { margin-bottom: 110px; }
+
+
+/* v0.1.4: independent scroll area + always-visible review action dock.
+   The MBBS library remains a standard scrollable page. */
+.marrow-cards.marrow-review-mode {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  margin: 0 auto;
+  padding: 12px 14px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.marrow-cards.marrow-review-mode .marrow-review-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 2px 18px;
+}
+.marrow-cards.marrow-review-mode .marrow-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 0 0 auto;
+  position: static;
+  bottom: auto;
+  margin: 0;
+  padding: 10px 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-primary);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 3;
+}
+.marrow-cards.marrow-review-mode .marrow-actions-back {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.marrow-cards.marrow-review-mode .marrow-actions button {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 9px 7px;
+  line-height: 1.3;
+  white-space: normal;
+  touch-action: manipulation;
+}
+.marrow-cards.marrow-review-mode .marrow-flip-back {
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+}
+.is-mobile .marrow-cards.marrow-review-mode {
+  /* Reserved clearance for Obsidian's floating bottom navigation and system bar.
+     Footer is inside this padded boundary, never beneath the mobile toolbar. */
+  padding: 8px 12px calc(108px + env(safe-area-inset-bottom, 0px));
+}
+.is-mobile .marrow-cards.marrow-review-mode .marrow-actions {
+  gap: 6px;
+}
+@media (max-width: 360px) {
+  .is-mobile .marrow-cards.marrow-review-mode .marrow-actions-back button {
+    font-size: 0.82em;
+    padding-inline: 3px;
+  }
+}
