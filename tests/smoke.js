@@ -18,3 +18,10 @@ assert(imageUse,'Missing image import/display implementation');
 const logs=src.includes('jsonl')&&src.includes("event.action === 'right'");
 assert(logs,'Missing review-event log implementation');
 console.log('Pilot smoke checks passed: manifest, source syntax, dummy cards, image handling and review-log code.');
+
+// Navigation contract: the reviewer starts at MBBS, then subject, then index.
+assert(source.includes("this.screen = 'mbbs'"), 'MBBS should be initial navigation screen');
+assert(source.includes('drawHierarchy(el)'), 'Missing hierarchical navigation');
+assert(source.includes("this.goLibrary('subjects')"), 'Missing subject navigation');
+assert(source.includes("this.goLibrary('indexes')"), 'Missing index navigation');
+assert(source.includes("this.startReview([idx.id])"), 'Missing one-index review');
