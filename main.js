@@ -74,12 +74,27 @@ function tally(events) {
   return result;
 }
 
+
+const PILOT_RESET_FILE = ROOT + '/pilot-reset.json';
+const RETIRED_PACKS = new Map([
+  ['demo', '0.1.0'], ['pilot-example', '1.0.0'], ['ophthalmology-retina-index', '1.1.0']
+]);
+const RETIRED_MEDIA = [
+  'demo-circle.svg', 'pilot-circle.png',
+  'A18-OPH-Q013-original.jpeg', 'A19-OPH-Q011-original.jpeg', 'I24-OPH-Q022-original.jpeg'
+];
+const RETIRED_CARD_IDS = new Set([
+  'DEMO-Q001', 'DEMO-F001', 'DEMO-GH-001', 'DEMO-GH-002',
+  'A18-OPH-Q013', 'A19-OPH-Q011', 'I24-OPH-Q022'
+]);
+
 class MarrowCardsPlugin extends Plugin {
   async onload() {
     this.settings = Object.assign({ deviceId: uniqueId(), autoSync: true }, await this.loadData() || {});
     if (!safeId(this.settings.deviceId)) this.settings.deviceId = uniqueId().replace(/[^A-Za-z0-9_-]/g, '');
     await this.saveData(this.settings);
     await this.ensureDirectories();
+    await this.cleanPilotArtifacts();
     this.cards = [];
     this.indexes = [];
     this.stats = new Map();
@@ -120,7 +135,61 @@ class MarrowCardsPlugin extends Plugin {
     if (file) await this.app.vault.modify(file, content);
     else await this.app.vault.create(path, content);
   }
+  async cleanPilotArtifacts() {
+    await this.ensureDirectories();
+    let markerFile = this.app.vault.getAbstractFileByPath(PILOT_RESET_FILE);
+    if (!markerFile) {
+      const marker = { schemaVersion: 1, id: 'pilot-reset-2026-10-11',
+        before: new Date().toISOString(),
+        note: 'Remove retired pilot cards and reviews while preserving MBBS index catalog.' };
+      try { await this.app.vault.create(PILOT_RESET_FILE, JSON.stringify(marker, null, 2) + '\n'); }
+      catch (e) {
+        if (!(await this.app.vault.adapter.exists(PILOT_RESET_FILE))) throw e;
+      }
+      markerFile = this.app.vault.getAbstractFileByPath(PILOT_RESET_FILE);
+    }
+    if (!markerFile) throw new Error('Missing pilot reset marker');
+    const marker = JSON.parse(await this.app.vault.read(markerFile));
+    if (marker.id !== 'pilot-reset-2026-10-11' ||
+        !/^20\d{2}-\d{2}-\d{2}T/.test(marker.before)) {
+      throw new Error('Invalid pilot reset marker; no files deleted.');
+    }
+    this.pilotResetBefore = marker.before;
+    let removed = 0;
+    for (const [id, maxVersion] of RETIRED_PACKS) {
+      const file = this.app.vault.getAbstractFileByPath(PACKS + '/' + id + '.json');
+      if (!file) continue;
+      let pack;
+      try { pack = JSON.parse(await this.app.vault.read(file)); }
+      catch (e) { continue; }
+      if (pack.packId === id && compareVersions(pack.version, maxVersion) <= 0) {
+        await this.app.vault.delete(file);
+        removed++;
+      }
+    }
+    for (const name of RETIRED_MEDIA) {
+      const file = this.app.vault.getAbstractFileByPath(MEDIA + '/' + name);
+      if (file) { await this.app.vault.delete(file); removed++; }
+    }
+    for (const file of this.app.vault.getFiles().filter(f =>
+      f.path.startsWith(REVIEWS + '/') && f.extension === 'jsonl')) {
+      const lines = (await this.app.vault.read(file)).split('\n').filter(Boolean);
+      const kept = lines.filter(line => {
+        try {
+          const e = JSON.parse(line);
+          return !(RETIRED_CARD_IDS.has(e.cardId) &&
+            typeof e.at === 'string' && e.at <= marker.before);
+        } catch (e) { return true; }
+      });
+      if (kept.length === lines.length) continue;
+      if (!kept.length) await this.app.vault.delete(file);
+      else await this.app.vault.modify(file, kept.join('\n') + '\n');
+      removed++;
+    }
+    return removed;
+  }
   async loadCollection() {
+    await this.cleanPilotArtifacts();
     const cards = new Map();
     const indexes = new Map();
     const files = this.app.vault.getFiles().filter((f) => f.path.startsWith(PACKS + '/') && f.extension === 'json');
@@ -143,7 +212,12 @@ class MarrowCardsPlugin extends Plugin {
       const text = await this.app.vault.read(file);
       for (const line of text.split('\n')) {
         if (!line.trim()) continue;
-        try { events.push(JSON.parse(line)); } catch (err) { console.warn('[Marrow Cards] malformed event line', file.path, err); }
+        try {
+          const event = JSON.parse(line);
+          if (RETIRED_CARD_IDS.has(event.cardId) &&
+              typeof event.at === 'string' && event.at <= this.pilotResetBefore) continue;
+          events.push(event);
+        } catch (err) { console.warn('[Marrow Cards] malformed event line', file.path, err); }
       }
     }
     this.stats = tally(events);
@@ -231,29 +305,6 @@ class MarrowCardsPlugin extends Plugin {
     picker.click();
   }
 
-  async installDemo() {
-    const demoPath = PACKS + '/demo.json';
-    if (await this.app.vault.adapter.exists(demoPath)) { new Notice('Demo pack already exists'); return; }
-    const pack = {
-      schemaVersion: 1, packId: 'demo', version: '0.1.0',
-      indexes: [{ id: 'DEMO-INDEX', title: 'Demo index (not a real PYQ)', subject: 'Pilot' }],
-      cards: [
-        { id: 'DEMO-Q001', type: 'pyq', status: 'approved', indexIds: ['DEMO-INDEX'],
-          question: 'DEMO ONLY: Which geometric shape is in the picture?',
-          options: ['A. Triangle', 'B. Circle', 'C. Square', 'D. Hexagon'], images: ['demo-circle.svg'],
-          answer: 'B. Circle', explanation: 'This is a generated test graphic. It is not from your PYQ PDF.' },
-        { id: 'DEMO-F001', type: 'fact', status: 'approved', indexIds: ['DEMO-INDEX'],
-          question: 'What happens when I mark a card Right or Wrong?', answer: 'A dated review event is saved to the local vault.',
-          explanation: 'Events live in per-device monthly JSONL files and sync through Syncthing.' }
-      ]
-    };
-    validatePack(pack);
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160"><rect width="240" height="160" fill="#f4f4f4"/><circle cx="120" cy="80" r="53" fill="#94b8ef" stroke="#2f5e9d" stroke-width="5"/></svg>';
-    if (!(await this.app.vault.adapter.exists(MEDIA + '/demo-circle.svg'))) await this.app.vault.create(MEDIA + '/demo-circle.svg', svg);
-    await this.writeJson(demoPath, pack);
-    new Notice('Two demo cards installed. No real PYQs added.');
-    await this.refreshOpenViews();
-  }
   async refreshOpenViews() {
     await this.loadCollection();
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) await leaf.view.refresh();
@@ -489,9 +540,7 @@ class MarrowCardsView extends ItemView {
     select.addEventListener('change', () => { this.mode = select.value; this.resetQueue(); });
     const card = this.queue[this.cursor];
     if (!this.plugin.cards.length) {
-      scroll.createEl('p', { text: 'No approved cards installed. Use the demo button below, then review the two test cards.' });
-      const demo = scroll.createEl('button', { text: 'Install two DEMO cards' });
-      demo.addEventListener('click', () => this.plugin.installDemo());
+      scroll.createEl('p', { text: 'No approved cards yet. Your MBBS indexes are ready for newly approved PYQ decks.' });
       return;
     }
     if (!card) {
