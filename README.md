@@ -2,7 +2,7 @@
 
 Offline-first Obsidian flashcard reviewer for **user-approved** medical PYQs and personal facts. Cards, images, and review history are stored in the vault and synchronized between Android devices with Syncthing.
 
-**Version:** 0.1.0 — technical pilot, not yet field-tested on physical Android devices. **No real PYQs are included.**
+**Version:** 0.1.2 — MBBS hierarchy technical pilot, not yet field-tested on physical Android devices. **No real PYQs are included.**
 
 ## Install with BRAT
 
@@ -15,6 +15,14 @@ Offline-first Obsidian flashcard reviewer for **user-approved** medical PYQs and
 7. Press **Install two DEMO cards**, flip and mark Right/Wrong, then repeat a round. The image is a generated circle, **not an original PYQ**.
 
 The plugin supports **multiple index selection**, Right/Wrong grading, question images, full explanation text, and local Seen/Right/Wrong/Accuracy counters. `Ever wrong` and `Never seen` practice filters are included.
+
+## MBBS subject / index hierarchy
+
+The reviewer now opens at **MBBS → Subjects → Indexes → Review**. Choose **MBBS**, then a subject (such as Ophthalmology), then an index (such as **Anatomy of Retina / OPH-04**). You may select multiple indexes to review together.
+
+The private data repository includes a **metadata-only** catalog copied from the existing index tracker (19 subjects, 1,314 index IDs). It does **not** include real PYQ questions. Indexes with zero approved cards are shown as **Awaiting approved cards** and cannot be reviewed yet.
+
+To receive the catalog: configure a read-only token for `Akshat6/marrow-cards-data` on the phone (see below), then select **Check GitHub** and **Refresh local**. Sync the vault to the tablet through Syncthing.
 
 ## Connect the private approved-card collection
 
