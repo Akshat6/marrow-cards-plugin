@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "minAppVersion": "1.11.4",
-  "description": "Offline-first MBBS flashcards with independently scrollable reviewer, docked actions and reversible question/answer flip.",
+  "description": "Offline-first MBBS flashcards; clean pilot reset while preserving subject/index hierarchy and mobile review controls.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
