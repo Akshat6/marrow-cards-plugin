@@ -6,6 +6,7 @@ on:
       - main.js
       - manifest.json
       - styles.css
+      - tests/smoke.js
       - .github/workflows/release.yml
   workflow_dispatch:
 permissions:
