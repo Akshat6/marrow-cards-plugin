@@ -522,7 +522,7 @@ class MarrowCardsView extends ItemView {
     }
     const s = this.plugin.stats.get(card.id) || { seen: 0, right: 0, wrong: 0 };
     scroll.createEl('p', { cls: 'marrow-stats', text: 'Seen: ' + s.seen + '    Right: ' + s.right + '    Wrong: ' + s.wrong + '    Accuracy: ' + ((s.right + s.wrong) ? Math.round(100 * s.right / (s.right + s.wrong)) + '%' : '—') });
-    const actions = el.createDiv({ cls: 'marrow-actions', attr: { role: 'group', 'aria-label': 'Card review actions' } });
+    const actions = el.createDiv({ cls: this.flipped ? 'marrow-actions marrow-actions-back' : 'marrow-actions marrow-actions-front', attr: { role: 'group', 'aria-label': 'Card review actions' } });
     if (!this.flipped) {
       const flip = actions.createEl('button', { text: 'Flip to answer', cls: 'mod-cta' });
       flip.addEventListener('click', () => { this.flipped = true; this.draw(); });
