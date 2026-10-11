@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "packId": "pilot-example",
+  "version": "1.0.0",
+  "indexes": [
+    { "id": "DEMO-EXAMPLE", "title": "Example only", "subject": "Demo" }
+  ],
+  "cards": [
+    {
+      "id": "EXAMPLE-001",
+      "type": "pyq",
+      "status": "approved",
+      "indexIds": ["DEMO-EXAMPLE"],
+      "question": "TEST CARD ONLY: Which option is the correct example?",
+      "options": ["A. First", "B. Second", "C. Third", "D. Fourth"],
+      "images": [],
+      "answer": "B. Second",
+      "explanation": "Dummy content for a technical test. Not a real PYQ."
+    },
+    {
+      "id": "EXAMPLE-002",
+      "type": "fact",
+      "status": "approved",
+      "indexIds": ["DEMO-EXAMPLE"],
+      "question": "What is this example demonstrating?",
+      "answer": "Short front/back facts can be imported in the same pack.",
+      "explanation": "Keep card IDs stable in subsequent imports so their statistics persist."
+    }
+  ]
+}
