@@ -2,7 +2,7 @@
 
 Offline-first Obsidian flashcard reviewer for **user-approved** medical PYQs and personal facts. Cards, images, and review history are stored in the vault and synchronized between Android devices with Syncthing.
 
-**Version:** 0.1.2 — MBBS hierarchy technical pilot, not yet field-tested on physical Android devices. **No real PYQs are included.**
+**Version:** 0.1.3 — MBBS hierarchy technical pilot, not yet field-tested on physical Android devices. **No real PYQs are included.**
 
 ## Install with BRAT
 
@@ -23,6 +23,21 @@ The reviewer now opens at **MBBS → Subjects → Indexes → Review**. Choose *
 The private data repository includes a **metadata-only** catalog copied from the existing index tracker (19 subjects, 1,314 index IDs). It does **not** include real PYQ questions. Indexes with zero approved cards are shown as **Awaiting approved cards** and cannot be reviewed yet.
 
 To receive the catalog: configure a read-only token for `Akshat6/marrow-cards-data` on the phone (see below), then select **Check GitHub** and **Refresh local**. Sync the vault to the tablet through Syncthing.
+
+## Import a complete approved pack without uploading images to GitHub
+
+When an approved index has images, ChatGPT can prepare one `.marrowpack.json` file containing the exact original images, card text, answer options, explanations and SHA-256 checksums.
+
+1. Download the single `.marrowpack.json` bundle from the conversation to the phone.
+2. Open Marrow Cards (anywhere in the MBBS library).
+3. Tap **Import approved bundle**, then choose that downloaded JSON file.
+4. The plugin validates the card format and all image checksums, writes the images into `MarrowCards/media/`, and writes the card pack into `MarrowCards/packs/`.
+5. Open **MBBS → Ophthalmology → Anatomy of Retina** and review the imported cards.
+6. Syncthing carries the images, card text, and later review history to the tablet without needing a second import.
+
+No GitHub media upload, GitHub access token, app reinstall, or folder extraction is required for this operation. **Do not upload this bundle to a public repository**; it may contain proprietary question-bank material.
+
+Note: the current integration cannot publish raw image files from this chat directly into GitHub. The bundle method avoids manual *uploading*, but does still require one local file selection per prepared batch. Future no-touch distribution would require a binary-capable publishing bridge.
 
 ## Connect the private approved-card collection
 
