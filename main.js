@@ -251,7 +251,7 @@ class MarrowCardsPlugin extends Plugin {
 
 class MarrowCardsView extends ItemView {
   constructor(leaf, plugin) {
-    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = [];
+    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = '';
   }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return 'Marrow Cards'; }
@@ -260,7 +260,93 @@ class MarrowCardsView extends ItemView {
   async refresh() {
     await this.plugin.loadCollection();
     this.selected = new Set([...this.selected].filter((id) => this.plugin.indexes.some((idx) => idx.id === id)));
+    if (this.screen === 'review') await this.resetQueue();
+    else this.draw();
+  }
+  async startReview(indexIds) {
+    this.selected = new Set(indexIds);
+    this.screen = 'review';
+    this.mode = 'all';
     await this.resetQueue();
+  }
+  goLibrary(level = 'mbbs') {
+    this.screen = level;
+    this.flipped = false;
+    this.draw();
+  }
+  countForIndex(indexId) {
+    return this.plugin.cards.reduce((n, card) => n + (card.indexIds.includes(indexId) ? 1 : 0), 0);
+  }
+  drawHierarchy(el) {
+    const header = el.createDiv({ cls: 'marrow-header' });
+    header.createEl('h2', { text: 'MBBS Flashcards' });
+    const toolbar = header.createDiv({ cls: 'marrow-toolbar' });
+    const refresh = toolbar.createEl('button', { text: 'Refresh local' });
+    refresh.addEventListener('click', () => this.refresh());
+    const sync = toolbar.createEl('button', { text: 'Check GitHub' });
+    sync.addEventListener('click', () => this.plugin.syncPacks());
+    const crumbs = el.createDiv({ cls: 'marrow-breadcrumb' });
+    const home = crumbs.createEl('button', { text: 'MBBS', cls: 'marrow-crumb' });
+    home.addEventListener('click', () => this.goLibrary('mbbs'));
+    if (this.screen === 'indexes') {
+      crumbs.createSpan({ text: ' / ' });
+      const subject = crumbs.createEl('button', { text: this.navSubject, cls: 'marrow-crumb' });
+      subject.addEventListener('click', () => this.goLibrary('subjects'));
+    }
+    const all = this.plugin.indexes;
+    const subjects = [...new Set(all.map(i => i.subject || 'Other'))].sort((a,b) => a.localeCompare(b));
+    if (this.screen === 'mbbs') {
+      el.createEl('p', { cls: 'marrow-hint', text: 'Choose MBBS to browse subjects and then your approved index decks.' });
+      const btn = el.createEl('button', { cls: 'marrow-tree-tile', text: 'MBBS  ·  ' + subjects.length + ' subjects' });
+      btn.addEventListener('click', () => this.goLibrary('subjects'));
+      return;
+    }
+    if (this.screen === 'subjects') {
+      el.createEl('h3', { text: 'Subjects' });
+      if (!subjects.length) el.createEl('p', { text: 'No index catalog has been installed yet. Tap Check GitHub after configuring your private data token.' });
+      for (const name of subjects) {
+        const count = all.filter(i => (i.subject || 'Other') === name).length;
+        const tile = el.createEl('button', { cls: 'marrow-tree-tile', text: name + '  ·  ' + count + ' indexes' });
+        tile.addEventListener('click', () => { this.navSubject = name; this.goLibrary('indexes'); });
+      }
+      return;
+    }
+    if (this.screen === 'indexes') {
+      el.createEl('h3', { text: this.navSubject });
+      const matching = all.filter(i => (i.subject || 'Other') === this.navSubject);
+      const grouped = new Map();
+      for (const idx of matching) {
+        const key = idx.system || 'Indexes';
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(idx);
+      }
+      for (const [system, indexes] of grouped.entries()) {
+        el.createEl('h4', { cls: 'marrow-system', text: system });
+        for (const idx of indexes) {
+          const count = this.countForIndex(idx.id);
+          const tile = el.createDiv({ cls: 'marrow-index-tile' });
+          const label = tile.createEl('label', { cls: 'marrow-index-name' });
+          const checkbox = label.createEl('input', { type: 'checkbox' });
+          checkbox.checked = this.selected.has(idx.id);
+          checkbox.disabled = !count;
+          checkbox.addEventListener('change', () => {
+            if (checkbox.checked) this.selected.add(idx.id);
+            else this.selected.delete(idx.id);
+            this.draw();
+          });
+          label.createSpan({ text: ' ' + idx.title });
+          tile.createEl('span', { cls: 'marrow-count', text: count ? count + (count === 1 ? ' approved card' : ' approved cards') : 'Awaiting approved cards' });
+          const practice = tile.createEl('button', { text: 'Review', cls: 'marrow-start-single' });
+          practice.disabled = !count;
+          practice.addEventListener('click', () => this.startReview([idx.id]));
+        }
+      }
+      const picked = [...this.selected].filter(id => this.countForIndex(id) > 0);
+      const combined = el.createEl('button', { cls: 'mod-cta marrow-start-selected', text: 'Review selected indexes (' + picked.length + ')' });
+      combined.disabled = picked.length === 0;
+      combined.addEventListener('click', () => this.startReview(picked));
+      el.createEl('p', { cls: 'marrow-hint', text: 'You may select indexes across subjects. An index with zero approved cards is visible but cannot start a review.' });
+    }
   }
   filterCards() {
     return this.plugin.cards.filter((c) => {
@@ -299,26 +385,19 @@ class MarrowCardsView extends ItemView {
   draw() {
     const el = this.contentEl;
     el.empty(); el.addClass('marrow-cards');
+    if (this.screen !== 'review') { this.drawHierarchy(el); return; }
     const header = el.createDiv({ cls: 'marrow-header' });
     header.createEl('h2', { text: 'Marrow Cards' });
     const bar = header.createDiv({ cls: 'marrow-toolbar' });
+    const library = bar.createEl('button', { text: '← MBBS library' });
+    library.addEventListener('click', () => this.goLibrary('subjects'));
     const refresh = bar.createEl('button', { text: 'Refresh local' });
     refresh.addEventListener('click', () => this.refresh());
     const sync = bar.createEl('button', { text: 'Check GitHub' });
     sync.addEventListener('click', () => this.plugin.syncPacks());
     const controls = el.createDiv({ cls: 'marrow-controls' });
-    controls.createEl('strong', { text: 'Indexes (select multiple, or leave all unchecked for all)' });
-    const indexList = controls.createDiv({ cls: 'marrow-index-list' });
-    for (const idx of this.plugin.indexes) {
-      const label = indexList.createEl('label', { cls: 'marrow-index' });
-      const check = label.createEl('input', { type: 'checkbox' });
-      check.checked = this.selected.has(idx.id);
-      label.createSpan({ text: ' ' + (idx.subject ? idx.subject + ' · ' : '') + idx.title });
-      check.addEventListener('change', () => {
-        if (check.checked) this.selected.add(idx.id); else this.selected.delete(idx.id);
-        this.resetQueue();
-      });
-    }
+    controls.createEl('strong', { text: 'Reviewing ' + this.selected.size + (this.selected.size === 1 ? ' index' : ' indexes') });
+    controls.createEl('p', { cls: 'marrow-hint', text: this.plugin.indexes.filter(i => this.selected.has(i.id)).map(i => i.title).join(' · ') || 'All installed cards' });
     const row = controls.createDiv({ cls: 'marrow-toolbar' });
     row.createSpan({ text: 'Practice: ' });
     const select = row.createEl('select');
