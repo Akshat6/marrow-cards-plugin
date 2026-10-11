@@ -1,1 +1,23 @@
 .marrow-cards{padding:18px;max-width:850px;margin:auto}.marrow-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}.marrow-header h2{margin:0}.marrow-toolbar,.marrow-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}.marrow-controls{border:1px solid var(--background-modifier-border);border-radius:12px;padding:14px;margin:16px 0}.marrow-index-list{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:10px;max-height:200px;overflow:auto}.marrow-index{display:inline-flex;align-items:center;gap:3px;font-size:var(--font-ui-small);padding:5px 8px;background:var(--background-secondary);border-radius:8px}.marrow-index input{margin:0}.marrow-position{color:var(--text-muted);font-size:var(--font-ui-small)}.marrow-panel{padding:20px;border:1px solid var(--background-modifier-border);border-radius:14px;background:var(--background-secondary);min-height:200px}.marrow-side{letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);font-size:11px;font-weight:700;margin-bottom:16px}.marrow-question{white-space:pre-wrap;font-weight:600;font-size:1.08em;line-height:1.65}.marrow-option{padding:10px 12px;margin:8px 0;border-radius:8px;background:var(--background-primary);white-space:pre-wrap}.marrow-image{display:block;max-width:100%;max-height:55vh;width:auto;height:auto;object-fit:contain;margin:14px auto;border-radius:8px;cursor:zoom-in}.marrow-answer{font-size:1.1em;font-weight:700;white-space:pre-wrap}.marrow-explanation{line-height:1.65;white-space:pre-wrap}.marrow-stats{font-size:var(--font-ui-small);color:var(--text-muted);white-space:pre-wrap}.marrow-wrong{background:var(--color-red)!important;color:white!important}.marrow-right{background:var(--color-green)!important;color:white!important}.marrow-missing{color:var(--text-error)}.marrow-actions button{flex:1;min-height:44px}.marrow-controls select{max-width:90%;font-size:var(--font-ui-small)}@media(max-width:550px){.marrow-cards{padding:10px}.marrow-panel{padding:14px}.marrow-header h2{font-size:1.45em}.marrow-index-list{max-height:135px}}
+
+
+
+/* v0.1.1: On Obsidian mobile the bottom floating navigation can obscure review controls.
+   Keep the actions above it, and give the page enough scroll clearance for long cards. */
+.is-mobile .marrow-cards {
+  padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px));
+}
+.is-mobile .marrow-actions {
+  position: sticky;
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.is-mobile .marrow-actions button {
+  min-height: 48px;
+  touch-action: manipulation;
+}
