@@ -68,7 +68,7 @@ On your **phone only**:
 1. In GitHub: Settings → Developer settings → Personal access tokens → Fine-grained tokens.
 2. Create a token scoped only to **Akshat6/marrow-cards-data**, with **Contents → Read-only** permission, and set a reasonable expiration.
 3. In Obsidian: Settings → Community plugins → Marrow Cards settings → **Read-only GitHub token** → paste token locally → **Save token locally**.
-4. Open reviewer → **Check GitHub**. It downloads the dummy `pilot-example` pack and its PNG image. If it displays a 'downloaded' notice and the **Technical test** index appears, the importer is working.
+4. Open reviewer → **Check GitHub**. It downloads the MBBS index catalog (no active cards). If Ophthalmology and other subjects appear, private authentication is working.
 5. Never send tokens to chat, place tokens in GitHub code, or store tokens in the vault. This plugin stores the token in Obsidian's local SecretStorage.
 
 Auto-checks run on startup and every 30 minutes **while Obsidian is running and has internet connectivity**. After a pack is installed the reviewer works offline.
@@ -83,13 +83,14 @@ Auto-checks run on startup and every 30 minutes **while Obsidian is running and 
 
 ## Card data model
 
-The [data repository](https://github.com/Akshat6/marrow-cards-data) contains:
+The [private data repository](https://github.com/Akshat6/marrow-cards-data) now contains only:
 
 ```text
 manifest.json
-packs/pilot-example.json
-media/pilot-circle.png
+packs/mbbs-index-catalog.json
 ```
+
+There are no active questions or question images in the database.
 
 The approved card's ID stays stable, even if its explanation changes. Cards can link to several indexes through `indexIds`. Supported types: `pyq` (options and images) and `fact` (simple question/answer). The app displays only approved cards and saves event logs separately from card text. Remote image imports accept JPG, PNG, WebP and GIF. They are cached locally.
 
