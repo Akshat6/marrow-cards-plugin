@@ -25,3 +25,9 @@ assert(src.includes('drawHierarchy(el)'), 'Missing hierarchical navigation');
 assert(src.includes("this.goLibrary('subjects')"), 'Missing subject navigation');
 assert(src.includes("this.goLibrary('indexes')"), 'Missing index navigation');
 assert(src.includes("this.startReview([idx.id])"), 'Missing one-index review');
+
+assert(src.includes("async importLocalBundle(file)"), "Missing local bundle importer");
+assert(src.includes("marrow-cards-bundle"), "Missing local bundle format validation");
+assert(src.includes("SHA-256"), "Missing media checksum validation");
+assert(src.includes("compareVersions(existing.version, info.version) >= 0"), "Missing no-downgrade protection");
+console.log("Bundle import and no-downgrade smoke checks passed.");
