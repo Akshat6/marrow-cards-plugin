@@ -20,7 +20,7 @@ jobs:
           set -euo pipefail
           node --check main.js
           node tests/smoke.js
-          node -e "const m=require('./manifest.json');if(!/^\\d+\\.\\d+\\.\\d+$/.test(m.version)||m.id!=='marrow-cards')process.exit(1)"
+          node -e "const m=require('./manifest.json');if(m.id!=='marrow-cards'||!m.version.match(/^[0-9]+[.][0-9]+[.][0-9]+$/))process.exit(1)"
           test -s styles.css
       - name: Create release if this version is new
         env:
