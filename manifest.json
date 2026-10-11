@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "minAppVersion": "1.11.4",
-  "description": "Offline-first MBBS flashcards; clean pilot reset while preserving subject/index hierarchy and mobile review controls.",
+  "description": "Reliable Android startup: register reviewer before storage reads, retain OPH-04 cards, no recurring pilot cleanup.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
