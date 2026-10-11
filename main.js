@@ -76,28 +76,47 @@ function tally(events) {
 
 
 class MarrowCardsPlugin extends Plugin {
-  async onload() {
-    this.settings = Object.assign({ deviceId: uniqueId(), autoSync: true }, await this.loadData() || {});
-    if (!safeId(this.settings.deviceId)) this.settings.deviceId = uniqueId().replace(/[^A-Za-z0-9_-]/g, '');
-    await this.saveData(this.settings);
-    await this.ensureDirectories();
+  onload() {
+    this.settings = { deviceId: uniqueId(), autoSync: true };
     this.cards = [];
     this.indexes = [];
     this.stats = new Map();
     this.writeQueue = Promise.resolve();
+    this.syncing = false;
+
+    // Register the plugin with Obsidian before touching the vault.
     this.registerView(VIEW_TYPE, (leaf) => new MarrowCardsView(leaf, this));
     this.addRibbonIcon('layers', 'Open Marrow Cards', () => this.activateView());
     this.addCommand({ id: 'open-marrow-cards', name: 'Open reviewer', callback: () => this.activateView() });
     this.addCommand({ id: 'sync-marrow-card-packs', name: 'Check for approved card packs', callback: () => this.syncPacks() });
     this.addSettingTab(new MarrowSettingsTab(this.app, this));
-    this.syncing = false;
+
+    this.initPromise = this.initializeRuntime();
     this.registerInterval(window.setInterval(() => {
-      if (this.settings.autoSync && this.app.secretStorage.getSecret(TOKEN_KEY)) void this.syncPacks(true);
+      if (this.settings.autoSync && this.app.secretStorage?.getSecret?.(TOKEN_KEY)) void this.syncPacks(true);
     }, 30 * 60 * 1000));
     this.app.workspace.onLayoutReady(() => {
-      if (this.settings.autoSync && this.app.secretStorage.getSecret(TOKEN_KEY)) void this.syncPacks(true);
+      void this.initPromise.then(() => {
+        if (this.settings.autoSync && this.app.secretStorage?.getSecret?.(TOKEN_KEY)) void this.syncPacks(true);
+      });
     });
   }
+
+  async initializeRuntime() {
+    try {
+      const saved = await this.loadData();
+      this.settings = Object.assign(this.settings, saved || {});
+      if (!safeId(this.settings.deviceId)) {
+        this.settings.deviceId = uniqueId().replace(/[^A-Za-z0-9_-]/g, '');
+      }
+      if (!saved || !safeId(saved.deviceId)) await this.saveData(this.settings);
+      await this.ensureDirectories();
+    } catch (error) {
+      console.error('[Marrow Cards] Startup file initialization failed', error);
+      new Notice('Marrow Cards: could not initialize local files. Plugin remains enabled.');
+    }
+  }
+
   onunload() { this.app.workspace.detachLeavesOfType(VIEW_TYPE); }
   async activateView() {
     let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0];
@@ -122,6 +141,7 @@ class MarrowCardsPlugin extends Plugin {
     else await this.app.vault.create(path, content);
   }
   async loadCollection() {
+    if (this.initPromise) await this.initPromise;
     const cards = new Map();
     const indexes = new Map();
     const files = this.app.vault.getFiles().filter((f) => f.path.startsWith(PACKS + '/') && f.extension === 'json');
@@ -252,6 +272,7 @@ class MarrowCardsPlugin extends Plugin {
     return asBinary ? decoded : new TextDecoder().decode(decoded);
   }
   async syncPacks(silent = false) {
+    if (this.initPromise) await this.initPromise;
     if (this.syncing) return;
     this.syncing = true;
     try {
