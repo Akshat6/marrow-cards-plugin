@@ -1025,6 +1025,15 @@ class MarrowCardsView extends ItemView {
     } finally { this.busy = false; }
   }
 
+  async nextAfterOption() {
+    if (!this.answerState || this.busy || this.sessionKind !== 'review') return;
+    await this.flushNote();
+    this.noteRevision++;
+    this.notesOpen = false;
+    this.noteData = null;
+    this.cursor++;
+    await this.present();
+  }
   draw() {
     const el = this.contentEl;
     el.empty();
