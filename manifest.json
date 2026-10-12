@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: nested subject subheading accordions, taller index panels and cross-subject review.",
+  "description": "Marrow Cards: browse cards without grading; add local per-card typed and stylus notes synced via vault.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
