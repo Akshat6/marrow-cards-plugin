@@ -1123,7 +1123,9 @@ class MarrowCardsView extends ItemView {
             text: optionLetter(displayIndex) + '. ' + optionBody(text),
             attr: { 'aria-label': 'Choose option ' + optionLetter(displayIndex) }
           });
-          option.disabled = Boolean(this.answerState) || this.busy;
+          // A new card can render during an async transition while busy is still true.
+          // Disable only an already-answered card; the click handler checks busy live.
+          option.disabled = Boolean(this.answerState);
           if (this.answerState?.sourceIndex === sourceIndex) option.addClass('marrow-option-selected');
           option.addEventListener('click', () => void this.selectOption(sourceIndex));
         } else {
