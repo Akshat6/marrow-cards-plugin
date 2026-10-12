@@ -239,3 +239,109 @@ assert(reviewer.selected.has('OPH-04') && reviewer.selected.has('MED-01'));
 assert(newCss.includes('.marrow-accordion-body'), 'Accordion panel styles missing');
 assert(newCss.includes('max-height: min('), 'Open index list should have bounded scroll height');
 console.log('Cross-subject collapsible index-selection and availability-filter checks passed.');
+
+
+// v0.1.9: subject -> system/subheading -> index; selected cards survive switches.
+const anatomyHeadCard = { id: 'ANAT-HNF-01', type: 'fact', status: 'approved',
+  indexIds: ['ANA-HNF-01'], question: 'Head question?', answer: 'Answer' };
+const anatomyUpperCard = { id: 'ANAT-UL-01', type: 'fact', status: 'approved',
+  indexIds: ['ANA-UL-01'], question: 'Upper limb question?', answer: 'Answer' };
+reviewer.plugin = {
+  cards: [card, secondCard, anatomyHeadCard, anatomyUpperCard],
+  indexes: [
+    { id: 'ANA-HNF-01', title: 'Cranial nerves', subject: 'Anatomy', system: 'Head, Neck and Face' },
+    { id: 'ANA-HNF-02', title: 'Face muscles (empty)', subject: 'Anatomy', system: 'Head, Neck and Face' },
+    { id: 'ANA-UL-01', title: 'Brachial plexus', subject: 'Anatomy', system: 'Upper Limb' },
+    { id: 'ANA-LL-01', title: 'Popliteal fossa (empty)', subject: 'Anatomy', system: 'Lower Limb' },
+    { id: 'OPH-04', title: 'Anatomy of Retina', subject: 'Ophthalmology', system: 'Basic Anatomy of Eye' },
+    { id: 'OPH-32', title: 'Retinal investigations (empty)', subject: 'Ophthalmology', system: 'Retina' },
+    { id: 'MED-01', title: 'Approved medicine index', subject: 'Medicine', system: 'General' }
+  ],
+  stats: new Map()
+};
+reviewer.screen = 'subjects';
+reviewer.expandedSubject = '';
+reviewer.expandedSystem = '';
+reviewer.onlyApprovedIndexes = false;
+reviewer.selected = new Set();
+reviewer.draw();
+
+function findActiveSystem(node) {
+  if (node.cls.split(' ').includes('marrow-system-body') && !node.hidden) return node;
+  for (const child of node.children) {
+    const found = findActiveSystem(child);
+    if (found) return found;
+  }
+  return null;
+}
+assert(reviewer.contentEl.findText('▸  Anatomy  ·  4 indexes'),
+  'Anatomy must appear as a collapsible subject');
+reviewer.contentEl.findText('▸  Anatomy  ·  4 indexes').handlers.click();
+assert(reviewer.contentEl.findText('▸  Head, Neck and Face  ·  2 indexes'),
+  'Live catalog system names should be used as subheadings');
+assert(reviewer.contentEl.findText('▸  Upper Limb  ·  1 index'),
+  'Multiple subheadings should be shown');
+assert(!reviewer.contentEl.findText(' Cranial nerves'),
+  'Indexes should be hidden until their subheading opens');
+reviewer.contentEl.findText('▸  Head, Neck and Face  ·  2 indexes').handlers.click();
+assert.equal(reviewer.expandedSystem, 'Head, Neck and Face');
+assert(reviewer.contentEl.findText(' Cranial nerves'),
+  'Opening Head, Neck and Face should show its own indexes');
+assert(!reviewer.contentEl.findText(' Brachial plexus'),
+  'Another system’s indexes should remain hidden');
+let nestedCheckbox = findIndexCheckbox(findActiveSystem(reviewer.contentEl));
+assert(nestedCheckbox && nestedCheckbox.props.attr['aria-label'] === 'Select Cranial nerves',
+  'Only the expanded system should provide selectable indexes');
+nestedCheckbox.checked = true;
+nestedCheckbox.handlers.change();
+assert(reviewer.selected.has('ANA-HNF-01'));
+assert(reviewer.contentEl.findText('▾  Head, Neck and Face  ·  2 indexes  ·  1 selected'),
+  'Selected count should appear on the system heading');
+reviewer.contentEl.findText('▸  Upper Limb  ·  1 index').handlers.click();
+assert.equal(reviewer.expandedSystem, 'Upper Limb');
+assert(!reviewer.contentEl.findText(' Cranial nerves'),
+  'Opening Upper Limb should collapse Head, Neck and Face');
+assert(reviewer.selected.has('ANA-HNF-01'), 'Switching system must keep earlier choices');
+assert(reviewer.contentEl.findText(' Brachial plexus'));
+nestedCheckbox = findIndexCheckbox(findActiveSystem(reviewer.contentEl));
+nestedCheckbox.checked = true;
+nestedCheckbox.handlers.change();
+assert(reviewer.selected.has('ANA-UL-01'));
+assert(reviewer.contentEl.findText('▾  Anatomy  ·  4 indexes  ·  2 selected'),
+  'The subject header should reflect selections across its systems');
+reviewer.contentEl.findText('▸  Ophthalmology  ·  2 indexes').handlers.click();
+assert.equal(reviewer.expandedSubject, 'Ophthalmology');
+assert.equal(reviewer.expandedSystem, '', 'New subject should start with subheadings collapsed');
+assert(!reviewer.contentEl.findText(' Brachial plexus'),
+  'Previous subject should collapse entirely');
+assert(reviewer.selected.has('ANA-HNF-01') && reviewer.selected.has('ANA-UL-01'),
+  'Both anatomy indexes must remain selected after switching subject');
+assert(reviewer.contentEl.findText('▸  Basic Anatomy of Eye  ·  1 index'));
+reviewer.contentEl.findText('▸  Basic Anatomy of Eye  ·  1 index').handlers.click();
+assert(reviewer.contentEl.findText(' Anatomy of Retina'));
+nestedCheckbox = findIndexCheckbox(findActiveSystem(reviewer.contentEl));
+nestedCheckbox.checked = true;
+nestedCheckbox.handlers.change();
+assert.equal(reviewer.selected.size, 3, 'Anatomy and Ophthalmology selections must combine');
+assert.equal(reviewer.contentEl.findClass('marrow-start-selected-top').text,
+  'Review selected indexes (3)');
+reviewer.contentEl.findClass('marrow-start-selected-top').handlers.click();
+assert.deepEqual([...chosenForReview].sort(), ['ANA-HNF-01', 'ANA-UL-01', 'OPH-04'],
+  'Combined review must include all chosen index IDs across subheadings/subjects');
+// Approved-only should remove empty systems entirely and preserve selected ones.
+availability = reviewer.contentEl.findClass('marrow-availability-label');
+toggle = availability.children.find(child => child.props.tag === 'input');
+toggle.checked = true;
+toggle.handlers.change();
+assert(!reviewer.contentEl.findText('▸  Retina  ·  1 index'),
+  'System with no approved cards should be hidden by approved-only filter');
+assert(reviewer.contentEl.findText(' Anatomy of Retina'),
+  'Expanded, approved subheading should remain open after filtering');
+assert.equal(reviewer.selected.size, 3, 'Filter must not remove selected indexes');
+reviewer.contentEl.findText('▾  Ophthalmology  ·  1 index  ·  1 selected').handlers.click();
+assert.equal(reviewer.expandedSystem, '', 'Collapsing subject should close its subheading');
+assert.equal(reviewer.selected.size, 3);
+assert(newCss.includes('max-height: min(74vh, 680px)'), 'Subject accordion should be taller');
+assert(newCss.includes('max-height: min(70vh, 620px)'), 'Mobile subject accordion should be taller');
+assert(newCss.includes('.marrow-system-toggle'), 'Nested subheading styles are missing');
+console.log('Nested system accordion regression checks passed.');
