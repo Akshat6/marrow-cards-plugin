@@ -1117,6 +1117,16 @@ class MarrowCardsView extends ItemView {
           optionBody(card.options[this.correctIndex])
         : card.answer;
       panel.createEl('div', { cls: 'marrow-answer', text: answerText });
+      if (this.answerState && this.answerState.cardId === card.id) {
+        panel.createEl('p', {
+          cls: this.answerState.outcome === 'right' ? 'marrow-choice-correct' : 'marrow-choice-wrong',
+          text: this.answerState.outcome === 'right'
+            ? 'Correct — saved as Right' : 'Incorrect — saved as Wrong'
+        });
+        panel.createEl('p', { cls: 'marrow-choice-feedback-detail',
+          text: 'Your choice: ' + optionLetter(this.optionOrder.indexOf(this.answerState.sourceIndex)) +
+            '. ' + optionBody(card.options[this.answerState.sourceIndex]) });
+      }
       if (card.explanation) {
         panel.createEl('h4', { text: 'Explanation' });
         panel.createEl('div', { cls: 'marrow-explanation', text: card.explanation });
