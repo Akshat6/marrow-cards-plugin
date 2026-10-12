@@ -24,6 +24,14 @@ Suggested first message in a new chat:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Tap MCQ options and shuffle them safely in Review (v0.2.2)
+
+**Review mode:** For approved questions with a verifiable correct option, tap an option instead of flipping. The plugin saves a single **Right** or **Wrong** event immediately and flips to the answer, displaying the chosen choice, the correct **currently displayed letter**, and the original explanation. It stays on the answered card until you tap **Next card**, so you can open **My notes** and write before advancing. Once an answer has been recorded, flipping back to the question cannot grade it again. **Flip to answer** remains available as an alternative for mental recall and manual Right/Wrong grading.
+
+**Per-attempt option scrambling:** Eligible independent-option MCQs receive a new randomized display order whenever they are presented for Review; a given card's displayed order does not change while flipping, opening notes, or viewing its explanation. The source options and answers in the private approved packs are **never modified**. The app calculates correctness from the original source option identity, not the current A/B/C/D position. Questions with potentially positional answer choices (such as "All of the above", "Both A and B", numeric matching sequences, or image marker labels) remain in their original order but still support tapping when their answers are verifiable. If the original answer does not match its options safely, choices remain read-only and you must flip and grade manually. Future PYQ approvals should include a verified correct answer and identify unsafe-to-shuffle option dependencies.
+
+**Fact cards without options** still use manual flip and Right/Wrong. **Browse mode** keeps options in their original order, does not let taps grade the card, and never records Seen/Right/Wrong. No change is made to your existing approved cards, personal notes, image assets or previous review events.
+
 ## Compact Review / Browse action buttons (v0.2.1)
 
 On the **MBBS → Subjects** screen, **Review selected indexes (N)** (purple) and **Browse selected indexes (N)** (neutral grey) are now adjacent in a small, consistent vertical stack at both the top and bottom of the subject list. The old Android 110px per-button bottom gap has been removed; bottom toolbar clearance is reserved at the end of the library page instead. Button functionality, card grading, browsing, personal notes and cross-subject index selection are unchanged.
