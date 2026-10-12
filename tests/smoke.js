@@ -23,7 +23,7 @@ console.log('Pilot smoke checks passed: manifest, source syntax, dummy cards, im
 assert(src.includes("this.screen = 'mbbs'"), 'MBBS should be initial navigation screen');
 assert(src.includes('drawHierarchy(el)'), 'Missing hierarchical navigation');
 assert(src.includes("this.goLibrary('subjects')"), 'Missing subject navigation');
-assert(src.includes("this.goLibrary('indexes')"), 'Missing index navigation');
+assert(src.includes('this.expandedSubject'), 'Missing collapsible subject navigation');
 assert(src.includes("this.startReview([idx.id])"), 'Missing one-index review');
 
 assert(src.includes("async importLocalBundle(file)"), "Missing local bundle importer");
@@ -45,6 +45,9 @@ class MockElement {
   createEl(tag, props = {}) { const c = new MockElement({ ...props, tag }); this.children.push(c); return c; }
   createSpan(props = {}) { return this.createEl('span', props); }
   addEventListener(event, handler) { this.handlers[event] = handler; }
+  setText(value) { this.text = value; }
+  setAttribute(name, value) { this.props.attr = { ...(this.props.attr || {}), [name]: value }; }
+
   findText(text) {
     if (this.text === text) return this;
     for (const child of this.children) { const found = child.findText(text); if (found) return found; }
@@ -126,8 +129,7 @@ assert(startupCalls.includes('settings') && startupCalls.includes('view'),
 console.log('Android cold-start regression check passed.');
 
 
-// Approved-card-only browser filter: empty indexes and subjects are hidden,
-// while existing selections and full-list visibility remain intact.
+// v0.1.8 subject accordion + v0.1.7 approved-only filter tests.
 const secondCard = { id: 'TEST-002', type: 'fact', status: 'approved',
   indexIds: ['MED-01'], question: 'Test?', answer: 'Test.' };
 reviewer.plugin = {
@@ -142,31 +144,99 @@ reviewer.plugin = {
 };
 reviewer.screen = 'subjects';
 reviewer.onlyApprovedIndexes = false;
-reviewer.selected = new Set(['OPH-04', 'MED-01']);
+reviewer.expandedSubject = '';
+reviewer.selected = new Set();
+let chosenForReview;
+reviewer.startReview = ids => { chosenForReview = ids; };
 reviewer.draw();
-assert(reviewer.contentEl.findText('ENT  ·  1 index'), 'All-subjects mode should show subjects without cards');
+
+assert(reviewer.contentEl.findText('▸  ENT  ·  1 index'), 'Unapproved subject should be visible with filter off');
+assert(reviewer.contentEl.findText('▸  Medicine  ·  1 index'), 'Medicine subject should initially be collapsed');
+assert(!reviewer.contentEl.findText(' Approved medicine index'), 'Collapsed subjects should not render indexes');
+assert.equal(reviewer.contentEl.findClass('marrow-start-selected-top').disabled, true,
+  'Review selected button should initially be disabled');
+
+function findIndexCheckbox(root) {
+  if (root.props.tag === 'input' && root.props.type === 'checkbox' &&
+      root.props.attr?.['aria-label']?.startsWith('Select ')) return root;
+  for (const child of root.children) {
+    const result = findIndexCheckbox(child);
+    if (result) return result;
+  }
+  return null;
+}
+
+// Open medicine, select one index, then open Ophthalmology without leaving the page.
+reviewer.contentEl.findText('▸  Medicine  ·  1 index').handlers.click();
+assert.equal(reviewer.screen, 'subjects', 'Subject opens inline instead of navigating away');
+assert.equal(reviewer.expandedSubject, 'Medicine', 'Medicine should be open');
+assert(reviewer.contentEl.findText(' Approved medicine index'), 'Open subject should show its indexes');
+let checkbox = findIndexCheckbox(reviewer.contentEl.findClass('marrow-accordion-body'));
+assert(checkbox, 'Need an index selection checkbox');
+checkbox.checked = true; checkbox.handlers.change();
+assert(reviewer.selected.has('MED-01'), 'Medicine selection should stick');
+assert(reviewer.contentEl.findText('▾  Medicine  ·  1 index  ·  1 selected'),
+  'Medicine heading should show selected index count');
+assert.equal(reviewer.contentEl.findClass('marrow-start-selected-top').disabled, false,
+  'Review selected button must enable after selecting an index');
+
+reviewer.contentEl.findText('▸  Ophthalmology  ·  2 indexes').handlers.click();
+assert.equal(reviewer.screen, 'subjects');
+assert.equal(reviewer.expandedSubject, 'Ophthalmology');
+assert(!reviewer.contentEl.findText(' Approved medicine index'), 'Opening Ophthalmology must collapse Medicine');
+assert(reviewer.selected.has('MED-01'), 'Collapsing must not discard Medicine selection');
+assert(reviewer.contentEl.findText(' Anatomy of Retina'), 'Ophthalmology index must be visible');
+assert(reviewer.contentEl.findText(' Unapproved eye index'), 'Full view must also show empty indexes');
+checkbox = findIndexCheckbox(reviewer.contentEl.findClass('marrow-accordion-body'));
+// There are multiple bodies; get the active (non-hidden) body for Ophthalmology.
+const findActiveBody = node => {
+  if (node.cls.split(' ').includes('marrow-accordion-body') && !node.hidden) return node;
+  for (const child of node.children) { const f = findActiveBody(child); if (f) return f; }
+  return null;
+};
+const activeBody = findActiveBody(reviewer.contentEl);
+assert(activeBody, 'An expanded subject needs an active body');
+checkbox = findIndexCheckbox(activeBody);
+assert(checkbox, 'Ophthalmology checkbox missing');
+checkbox.checked = true; checkbox.handlers.change();
+assert(reviewer.selected.has('OPH-04') && reviewer.selected.has('MED-01'),
+  'Both subjects must remain selected');
+assert(reviewer.contentEl.findText('▾  Ophthalmology  ·  2 indexes  ·  1 selected'));
+assert.equal(reviewer.contentEl.findClass('marrow-start-selected-top').text,
+  'Review selected indexes (2)', 'Top combined review button should update');
+assert.equal(reviewer.contentEl.findClass('marrow-start-selected-bottom').text,
+  'Review selected indexes (2)', 'Bottom combined review button should update');
+reviewer.contentEl.findClass('marrow-start-selected-top').handlers.click();
+assert.deepEqual([...chosenForReview].sort(), ['MED-01', 'OPH-04'],
+  'Combined review should include both subjects');
+
+// The single-index Review button must not include other selected subjects.
+activeBody.findText('Review').handlers.click();
+assert.deepEqual([...chosenForReview], ['OPH-04'], 'Individual Review should start only that index');
+
+// Approved filter hides empty indexes/subjects while preserving both selections.
 let availability = reviewer.contentEl.findClass('marrow-availability-label');
-assert(availability, 'Approved-only toggle must be shown on subjects page');
 let toggle = availability.children.find(child => child.props.tag === 'input');
-assert(toggle && toggle.checked === false, 'Filter must start off');
-toggle.checked = true;
-toggle.handlers.change();
-assert.equal(reviewer.onlyApprovedIndexes, true, 'Toggle state should turn on');
-assert(!reviewer.contentEl.findText('ENT  ·  1 index'), 'Empty subjects must be hidden when filter is on');
-assert(reviewer.contentEl.findText('Ophthalmology  ·  1 index'), 'Subject count should reflect visible approved indexes');
-assert(reviewer.contentEl.findText('Medicine  ·  1 index'), 'Other approved subjects must stay visible');
-reviewer.screen = 'indexes';
-reviewer.navSubject = 'Ophthalmology';
-reviewer.draw();
-assert(reviewer.contentEl.findText(' Anatomy of Retina'), 'Approved index not displayed');
-assert(!reviewer.contentEl.findText(' Unapproved eye index'), 'Unapproved index must be hidden');
-assert.equal(reviewer.selected.size, 2, 'Filtering must not discard index selections');
+assert(toggle && !toggle.checked, 'Approved-only toggle should start off');
+toggle.checked = true; toggle.handlers.change();
+assert.equal(reviewer.onlyApprovedIndexes, true);
+assert(!reviewer.contentEl.findText('▸  ENT  ·  1 index'), 'Empty subjects must disappear');
+assert(!reviewer.contentEl.findText(' Unapproved eye index'), 'Empty indexes must disappear');
+assert(reviewer.contentEl.findText('▾  Ophthalmology  ·  1 index  ·  1 selected'),
+  'Approved-only filter should keep the opened subject and selections');
+assert.equal(reviewer.selected.size, 2, 'Filtering must not change selections');
 availability = reviewer.contentEl.findClass('marrow-availability-label');
 toggle = availability.children.find(child => child.props.tag === 'input');
-assert(toggle && toggle.checked === true, 'Filter must remain on between screens');
-toggle.checked = false;
-toggle.handlers.change();
-assert(reviewer.contentEl.findText(' Unapproved eye index'), 'Turn filter off to restore full index list');
-assert.equal(reviewer.selected.size, 2, 'Turning off filter must preserve selected indexes');
-assert(newCss.includes('.marrow-availability-label'), 'Touch-friendly toggle styles missing');
-console.log('Approved-index visibility filter checks passed.');
+toggle.checked = false; toggle.handlers.change();
+assert(reviewer.contentEl.findText(' Unapproved eye index'), 'Full list should return when toggle is off');
+assert.equal(reviewer.selected.size, 2, 'Turning off filter should keep both selections');
+
+// Tapping the open subject a second time should collapse it.
+reviewer.contentEl.findText('▾  Ophthalmology  ·  2 indexes  ·  1 selected').handlers.click();
+assert.equal(reviewer.expandedSubject, '', 'An open subject should collapse when tapped again');
+assert(!reviewer.contentEl.findText(' Anatomy of Retina'), 'Collapsed index tiles must be removed');
+assert(reviewer.selected.has('OPH-04') && reviewer.selected.has('MED-01'));
+
+assert(newCss.includes('.marrow-accordion-body'), 'Accordion panel styles missing');
+assert(newCss.includes('max-height: min('), 'Open index list should have bounded scroll height');
+console.log('Cross-subject collapsible index-selection and availability-filter checks passed.');
