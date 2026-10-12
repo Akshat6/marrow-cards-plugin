@@ -24,6 +24,19 @@ Suggested first message in a new chat:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Collapsible subject selector (v0.1.8)
+
+Select multiple indexes across different subjects **without leaving the subject list**:
+
+1. Navigate **Marrow Cards → MBBS → Subjects**.
+2. Tap **Anatomy** to expand its indexes. Tick the two indexes you want.
+3. Tap **Ophthalmology**. Anatomy automatically collapses, but its two selections stay selected. Tick two Ophthalmology indexes.
+4. Tap **Review selected indexes (4)** at the top or bottom of the subject list. It reviews all four indexes together; choose **Ever wrong** inside the reviewer to practise only the ones previously marked Wrong.
+
+You can tap an open subject again to collapse it. Each expanded index list has its own bounded scroll area, keeping other subject headings accessible on small Android screens. **Review** beside any individual index still reviews only that one index.
+
+The existing **Show only indexes with approved cards** filter also works with the collapsible list, hiding subjects and indexes with no installed approved cards. Toggling it never clears selections. The expanded subject is remembered during the current reviewer session; nothing is added to or removed from the underlying data.
+
 ## Show only indexes with approved cards (v0.1.7)
 
 On **MBBS → Subjects** or **Subject → Indexes**, turn on **Show only indexes with approved cards**. The browser will hide index entries that do not have at least one approved card in the locally installed packs, and hide subjects without any such indexes. You can turn it off at any time to restore the full subject/index catalog.
