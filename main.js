@@ -418,7 +418,7 @@ class MarrowCardsPlugin extends Plugin {
 
 class MarrowCardsView extends ItemView {
   constructor(leaf, plugin) {
-    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.expandedSubject = ''; this.expandedSystem = ''; this.onlyApprovedIndexes = false; this.sessionKind = 'review'; this.notesOpen = false; this.noteData = null; this.noteTimer = null; this.noteRevision = 0;
+    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.expandedSubject = ''; this.expandedSystem = ''; this.onlyApprovedIndexes = false; this.sessionKind = 'review'; this.notesOpen = false; this.noteData = null; this.noteTimer = null; this.noteRevision = 0; this.optionOrder = []; this.correctIndex = -1; this.answerState = null;
   }
   getViewType() { return VIEW_TYPE; }
   async onClose() { try { await this.flushNote(); } catch (error) { /* notice already shown */ } }
