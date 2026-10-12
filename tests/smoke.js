@@ -124,3 +124,49 @@ assert.equal(resultOfLoad, undefined, 'Startup should not block plugin registrat
 assert(startupCalls.includes('settings') && startupCalls.includes('view'),
   'Views and settings must register despite a stuck settings-data read');
 console.log('Android cold-start regression check passed.');
+
+
+// Approved-card-only browser filter: empty indexes and subjects are hidden,
+// while existing selections and full-list visibility remain intact.
+const secondCard = { id: 'TEST-002', type: 'fact', status: 'approved',
+  indexIds: ['MED-01'], question: 'Test?', answer: 'Test.' };
+reviewer.plugin = {
+  cards: [card, secondCard],
+  indexes: [
+    { id: 'OPH-04', title: 'Anatomy of Retina', subject: 'Ophthalmology', system: 'Basic Anatomy of Eye' },
+    { id: 'OPH-05', title: 'Unapproved eye index', subject: 'Ophthalmology', system: 'Basic Anatomy of Eye' },
+    { id: 'MED-01', title: 'Approved medicine index', subject: 'Medicine', system: 'General' },
+    { id: 'ENT-01', title: 'Unapproved ENT index', subject: 'ENT', system: 'General' }
+  ],
+  stats: new Map()
+};
+reviewer.screen = 'subjects';
+reviewer.onlyApprovedIndexes = false;
+reviewer.selected = new Set(['OPH-04', 'MED-01']);
+reviewer.draw();
+assert(reviewer.contentEl.findText('ENT  ·  1 index'), 'All-subjects mode should show subjects without cards');
+let availability = reviewer.contentEl.findClass('marrow-availability-label');
+assert(availability, 'Approved-only toggle must be shown on subjects page');
+let toggle = availability.children.find(child => child.props.tag === 'input');
+assert(toggle && toggle.checked === false, 'Filter must start off');
+toggle.checked = true;
+toggle.handlers.change();
+assert.equal(reviewer.onlyApprovedIndexes, true, 'Toggle state should turn on');
+assert(!reviewer.contentEl.findText('ENT  ·  1 index'), 'Empty subjects must be hidden when filter is on');
+assert(reviewer.contentEl.findText('Ophthalmology  ·  1 index'), 'Subject count should reflect visible approved indexes');
+assert(reviewer.contentEl.findText('Medicine  ·  1 index'), 'Other approved subjects must stay visible');
+reviewer.screen = 'indexes';
+reviewer.navSubject = 'Ophthalmology';
+reviewer.draw();
+assert(reviewer.contentEl.findText(' Anatomy of Retina'), 'Approved index not displayed');
+assert(!reviewer.contentEl.findText(' Unapproved eye index'), 'Unapproved index must be hidden');
+assert.equal(reviewer.selected.size, 2, 'Filtering must not discard index selections');
+availability = reviewer.contentEl.findClass('marrow-availability-label');
+toggle = availability.children.find(child => child.props.tag === 'input');
+assert(toggle && toggle.checked === true, 'Filter must remain on between screens');
+toggle.checked = false;
+toggle.handlers.change();
+assert(reviewer.contentEl.findText(' Unapproved eye index'), 'Turn filter off to restore full index list');
+assert.equal(reviewer.selected.size, 2, 'Turning off filter must preserve selected indexes');
+assert(newCss.includes('.marrow-availability-label'), 'Touch-friendly toggle styles missing');
+console.log('Approved-index visibility filter checks passed.');
