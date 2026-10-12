@@ -120,3 +120,58 @@
   accent-color: var(--interactive-accent);
 }
 .is-mobile .marrow-availability-label { min-height: 42px; }
+
+/* v0.1.8: collapsible subject list for cross-subject index selection.
+   Bound each open panel's scroll height so the next subject remains reachable. */
+.marrow-subject-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.marrow-subject-section {
+  min-width: 0;
+}
+.marrow-subject-toggle {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.marrow-subject-toggle[aria-expanded="true"] {
+  border-color: var(--interactive-accent);
+  background: var(--background-secondary-alt, var(--background-secondary));
+}
+.marrow-accordion-body {
+  box-sizing: border-box;
+  padding: 8px 12px 12px;
+  max-height: min(55vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--background-modifier-border);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: var(--background-primary);
+}
+.marrow-accordion-body[hidden] {
+  display: none !important;
+}
+.marrow-accordion-body .marrow-system:first-child {
+  margin-top: 8px;
+}
+.marrow-accordion-body .marrow-index-tile {
+  margin: 8px 0;
+}
+.marrow-start-selected-top {
+  margin: 12px 0;
+}
+.marrow-start-selected-bottom {
+  margin: 16px 0;
+}
+.is-mobile .marrow-subject-toggle { min-height: 55px; }
+.is-mobile .marrow-accordion-body { max-height: min(52vh, 410px); }
