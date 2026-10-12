@@ -558,5 +558,19 @@ console.log('Nested system accordion regression checks passed.');
     'Browsing must display the untouched source options');
   await mcqView.selectOption(2);
   assert.equal(logged.length,eventCount,'Browse selection must never grade');
+  const positional = { ...mcq, id:'MCQ-POSITIONAL', options:[
+    'a) First','b) Correct','c) Both A and B','d) Last'
+  ], answer:'B. Correct' };
+  plugin.cards = [positional];
+  await mcqView.startReview(['OPH-04']);
+  assert.deepEqual([...mcqView.optionOrder],[0,1,2,3],
+    'Dependent options must remain in source order');
+  const bad = { ...positional, id:'MCQ-UNKNOWN-ANSWER', answer:'B. Not in the options' };
+  plugin.cards = [bad];
+  await mcqView.startReview(['OPH-04']);
+  assert.equal(mcqView.correctIndex,-1,'Never guess a mismatched source answer');
+  assert(mcqView.contentEl.findText('Flip to answer'));
+  assert(mcqView.contentEl.findText('b) Correct'),
+    'Unverifiable MCQ must remain readable with manual grading');
   console.log('MCQ tap-to-grade, changed letters, single count and fact fallback checks passed.');
 })().catch(err=>{console.error(err);process.exitCode=1;});
