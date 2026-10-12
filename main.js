@@ -363,13 +363,19 @@ class MarrowCardsView extends ItemView {
     super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.expandedSubject = ''; this.expandedSystem = ''; this.onlyApprovedIndexes = false; this.sessionKind = 'review'; this.notesOpen = false; this.noteData = null; this.noteTimer = null; this.noteRevision = 0;
   }
   getViewType() { return VIEW_TYPE; }
+  async onClose() { try { await this.flushNote(); } catch (error) { /* notice already shown */ } }
   getDisplayText() { return 'Marrow Cards'; }
   getIcon() { return 'layers'; }
   async onOpen() { await this.refresh(); }
   async refresh() {
     await this.plugin.loadCollection();
     this.selected = new Set([...this.selected].filter((id) => this.plugin.indexes.some((idx) => idx.id === id)));
-    if (this.screen === 'review') await this.resetQueue();
+    if (this.screen === 'review') {
+      try { await this.flushNote(); } catch (error) { return; }
+      this.notesOpen = false;
+      this.noteData = null;
+      await this.resetQueue();
+    }
     else this.draw();
   }
   async startReview(indexIds) {
@@ -658,6 +664,212 @@ class MarrowCardsView extends ItemView {
         text: 'Return to Subjects for the collapsible multi-subject index selector.' });
     }
   }
+  // A note is local to the card ID, not to a changing GitHub pack version.
+  // Text and vector ink have independent files for Syncthing.
+  scheduleNoteSave() {
+    if (this.noteTimer) clearTimeout(this.noteTimer);
+    this.noteTimer = setTimeout(() => {
+      this.noteTimer = null;
+      void this.flushNote();
+    }, 650);
+  }
+  async flushNote() {
+    if (this.noteTimer) { clearTimeout(this.noteTimer); this.noteTimer = null; }
+    const note = this.noteData;
+    if (!note) return;
+    try {
+      if (note.dirtyText) {
+        const snapshot = note.text;
+        await this.plugin.saveCardNotePart(note.cardId, 'text', snapshot);
+        if (note.text === snapshot) note.dirtyText = false;
+      }
+      if (note.dirtyInk) {
+        const snapshot = JSON.parse(JSON.stringify(note.strokes));
+        await this.plugin.saveCardNotePart(note.cardId, 'ink', snapshot);
+        if (JSON.stringify(note.strokes) === JSON.stringify(snapshot)) note.dirtyInk = false;
+      }
+    } catch (error) {
+      console.error('[Marrow Cards] Note save failed', error);
+      new Notice('Personal note not saved: ' + (error.message || String(error)), 9000);
+      throw error;
+    }
+  }
+  async toggleNote(card) {
+    if (this.notesOpen) {
+      try { await this.flushNote(); } catch (error) { return; }
+      this.notesOpen = false;
+      this.noteData = null;
+      this.noteRevision += 1;
+      this.draw();
+      return;
+    }
+    try {
+      await this.flushNote();
+      const revision = ++this.noteRevision;
+      const data = await this.plugin.readCardNote(card.id);
+      if (revision !== this.noteRevision || this.queue[this.cursor]?.id !== card.id) return;
+      this.noteData = { ...data, mode: 'type', dirtyText: false, dirtyInk: false };
+      this.notesOpen = true;
+      this.draw();
+    } catch (error) {
+      console.error('[Marrow Cards] Note load failed', error);
+      new Notice('Could not open personal note: ' + (error.message || String(error)), 9000);
+    }
+  }
+  async browseStep(direction) {
+    if (this.sessionKind !== 'browse') return;
+    const next = this.cursor + direction;
+    if (next < 0 || next >= this.queue.length) return;
+    try { await this.flushNote(); } catch (error) { return; }
+    this.noteRevision += 1;
+    this.notesOpen = false;
+    this.noteData = null;
+    this.cursor = next;
+    await this.present(); // Browsing deliberately does not record a 'seen' event.
+  }
+  drawNoteEditor(parent, card) {
+    const note = this.noteData;
+    if (!this.notesOpen || !note || note.cardId !== card.id) return;
+    const holder = parent.createDiv({ cls: 'marrow-note-editor' });
+    holder.createEl('h4', { text: 'My notes · ' + card.id });
+    holder.createEl('p', { cls: 'marrow-hint',
+      text: 'Type on your phone; switch to Pen on your tablet to write over the text. Saved locally for Syncthing.' });
+    const toolbar = holder.createDiv({ cls: 'marrow-note-toolbar' });
+    const setMode = mode => {
+      note.mode = mode;
+      this.draw(); // preserves the note data and redraws both layers.
+    };
+    for (const [mode, label] of [['type', 'Type'], ['pen', 'Pen'], ['eraser', 'Eraser']]) {
+      const button = toolbar.createEl('button', {
+        text: label, cls: note.mode === mode ? 'mod-cta' : ''
+      });
+      button.addEventListener('click', () => setMode(mode));
+    }
+    const undo = toolbar.createEl('button', { text: 'Undo ink' });
+    undo.disabled = !note.strokes.length;
+    undo.addEventListener('click', () => {
+      if (!note.strokes.length) return;
+      note.strokes.pop();
+      note.dirtyInk = true;
+      this.draw();
+      this.scheduleNoteSave();
+    });
+    const save = toolbar.createEl('button', { text: 'Save note' });
+    save.addEventListener('click', () => void this.flushNote().then(
+      () => new Notice('Personal note saved locally.'),
+      () => {}
+    ));
+    const viewport = holder.createDiv({ cls: 'marrow-note-viewport' });
+    const stage = viewport.createDiv({ cls: 'marrow-note-page' });
+    const input = stage.createEl('textarea', {
+      cls: 'marrow-note-text',
+      attr: { 'aria-label': 'Editable typed note for ' + card.id,
+        placeholder: 'Type your quick revision notes here…' }
+    });
+    input.value = note.text;
+    input.readOnly = note.mode !== 'type';
+    input.addEventListener('input', () => {
+      note.text = input.value;
+      note.dirtyText = true;
+      this.scheduleNoteSave();
+    });
+    const canvas = stage.createEl('canvas', { cls: 'marrow-note-ink' });
+    const width = 900, height = 600;
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.pointerEvents = note.mode === 'type' ? 'none' : 'auto';
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      holder.createEl('p', { text: 'Drawing canvas is unavailable on this device.' });
+      return;
+    }
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      for (const stroke of note.strokes) {
+        if (!stroke.points?.length) continue;
+        ctx.strokeStyle = stroke.color || '#286ab7';
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.lineWidth = stroke.width || 2.5;
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0][0], stroke.points[0][1]);
+        if (stroke.points.length === 1) {
+          ctx.arc(stroke.points[0][0], stroke.points[0][1], ctx.lineWidth / 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          for (let i = 1; i < stroke.points.length; i++) {
+            ctx.lineTo(stroke.points[i][0], stroke.points[i][1]);
+          }
+          ctx.stroke();
+        }
+      }
+    };
+    const coords = event => {
+      const rect = canvas.getBoundingClientRect();
+      return [
+        Math.max(0, Math.min(width, ((event.clientX - rect.left) / Math.max(rect.width, 1)) * width)),
+        Math.max(0, Math.min(height, ((event.clientY - rect.top) / Math.max(rect.height, 1)) * height))
+      ];
+    };
+    let active = null;
+    let pointer = null;
+    canvas.addEventListener('pointerdown', event => {
+      if (note.mode === 'type' || event.pointerType === 'touch') return; // reject palms/fingers
+      event.preventDefault();
+      const point = coords(event);
+      if (note.mode === 'eraser') {
+        const before = note.strokes.length;
+        // Simple first-version eraser removes the touched stroke, not a segment.
+        const thresholdSq = 15 * 15;
+        for (let i = note.strokes.length - 1; i >= 0; i--) {
+          if (note.strokes[i].points.some(p =>
+            (p[0] - point[0]) ** 2 + (p[1] - point[1]) ** 2 <= thresholdSq)) {
+            note.strokes.splice(i, 1);
+            break;
+          }
+        }
+        if (note.strokes.length !== before) {
+          note.dirtyInk = true;
+          render();
+          this.scheduleNoteSave();
+        }
+        return;
+      }
+      if (note.strokes.length >= 5000) {
+        new Notice('This note has reached the first-version ink limit.');
+        return;
+      }
+      active = { id: uniqueId(), color: '#286ab7', width: 2.8, points: [point] };
+      pointer = event.pointerId;
+      note.strokes.push(active);
+      canvas.setPointerCapture?.(event.pointerId);
+      render();
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (!active || event.pointerId !== pointer) return;
+      event.preventDefault();
+      const point = coords(event);
+      const prior = active.points[active.points.length - 1];
+      if ((prior[0] - point[0]) ** 2 + (prior[1] - point[1]) ** 2 < 0.7) return;
+      if (active.points.length < 15000) active.points.push(point);
+      render();
+    });
+    const finish = event => {
+      if (!active || event.pointerId !== pointer) return;
+      active = null;
+      pointer = null;
+      note.dirtyInk = true;
+      render();
+      this.scheduleNoteSave();
+    };
+    canvas.addEventListener('pointerup', finish);
+    canvas.addEventListener('pointercancel', finish);
+    render();
+    holder.createEl('p', { cls: 'marrow-hint',
+      text: 'Pen/Eraser accepts stylus or mouse input; touch is ignored to reduce accidental palm marks. Keep Syncthing file versioning enabled and avoid simultaneous edits on both devices.' });
+  }
+
   filterCards() {
     return this.plugin.cards.filter((c) => {
       if (this.selected.size && !c.indexIds.some((id) => this.selected.has(id))) return false;
@@ -667,7 +879,16 @@ class MarrowCardsView extends ItemView {
       return true;
     });
   }
-  async resetQueue() { this.queue = this.filterCards(); this.cursor = 0; this.flipped = false; await this.present(); }
+  async resetQueue() {
+    try { await this.flushNote(); } catch (error) { return; }
+    this.noteRevision += 1;
+    this.notesOpen = false;
+    this.noteData = null;
+    this.queue = this.filterCards();
+    this.cursor = 0;
+    this.flipped = false;
+    await this.present();
+  }
   async present() {
     const card = this.queue[this.cursor];
     this.flipped = false;
@@ -686,7 +907,11 @@ class MarrowCardsView extends ItemView {
     if (this.sessionKind === 'browse' || !this.flipped || !card || this.busy) return;
     this.busy = true;
     try {
+      await this.flushNote();
       await this.plugin.recordEvent(card.id, action);
+      this.notesOpen = false;
+      this.noteData = null;
+      this.noteRevision += 1;
       this.cursor += 1;
       await this.present();
     } catch (e) { new Notice('Review not saved: ' + e.message); this.draw(); }
@@ -714,7 +939,14 @@ class MarrowCardsView extends ItemView {
     const sync = bar.createEl('button', { text: 'Check GitHub' });
     sync.addEventListener('click', () => this.plugin.syncPacks());
     const controls = scroll.createDiv({ cls: 'marrow-controls' });
-    controls.createEl('strong', { text: 'Reviewing ' + this.selected.size + (this.selected.size === 1 ? ' index' : ' indexes') });
+    controls.createEl('strong', {
+      text: (this.sessionKind === 'browse' ? 'Browsing ' : 'Reviewing ') + this.selected.size +
+        (this.selected.size === 1 ? ' index' : ' indexes')
+    });
+    if (this.sessionKind === 'browse') {
+      controls.createEl('p', { cls: 'marrow-hint',
+        text: 'Browse only: flip, go back/next and add notes. Nothing is counted as Seen, Right or Wrong.' });
+    }
     controls.createEl('p', { cls: 'marrow-hint', text: this.plugin.indexes.filter(i => this.selected.has(i.id)).map(i => i.title).join(' · ') || 'All installed cards' });
     const row = controls.createDiv({ cls: 'marrow-toolbar' });
     row.createSpan({ text: 'Practice: ' });
@@ -756,8 +988,28 @@ class MarrowCardsView extends ItemView {
     }
     const s = this.plugin.stats.get(card.id) || { seen: 0, right: 0, wrong: 0 };
     scroll.createEl('p', { cls: 'marrow-stats', text: 'Seen: ' + s.seen + '    Right: ' + s.right + '    Wrong: ' + s.wrong + '    Accuracy: ' + ((s.right + s.wrong) ? Math.round(100 * s.right / (s.right + s.wrong)) + '%' : '—') });
-    const actions = el.createDiv({ cls: this.flipped ? 'marrow-actions marrow-actions-back' : 'marrow-actions marrow-actions-front', attr: { role: 'group', 'aria-label': 'Card review actions' } });
-    if (!this.flipped) {
+    const noteButton = scroll.createEl('button', {
+      text: this.notesOpen ? 'Close my notes' : 'My notes (type / pen)',
+      cls: 'marrow-note-toggle'
+    });
+    noteButton.addEventListener('click', () => void this.toggleNote(card));
+    if (this.notesOpen) this.drawNoteEditor(scroll, card);
+    const actions = el.createDiv({ cls: this.sessionKind === 'browse'
+      ? 'marrow-actions marrow-actions-browse'
+      : (this.flipped ? 'marrow-actions marrow-actions-back' : 'marrow-actions marrow-actions-front'),
+      attr: { role: 'group', 'aria-label': this.sessionKind === 'browse' ? 'Browse card actions' : 'Card review actions' } });
+    if (this.sessionKind === 'browse') {
+      const previous = actions.createEl('button', { text: 'Previous' });
+      previous.disabled = this.cursor === 0;
+      previous.addEventListener('click', () => void this.browseStep(-1));
+      const flip = actions.createEl('button', {
+        text: this.flipped ? 'Show question' : 'Show answer', cls: 'mod-cta'
+      });
+      flip.addEventListener('click', () => { this.flipped = !this.flipped; this.draw(); });
+      const next = actions.createEl('button', { text: 'Next' });
+      next.disabled = this.cursor + 1 >= this.queue.length;
+      next.addEventListener('click', () => void this.browseStep(1));
+    } else if (!this.flipped) {
       const flip = actions.createEl('button', { text: 'Flip to answer', cls: 'mod-cta' });
       flip.addEventListener('click', () => { this.flipped = true; this.draw(); });
     } else {
