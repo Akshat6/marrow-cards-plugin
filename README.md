@@ -24,6 +24,16 @@ Suggested first message in a new chat:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Show only indexes with approved cards (v0.1.7)
+
+On **MBBS → Subjects** or **Subject → Indexes**, turn on **Show only indexes with approved cards**. The browser will hide index entries that do not have at least one approved card in the locally installed packs, and hide subjects without any such indexes. You can turn it off at any time to restore the full subject/index catalog.
+
+- The toggle is **off by default** and stays set while browsing in the current reviewer session.
+- Subject counts reflect the visible indexes while the filter is enabled.
+- Existing selected indexes remain selected when the filter is toggled. **Review** beside an index still reviews only that index; **Review selected indexes** still reviews all selected indexes together.
+- This is a *visibility filter only*: it does not delete packs, unapproved/empty index metadata, card images, or review history.
+- If you have just approved/published an index but it does not appear, tap **Check GitHub → Refresh local** on the phone (or **Refresh local** after Syncthing on the tablet). The filter uses the cards already available locally, not merely PYQ mapping counts.
+
 ## Current approved content (re-check the live private repository)
 
 On 2026-10-11, the private manifest lists:
