@@ -77,6 +77,39 @@ function correctOptionIndex(card) {
 }
 function optionLetter(index) { return String.fromCharCode(65 + index); } // A, B, C, D
 
+function canShuffleCard(card, correct) {
+  if (correct < 0 || !Array.isArray(card.options) || card.options.length < 2) return false;
+  const labels = card.options.map(optionBody);
+  // A deliberately conservative opt-out for positional and referential MCQs.
+  if (labels.some(value => {
+    const x = value.toLowerCase();
+    return /^[a-h]$/i.test(value) || /^[0-9, -]+$/.test(value) ||
+      x.includes('all of the above') || x.includes('none of the above') ||
+      x.includes('both of the above') || x.includes('either of the above') ||
+      x.includes('option a') || x.includes('option b') ||
+      x.includes('option c') || x.includes('option d') ||
+      /^[a-d] +(and|or) +[a-d]$/i.test(value);
+  })) return false;
+  const prompt = String(getQuestion(card) || '').toLowerCase();
+  if (prompt.includes('option a') || prompt.includes('option b') ||
+      prompt.includes('option c') || prompt.includes('option d')) return false;
+  const explanation = String(card.explanation || '').toLowerCase();
+  if (explanation.includes('printed answer') || explanation.includes('original answer') ||
+      explanation.includes('source answer') || explanation.includes('option a') ||
+      explanation.includes('option b') || explanation.includes('option c') ||
+      explanation.includes('option d')) return false;
+  return true;
+}
+function shuffleChoiceIndices(count, random = Math.random) {
+  const result = Array.from({length: count}, (_, i) => i);
+  for (let i = count - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  if (count > 1 && result.every((index, i) => index === i)) result.push(result.shift());
+  return result;
+}
+
 function compareVersions(a, b) {
   const parse = s => String(s || '0.0.0').split('.').slice(0,3).map(x => Number(x) || 0);
   const x = parse(a), y = parse(b);
