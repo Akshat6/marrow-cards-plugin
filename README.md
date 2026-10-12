@@ -4,13 +4,17 @@ An offline-first Obsidian flashcard reviewer for **user-approved** MBBS PYQs and
 
 ## New ChatGPT conversation? Start here
 
-**[AGENTS.md — read first](AGENTS.md)** · **[Complete flashcard workflow](docs/flashcard-workflow.md)** · **[Original-image publishing procedure](docs/publishing-approved-cards.md)**
+**[AGENTS.md — start every new chat here](AGENTS.md)** · **[Plugin maintenance, upgrades and bug fixes](docs/plugin-maintenance.md)** · **[Approved-card workflow](docs/flashcard-workflow.md)** · **[Original-image publishing procedure](docs/publishing-approved-cards.md)**
 
-The workflow explains how to look up an index in the live Google Sheets tracker, retrieve exact PYQ text/options/answers and original figures from user-provided PDFs, show cards for approval, publish *only approved cards* to the private repository, update the manifest, and verify the cards in Obsidian.
+The **plugin maintenance guide** explains how to inspect code, preserve the existing navigation/reviewer/notes/Browse features, reproduce regressions, test, publish a new BRAT release and avoid repeating past Android bugs. The separate flashcard publishing workflow explains how to look up an index in the live Google Sheets tracker, retrieve exact PYQ text/options/answers and original figures from user-provided PDFs, show cards for approval, publish *only approved cards* to the private repository, update the manifest, and verify the cards in Obsidian.
 
 Suggested first message in a new chat:
 
 > Read https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md and the linked workflow. Prepare cards for [subject + index ID], using my live PYQ mapping and source PDFs. Show every card for my approval before publishing anything.
+
+For **plugin upgrades or bug fixes** in a new chat, use:
+
+> Read https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md and https://github.com/Akshat6/marrow-cards-plugin/blob/main/docs/plugin-maintenance.md. Inspect the current plugin and tests, then fix [problem], add a regression test, keep all approved cards and local notes/reviews untouched, publish a verified BRAT release, and explain how to update.
 
 **GitHub files are not automatically loaded into every new ChatGPT conversation.** Include that entry-point link or explicitly ask the new chat to read it. The instructions are designed not to require this conversation once loaded.
 
@@ -23,6 +27,12 @@ Suggested first message in a new chat:
 - Filter **All**, **Ever wrong**, or **Never seen**; show Seen/Right/Wrong counts from per-device JSONL event logs.
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
+
+## Consecutive MCQ tap-to-answer fix (v0.2.3)
+
+**Reported Android bug in v0.2.2:** The first MCQ accepted a tap, but later cards in an index could stop responding to option taps. Root cause: `nextAfterOption()` and manual `grade()` render the next card while the reviewer is temporarily `busy`; the old button-rendering code used `option.disabled = Boolean(this.answerState) || this.busy`. The newly rendered options therefore remained disabled even after the asynchronous transition completed. The fixed renderer disables options only when that **same card has already been graded**, while `selectOption()` continues to check the live `busy` flag to prevent premature or double taps.
+
+**Regression tests:** New automated checks go through **all three consecutive synthetic MCQs**, assert that each next card's actual option button is enabled, and verify exact Seen/Right counts. They also check that a newly presented MCQ is enabled after **manual** flip + Wrong on the preceding card. Real-device tapping should still be verified after updating BRAT on Android. Details and full compatibility rules: [plugin maintenance guide](docs/plugin-maintenance.md).
 
 ## Tap MCQ options and shuffle them safely in Review (v0.2.2)
 
