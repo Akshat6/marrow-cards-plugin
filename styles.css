@@ -20,7 +20,11 @@
 .marrow-start-single { min-height: 40px; }
 .marrow-start-selected { display: block; width: 100%; min-height: 50px; margin: 18px 0; }
 .is-mobile .marrow-tree-tile, .is-mobile .marrow-index-tile { touch-action: manipulation; }
-.is-mobile .marrow-start-selected { margin-bottom: 110px; }
+/* Keep clearance for Obsidian's bottom navigation on the library itself,
+   not between action buttons. */
+.is-mobile .marrow-cards:not(.marrow-review-mode) {
+  padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+}
 
 
 /* v0.1.4: independent scroll area + always-visible review action dock.
@@ -323,3 +327,31 @@
 }
 .is-mobile .marrow-cards .marrow-note-text { pointer-events: none; }
 .is-mobile .marrow-cards .marrow-note-viewport { border-radius: 8px; }
+
+
+/* v0.2.1: compact paired Review/Browse actions on subject browser. */
+.marrow-cards .marrow-selection-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+.marrow-cards .marrow-selection-actions .marrow-start-selected {
+  display: block;
+  width: 100%;
+  min-height: 50px;
+  margin: 0;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.marrow-cards .marrow-selection-actions .marrow-start-selected.mod-cta:not(:disabled) {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+.marrow-cards .marrow-selection-actions .marrow-start-browse-selected:not(:disabled) {
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+}
+.is-mobile .marrow-cards .marrow-selection-actions .marrow-start-selected {
+  margin: 0;
+}
