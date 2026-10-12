@@ -995,7 +995,7 @@ class MarrowCardsView extends ItemView {
   }
   async grade(action) {
     const card = this.queue[this.cursor];
-    if (this.sessionKind === 'browse' || !this.flipped || !card || this.busy) return;
+    if (this.sessionKind === 'browse' || !this.flipped || !card || this.busy || this.answerState) return;
     this.busy = true;
     try {
       await this.flushNote();
