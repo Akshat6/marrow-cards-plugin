@@ -149,7 +149,7 @@
 .marrow-accordion-body {
   box-sizing: border-box;
   padding: 8px 12px 12px;
-  max-height: min(55vh, 460px);
+  max-height: min(74vh, 680px);
   overflow-y: auto;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
@@ -174,4 +174,42 @@
   margin: 16px 0;
 }
 .is-mobile .marrow-subject-toggle { min-height: 55px; }
-.is-mobile .marrow-accordion-body { max-height: min(52vh, 410px); }
+.is-mobile .marrow-accordion-body { max-height: min(70vh, 620px); }
+
+
+/* v0.1.9: two-level accordion: subject > system/subheading > indexes.
+   The outer panel owns vertical scrolling, including very long index lists. */
+.marrow-system-section {
+  min-width: 0;
+  margin-bottom: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.marrow-system-toggle {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.45;
+  font-weight: 600;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.marrow-system-toggle[aria-expanded="true"] {
+  background: var(--background-secondary-alt, var(--background-secondary));
+  box-shadow: inset 3px 0 var(--interactive-accent);
+}
+.marrow-system-body {
+  padding: 6px 10px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.marrow-system-body[hidden] { display: none !important; }
+.is-mobile .marrow-system-toggle { min-height: 52px; }
