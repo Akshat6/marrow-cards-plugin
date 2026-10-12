@@ -1008,6 +1008,23 @@ class MarrowCardsView extends ItemView {
     } catch (e) { new Notice('Review not saved: ' + e.message); this.draw(); }
     finally { this.busy = false; }
   }
+  async selectOption(sourceIndex) {
+    const card = this.queue[this.cursor];
+    if (this.sessionKind !== 'review' || this.flipped || this.busy || this.answerState ||
+        !card || this.correctIndex < 0 || !this.optionOrder.includes(sourceIndex)) return;
+    this.busy = true;
+    const outcome = sourceIndex === this.correctIndex ? 'right' : 'wrong';
+    try {
+      await this.plugin.recordEvent(card.id, outcome);
+      this.answerState = { cardId: card.id, sourceIndex, outcome };
+      this.flipped = true;
+      this.redrawKeepingScroll();
+    } catch (error) {
+      console.error('[Marrow Cards] Could not record chosen option', error);
+      new Notice('Could not record your answer: ' + (error.message || String(error)));
+    } finally { this.busy = false; }
+  }
+
   draw() {
     const el = this.contentEl;
     el.empty();
