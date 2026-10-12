@@ -394,8 +394,9 @@ class MarrowCardsView extends ItemView {
     this.noteData = null;
     await this.resetQueue();
   }
-  goLibrary(level = 'mbbs') {
-    void this.flushNote();
+  async goLibrary(level = 'mbbs') {
+    try { await this.flushNote(); } catch (error) { return; }
+    this.noteRevision += 1;
     this.notesOpen = false;
     this.noteData = null;
     this.screen = level;
@@ -670,7 +671,7 @@ class MarrowCardsView extends ItemView {
     if (this.noteTimer) clearTimeout(this.noteTimer);
     this.noteTimer = setTimeout(() => {
       this.noteTimer = null;
-      void this.flushNote();
+      void this.flushNote().catch(() => {});
     }, 650);
   }
   async flushNote() {
