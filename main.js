@@ -1112,7 +1112,11 @@ class MarrowCardsView extends ItemView {
         }
       }
     } else {
-      panel.createEl('div', { cls: 'marrow-answer', text: card.answer });
+      const answerText = this.sessionKind === 'review' && this.correctIndex >= 0
+        ? 'Correct: ' + optionLetter(this.optionOrder.indexOf(this.correctIndex)) + '. ' +
+          optionBody(card.options[this.correctIndex])
+        : card.answer;
+      panel.createEl('div', { cls: 'marrow-answer', text: answerText });
       if (card.explanation) {
         panel.createEl('h4', { text: 'Explanation' });
         panel.createEl('div', { cls: 'marrow-explanation', text: card.explanation });
