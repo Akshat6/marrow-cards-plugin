@@ -60,7 +60,7 @@ function correctOptionIndex(card) {
   const options = card.options;
   if (!Array.isArray(options) || options.length < 2 || options.length > 8) return -1;
   const answer = String(card.answer || '').trim();
-  const match = answer.match(/^([A-Ha-h])\\s*[).:-]\\s*(.*)$/s);
+  const match = answer.match(/^([A-Ha-h])[).: -]+(.*)$/s);
   if (match) {
     const idx = match[1].toUpperCase().charCodeAt(0) - 65;
     if (idx >= options.length) return -1;
