@@ -485,3 +485,66 @@ console.log('Nested system accordion regression checks passed.');
   assert(reviewer.contentEl.findText('My notes (type / pen)'), 'Notes must also be available during reviews');
   console.log('No-grade Browse and phone+stylus note save/reopen checks passed.');
 })().catch(err => { console.error(err); process.exitCode = 1; });
+
+
+// v0.2.2: Option tap and safe scrambling, independent of original answer letters.
+(async () => {
+  const logged = [];
+  const mcq = { id:'MCQ-TAP-01', type:'pyq', status:'approved', indexIds:['OPH-04'],
+    question:'Site of best visual acuity?', images:[],
+    options:['a) Optic disc','b) Ora serrata','c) Fovea','d) Periphery'],
+    answer:'C. Fovea', explanation:'Central acuity is highest at the fovea.' };
+  const fact = { id:'FACT-TAP-02', type:'fact', status:'approved', indexIds:['OPH-04'],
+    question:'Name of blind spot?', answer:'Mariotte blind spot', images:[] };
+  const plugin = { cards:[mcq,fact],
+    indexes:[{id:'OPH-04', subject:'Ophthalmology', title:'Retina'}],
+    stats:new Map(),
+    async recordEvent(id, action) { logged.push({id,action}); },
+    async readCardNote(id) {return {cardId:id,text:'',strokes:[]}; },
+    async saveCardNotePart() {}
+  };
+  const mcqView = new Reviewer(mockLeaf,plugin);
+  await mcqView.startReview(['OPH-04']);
+  assert.equal(mcqView.correctIndex,2,'Source C must identify third option');
+  assert.equal(mcqView.optionOrder.length,4);
+  assert.notDeepEqual([...mcqView.optionOrder],[0,1,2,3],
+    'Safe MCQ should reshuffle on new presentation');
+  const firstOrder = [...mcqView.optionOrder];
+  mcqView.flipped = true;
+  mcqView.draw();
+  const originalCorrectPosition = firstOrder.indexOf(2);
+  assert(mcqView.contentEl.findText('Correct: ' + String.fromCharCode(65+originalCorrectPosition) + '. Fovea'),
+    'Flipping must display the new answer letter');
+  mcqView.flipped = false;
+  mcqView.draw();
+
+  mcqView.optionOrder = [2,0,3,1];
+  mcqView.draw();
+  const selectable = mcqView.contentEl.findText('A. Fovea');
+  assert(selectable && selectable.handlers.click,'Newly lettered correct option must be tappable');
+  await Promise.all([mcqView.selectOption(2), mcqView.selectOption(2)]);
+  assert.equal(logged.filter(e=>e.action==='right').length,1,
+    'Double taps must not create duplicate Right events');
+  assert.equal(mcqView.flipped,true,'Selecting an option must automatically reveal answer');
+  assert(mcqView.contentEl.findText('Correct — saved as Right'));
+  assert(mcqView.contentEl.findText('Your choice: A. Fovea'));
+  assert(mcqView.contentEl.findText('Next card'));
+  assert(!mcqView.contentEl.findText('Wrong'),'After automatic grading do not show manual Wrong');
+  assert(mcqView.contentEl.findText('My notes (type / pen)'),
+    'Answered card should remain open for note editing');
+  mcqView.contentEl.findText('Show question').handlers.click();
+  assert(mcqView.contentEl.findText('A. Fovea'), 'Answer order must stay fixed on reverse flip');
+  await mcqView.selectOption(0);
+  assert.equal(logged.filter(e=>e.action==='wrong').length,0,
+    'A finished answer cannot be graded a second time');
+  mcqView.contentEl.findText('Show answer').handlers.click();
+  await mcqView.nextAfterOption();
+  assert.equal(mcqView.queue[mcqView.cursor].id,'FACT-TAP-02',
+    'Next should move after showing the answer');
+  assert.equal(mcqView.correctIndex,-1,'Fact with no options stays manual');
+  assert(mcqView.contentEl.findText('Flip to answer'));
+  mcqView.contentEl.findText('Flip to answer').handlers.click();
+  assert(mcqView.contentEl.findText('Right') && mcqView.contentEl.findText('Wrong'),
+    'No-option cards must retain manual grading');
+  console.log('MCQ tap-to-grade, changed letters, single count and fact fallback checks passed.');
+})().catch(err=>{console.error(err);process.exitCode=1;});
