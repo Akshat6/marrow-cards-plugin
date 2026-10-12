@@ -977,6 +977,7 @@ class MarrowCardsView extends ItemView {
     const card = this.queue[this.cursor];
     this.flipped = false;
     this.answerState = null;
+    this.correctIndex = card ? correctOptionIndex(card) : -1;
     if (card && this.sessionKind !== 'browse') {
       try { await this.plugin.recordEvent(card.id, 'seen'); } catch (e) { console.error(e); new Notice('Could not record view: ' + e.message); }
     }
