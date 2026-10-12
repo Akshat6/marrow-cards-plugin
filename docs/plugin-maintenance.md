@@ -1,0 +1,60 @@
+# Marrow Cards — plugin maintenance and upgrade guide
+
+**Purpose:** A future ChatGPT session or developer can safely maintain the Obsidian plugin **without access to previous chats**. This file covers **plugin/UI/code** changes. For extracting and approving new PYQs, follow [flashcard-workflow.md](flashcard-workflow.md). Both workflows start at [../AGENTS.md](../AGENTS.md).
+
+_Last checked: 2026-10-12, during the v0.2.3 fix._
+
+## 1. Re-read live source and preserve boundaries
+
+- Public **plugin/code** repo: `Akshat6/marrow-cards-plugin` (this repo), main branch; principal files `main.js`, `styles.css`, `manifest.json`, `tests/smoke.js`, `README.md`, `AGENTS.md` and `docs/`.
+- **Private approved content** repo: `Akshat6/marrow-cards-data`. Always read its live `manifest.json` and relevant packs before reasoning about actual card structure/counts. It contains catalog, approved fact/PYQ card packs and source images. **Never** copy PYQ text/options/images, personal notes, tokens or review logs into this public code repo, even as regression fixtures.
+- Current live data manifest last checked during this fix: `mbbs-index-catalog` v2.0.0, `oph04-personal-facts` v1.0.0, `anatomy-thorax-pyqs` v1.0.2. Re-read live data next time; this list can change.
+- Live Google Sheets mappings and original source PDFs are relevant to **card publishing**, not ordinarily needed for **plugin UI** fixes. Use connected GitHub and Google Drive tools as appropriate; avoid unauthenticated access to the private repo.
+- **Approved content changes** require precise user approval. A user-directed **plugin/UI upgrade** does not authorize altering approved card text/answers or private manifest. Keep plugin source and card data updates separate.
+- Read current `manifest.json` to establish the version before making a BRAT release; do not assume the version in this guide is still current.
+
+## 2. Existing user-visible contract — preserve unless specifically requested
+
+**Navigation:** `MBBS → Subjects → System/subheading → Indexes` using the actual `system` field from the local approved index catalog. Subject and system sections are one-at-a-time accordions. Checked indexes persist across sections and can be reviewed or browsed together. One-index **Review** or **Browse** beside a tile acts on *only that index*. The paired **Review selected indexes (N)** and **Browse selected indexes (N)** controls appear together at the top and bottom of the subject list. Purple Review / neutral Browse; no old 110px Android gap. The "Show only indexes with approved cards" filter hides empty indexes, systems, and subjects without removing any selected IDs or packs. Longer accordion panels remain scrollable.
+
+**Review:** `startReview` → `startSession(..., 'review')` → `resetQueue` → `present`. `present` records `seen` to device-local JSONL once per displayed review card. `Ever wrong` filters cards ever marked wrong; `Never seen` filters never seen. For manually graded cards, flip (reversible) then tap Right or Wrong; `grade` records exactly one result and advances. A flipped card is *not* automatically counted wrong.
+
+**MCQ tap-to-grade:** On a Review card whose source correct option can be safely resolved, options render as tappable buttons. `correctOptionIndex(card)` resolves **original index**. `canShuffleCard(card, correct)` conservatively disables shuffling for positional/relative choices, image marker labels, sequence answers, or letter-dependent explanations. `shuffleChoiceIndices` chooses a display permutation **once per presentation**; option identity stays tied to the source index, not currently shown letter. Clicking calls `selectOption(sourceIndex)`: logs Right/Wrong **once**, flips automatically, keeps explanation and **My notes** available, then requires **Next card** (`nextAfterOption`) to advance. `Show question` should not allow regrading. `Flip to answer` + manual Right/Wrong continues to work if the user wants mental recall. If the original answer cannot be verified, options remain read-only and manual flipping is the safe fallback. Fact cards without options remain manual.
+
+**IMPORTANT v0.2.3 regression:** v0.2.2 rendered next-card MCQ buttons with `option.disabled = Boolean(this.answerState) || this.busy`. Because `nextAfterOption` (and manual `grade`) called `present` while `busy` was still true, next-card DOM buttons stayed disabled **even after** busy became false. That made the first of a three-card index work but later cards unresponsive. The fix uses `option.disabled = Boolean(this.answerState)` and keeps the **live** `this.busy` guard inside `selectOption`. **Never bind a long-lived DOM disabled state to an ephemeral async transition flag without re-rendering when it clears.** The sequential three-card and post-manual-grade tests in `tests/smoke.js` catch this exact failure.
+
+**Browse:** `startBrowse` → `startSession(...,'browse')`. No `seen`, Right, Wrong, accuracy changes or clickable answer options. The UI offers Previous / Show answer–Show question / Next, preserving *original* source option order. `My notes` works in Browse and Review, including after flipping/answering.
+
+**Personal notes:** Every card has `My notes (type / pen)`. Notes are **local** under `MarrowCards/notes/<stable-card-id>/text.json` and `ink.json`, separate from downloaded `packs/`, `media/` and per-device `reviews/<device-id>/*.jsonl`. Typed text + vector ink are two editable layers on the same fixed 720×960 page; quick shorthand typing works on narrow phones, stylus pen/whole-stroke eraser/undo on tablet, autosave plus manual save, and pending writes flush on navigation. These files sync through **Syncthing**, not GitHub. Do not reset, move, delete or overwrite existing notes or review events for a plugin/UI upgrade. Avoid editing on two devices before the vault finishes syncing; file versioning/backups are recommended but optional. `.obsidian/` remains excluded from Syncthing on both devices.
+
+**Device startup:** `onload()` registers views/settings/commands synchronously *before* async `initializeRuntime()`; this prevents the original Android cold-start issue where the settings tab disappeared. Do not reintroduce old pilot cleanup on startup or block registration behind vault I/O. Plugin code updates are distributed with **BRAT separately on each device**; card pack refresh uses Check GitHub / Refresh local, then Syncthing for the vault. The phone's private read-only GitHub token belongs in local Obsidian SecretStorage and **never** in chat or synced files.
+
+## 3. Source areas and smoke/regression tests
+
+- `main.js`: data schema guard `validatePack` / `isCard`; `correctOptionIndex`, `canShuffleCard`, `shuffleChoiceIndices`, `tally`; `MarrowCardsPlugin` for sync, notes, review logs; `MarrowCardsView` for hierarchy, queues, notes, MCQ presentation and grading; `MarrowSettingsTab` for local options/token.
+- `styles.css`: mobile navigation, longer accordion and nested systems; scrollable review body + docked footer; full-width MCQ options; text/ink editor. Avoid accidental overlarge margins, flex/grids that hide buttons behind Android/Obsidian navigation, and overriding touch scrolling.
+- `tests/smoke.js`: Node/VM syntax and data checks, Android startup registration, independent question scrolling and flip-back, collapsible subject/system selection, availability filter, Browse no-grade, text/ink note persistence, MCQ shuffle and tap-to-grade, and **multiple consecutive MCQs after auto and manual grading**. Run `node --check main.js && node tests/smoke.js` (the GitHub Actions publish workflow also runs checks).
+- When fixing an issue that appears only after moving from card 1 to 2/3, **test the actual DOM buttons and their `disabled` flags on card 2 and 3**, not only direct method calls on the first card. Verify review-event counts are exactly correct; never generate duplicate Right/Wrong events on flip-back, tapping twice, or returning from notes.
+- For data-sensitive MCQ edge cases, test synthetic dummy options in the **public** repo. You may privately validate the real approved pack through connected GitHub, but do not commit its original question text to tests.
+- Additional high-value tests: answers encoded as `C. Text`, bare `C`, mismatched answer text, numeric sequence, "Both A and B", `a) A` image-label choices, notes opened after selecting an option, end-of-queue, previous/next Browse and selected multi-index review.
+- Automated tests are **not** a substitute for testing touch responsiveness, stylus drawing, scrolling and BRAT restart on the actual Android phone/tablet. Be honest about what was and wasn't device-verified.
+
+## 4. Safe upgrade & release procedure
+
+1. Fetch live `main.js`, `styles.css`, `manifest.json`, `tests/smoke.js`, README and this guide. Identify the smallest change, preserve existing behaviour, and check current private data packs only where relevant.
+2. Implement code/UI fix in the public repo. Add/update tests for the **actual reported sequence**, not just a helper. GitHub Actions may run on each commit with the current manifest version; investigate any failure and correct it.
+3. Verify **latest code commit** passed GitHub Actions before release. Confirm that no cards, media, manifests, local notes/reviews or tokens were rewritten.
+4. Update README, this guide, and relevant AGENTS links for new behaviour and known limitations. Keep all versions current.
+5. **Only then** bump public `manifest.json` to the next semantic version. The existing GitHub Actions workflow validates assets and publishes the release for BRAT (with `main.js`, `manifest.json`, `styles.css`).
+6. Verify the release is actually **published**, has all three assets, and the release commit's GitHub Actions run succeeded. Don't announce a release on a successful git commit alone.
+7. User updates each installed device via **Obsidian → BRAT → Check for updates**, restarts/reopens the reviewer, and checks the affected screens. Describe what still needs real-device validation.
+
+**Manifest-last rule clarification:** The **private data** `manifest.json` is updated last when publishing **approved packs**. A **public plugin** version bump is the last code-release step and does **not** require altering any private data repository manifests.
+
+## 5. New-chat prompts for independent maintenance
+
+Use in a new conversation:
+
+> Read https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md and https://github.com/Akshat6/marrow-cards-plugin/blob/main/docs/plugin-maintenance.md. I want to fix/upgrade [specific Marrow Cards behaviour]. Inspect the current GitHub plugin source and tests, preserve approved PYQs and local review/notes, add a regression test, publish a verified BRAT release, and tell me how to update.
+
+A new chat is **not** guaranteed to load repo files or this context automatically. Supply the links explicitly. No prior chat history is required once the live docs and repositories have been read.
