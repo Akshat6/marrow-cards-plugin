@@ -546,5 +546,17 @@ console.log('Nested system accordion regression checks passed.');
   mcqView.contentEl.findText('Flip to answer').handlers.click();
   assert(mcqView.contentEl.findText('Right') && mcqView.contentEl.findText('Wrong'),
     'No-option cards must retain manual grading');
+  await mcqView.startReview(['OPH-04']);
+  await mcqView.selectOption(0);
+  assert.equal(logged.filter(e=>e.action==='wrong').length,1,
+    'Selecting an incorrect option must log Wrong');
+  assert(mcqView.contentEl.findText('Incorrect — saved as Wrong'));
+  const eventCount = logged.length;
+  await mcqView.startBrowse(['OPH-04']);
+  assert.equal(logged.length,eventCount,'Browse must not record Seen');
+  assert(mcqView.contentEl.findText('a) Optic disc'),
+    'Browsing must display the untouched source options');
+  await mcqView.selectOption(2);
+  assert.equal(logged.length,eventCount,'Browse selection must never grade');
   console.log('MCQ tap-to-grade, changed letters, single count and fact fallback checks passed.');
 })().catch(err=>{console.error(err);process.exitCode=1;});
