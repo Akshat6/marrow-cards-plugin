@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: safe MCQ option scrambling and tap-to-grade with preserved Browse and notes.",
+  "description": "Marrow Cards: fix MCQ option taps on consecutive cards; preserve Browse, notes and safe shuffling.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
