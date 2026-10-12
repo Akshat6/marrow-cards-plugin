@@ -24,6 +24,20 @@ Suggested first message in a new chat:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Collapsible subheadings inside subjects (v0.1.9)
+
+The reviewer now uses **MBBS → Subjects → Subheadings/systems → Indexes**. Subjects still behave as a one-at-a-time accordion; for subjects with multiple catalog subheadings, expanding a subject now displays its **real catalog system names** before individual index checkboxes. Examples:
+
+- **Anatomy:** General Anatomy, Head, Neck and Face, Neuroanatomy, Embryology, Upper Limb, Lower Limb, Thorax, Abdomen and Perineum, Histology, etc.
+- **Ophthalmology:** Basic Anatomy of Eye, Retina, Glaucoma, Cornea, Uvea, etc.
+- **Medicine:** Cardiology, Neurology, Gastroenterology, Endocrinology, etc.
+
+Tap one subheading to see only its indexes. Opening a different subheading collapses the first; opening another subject collapses the previous subject. **All checked indexes stay selected**. Subjects with only one catalog system display indexes directly to avoid an unnecessary click.
+
+The expanded **subject** panel has a longer vertical scroll area: up to `min(74vh, 680px)` on desktop, `min(70vh, 620px)` on mobile. Other subject headings remain reachable. The existing **Show only indexes with approved cards** toggle removes empty indexes and therefore empty subheadings; it does not modify selections or data.
+
+Use the top or bottom **Review selected indexes (N)** control to practise all checked indexes across subjects and subheadings, or **Review** beside an individual index to practise just that index. Inside review, the **Ever wrong** filter continues to work.
+
 ## Collapsible subject selector (v0.1.8)
 
 Select multiple indexes across different subjects **without leaving the subject list**:
