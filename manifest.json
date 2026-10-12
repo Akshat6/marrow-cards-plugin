@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "minAppVersion": "1.11.4",
-  "description": "Reliable Android startup: register reviewer before storage reads, retain OPH-04 cards, no recurring pilot cleanup.",
+  "description": "Marrow Cards: browse only indexes with approved cards; retain mobile flip controls and offline review.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
