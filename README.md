@@ -125,3 +125,4 @@ Approved card IDs are stable, pack versions increase when edited, and only appro
 - For plugin-code changes, update `main.js` / `styles.css` as needed, bump `manifest.json` version, and confirm GitHub Actions released assets `main.js`, `manifest.json`, `styles.css`.
 - For **new approved cards**, update **only the private data repository** per [the workflow](docs/flashcard-workflow.md); do not bump the public plugin version.
 - See [first-device pilot test checklist](docs/first-device-test.md) for optional regression checks and [media publishing procedure](docs/publishing-approved-cards.md) for binary-image uploads.
+
