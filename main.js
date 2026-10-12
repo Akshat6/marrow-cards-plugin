@@ -978,6 +978,11 @@ class MarrowCardsView extends ItemView {
     this.flipped = false;
     this.answerState = null;
     this.correctIndex = card ? correctOptionIndex(card) : -1;
+    this.optionOrder = card && Array.isArray(card.options)
+      ? (this.sessionKind === 'review' && canShuffleCard(card, this.correctIndex)
+          ? shuffleChoiceIndices(card.options.length)
+          : card.options.map((_, index) => index))
+      : [];
     if (card && this.sessionKind !== 'browse') {
       try { await this.plugin.recordEvent(card.id, 'seen'); } catch (e) { console.error(e); new Notice('Could not record view: ' + e.message); }
     }
