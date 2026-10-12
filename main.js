@@ -322,7 +322,7 @@ class MarrowCardsPlugin extends Plugin {
 
 class MarrowCardsView extends ItemView {
   constructor(leaf, plugin) {
-    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.expandedSubject = ''; this.onlyApprovedIndexes = false;
+    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.expandedSubject = ''; this.expandedSystem = ''; this.onlyApprovedIndexes = false;
   }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return 'Marrow Cards'; }
@@ -350,15 +350,15 @@ class MarrowCardsView extends ItemView {
   }
   // Shared index tiles for the accordion (and the legacy index view).
   // Selection updates the review buttons in place to avoid scroll jumps.
-  drawIndexChoices(container, indexes, onSelectionChange) {
+  drawIndexChoices(container, indexes, onSelectionChange, showHeadings = true) {
     const grouped = new Map();
     for (const idx of indexes) {
-      const system = idx.system || 'Indexes';
+      const system = showHeadings ? (idx.system || 'Indexes') : '';
       if (!grouped.has(system)) grouped.set(system, []);
       grouped.get(system).push(idx);
     }
     for (const [system, group] of grouped.entries()) {
-      container.createEl('h4', { cls: 'marrow-system', text: system });
+      if (showHeadings) container.createEl('h4', { cls: 'marrow-system', text: system });
       for (const idx of group) {
         const count = this.countForIndex(idx.id);
         const tile = container.createDiv({ cls: 'marrow-index-tile' });
@@ -432,7 +432,7 @@ class MarrowCardsView extends ItemView {
     if (this.screen === 'subjects') {
       el.createEl('h3', { text: 'Subjects' });
       el.createEl('p', { cls: 'marrow-hint',
-        text: 'Open a subject, select its indexes, then open another subject. Your selections are kept across subjects.' });
+        text: 'Open a subject, expand a subheading to choose indexes, then open another subject. Your selections stay selected.' });
       if (!subjects.length) {
         el.createEl('p', { cls: 'marrow-hint', text: this.onlyApprovedIndexes
           ? 'No indexes with approved cards yet. Turn off the filter to browse all subjects.'
@@ -478,6 +478,64 @@ class MarrowCardsView extends ItemView {
         for (const [name, nodes] of sectionNodes) nodes.button.setText(labelFor(name));
         updateActions();
       };
+      // Multi-system subjects get their own second-level accordion:
+      // subject → system/subheading → index. A single-system subject
+      // displays its indexes directly to avoid an unnecessary extra tap.
+      const drawSubjectBody = (name, body) => {
+        const groups = new Map();
+        for (const idx of subjectIndexes.get(name)) {
+          const key = idx.system || 'Indexes';
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(idx);
+        }
+        if (groups.size <= 1) {
+          this.drawIndexChoices(body, subjectIndexes.get(name), updateSubjectLabels);
+          return;
+        }
+        if (!groups.has(this.expandedSystem)) this.expandedSystem = '';
+        const systemNodes = new Map();
+        const systemLabelFor = system => {
+          const indexes = groups.get(system);
+          const selectedCount = indexes.filter(idx => this.selected.has(idx.id)).length;
+          return (this.expandedSystem === system ? '▾  ' : '▸  ') + system + '  ·  ' +
+            indexes.length + (indexes.length === 1 ? ' index' : ' indexes') +
+            (selectedCount ? '  ·  ' + selectedCount + ' selected' : '');
+        };
+        const updateSystemLabels = () => {
+          for (const [system, nodes] of systemNodes) nodes.button.setText(systemLabelFor(system));
+          updateSubjectLabels();
+        };
+        for (const [system, indexes] of groups) {
+          const section = body.createDiv({ cls: 'marrow-system-section' });
+          const open = this.expandedSystem === system;
+          const button = section.createEl('button', {
+            cls: 'marrow-system-toggle',
+            text: systemLabelFor(system),
+            attr: { 'aria-expanded': String(open) }
+          });
+          const content = section.createDiv({ cls: 'marrow-system-body' });
+          content.hidden = !open;
+          systemNodes.set(system, { button, content });
+          if (open) this.drawIndexChoices(content, indexes, updateSystemLabels, false);
+          button.addEventListener('click', () => {
+            const prior = this.expandedSystem;
+            if (prior && systemNodes.has(prior)) {
+              const old = systemNodes.get(prior);
+              old.content.empty();
+              old.content.hidden = true;
+              old.button.setAttribute('aria-expanded', 'false');
+            }
+            this.expandedSystem = prior === system ? '' : system;
+            if (this.expandedSystem) {
+              content.hidden = false;
+              this.drawIndexChoices(content, indexes, updateSystemLabels, false);
+              button.setAttribute('aria-expanded', 'true');
+            }
+            updateSystemLabels();
+          });
+        }
+      };
+
       const list = el.createDiv({ cls: 'marrow-subject-accordion' });
       for (const name of subjects) {
         const section = list.createDiv({ cls: 'marrow-subject-section' });
@@ -489,7 +547,7 @@ class MarrowCardsView extends ItemView {
         const body = section.createDiv({ cls: 'marrow-accordion-body' });
         body.hidden = !open;
         sectionNodes.set(name, { button, body });
-        if (open) this.drawIndexChoices(body, subjectIndexes.get(name), updateSubjectLabels);
+        if (open) drawSubjectBody(name, body);
 
         button.addEventListener('click', () => {
           const prior = this.expandedSubject;
@@ -500,9 +558,10 @@ class MarrowCardsView extends ItemView {
             old.button.setAttribute('aria-expanded', 'false');
           }
           this.expandedSubject = prior === name ? '' : name;
+          this.expandedSystem = '';
           if (this.expandedSubject) {
             body.hidden = false;
-            this.drawIndexChoices(body, subjectIndexes.get(name), updateSubjectLabels);
+            drawSubjectBody(name, body);
             button.setAttribute('aria-expanded', 'true');
           }
           updateSubjectLabels();
