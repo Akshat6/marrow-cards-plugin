@@ -1161,7 +1161,9 @@ class MarrowCardsView extends ItemView {
     if (this.notesOpen) this.drawNoteEditor(scroll, card);
     const actions = el.createDiv({ cls: this.sessionKind === 'browse'
       ? 'marrow-actions marrow-actions-browse'
-      : (this.flipped ? 'marrow-actions marrow-actions-back' : 'marrow-actions marrow-actions-front'),
+      : (this.flipped
+          ? (this.answerState ? 'marrow-actions marrow-actions-auto' : 'marrow-actions marrow-actions-back')
+          : 'marrow-actions marrow-actions-front'),
       attr: { role: 'group', 'aria-label': this.sessionKind === 'browse' ? 'Browse card actions' : 'Card review actions' } });
     if (this.sessionKind === 'browse') {
       const previous = actions.createEl('button', { text: 'Previous' });
