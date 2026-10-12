@@ -701,7 +701,7 @@ class MarrowCardsView extends ItemView {
       this.notesOpen = false;
       this.noteData = null;
       this.noteRevision += 1;
-      this.draw();
+      this.redrawKeepingScroll();
       return;
     }
     try {
@@ -711,7 +711,7 @@ class MarrowCardsView extends ItemView {
       if (revision !== this.noteRevision || this.queue[this.cursor]?.id !== card.id) return;
       this.noteData = { ...data, mode: 'type', dirtyText: false, dirtyInk: false };
       this.notesOpen = true;
-      this.draw();
+      this.redrawKeepingScroll();
     } catch (error) {
       console.error('[Marrow Cards] Note load failed', error);
       new Notice('Could not open personal note: ' + (error.message || String(error)), 9000);
@@ -728,6 +728,14 @@ class MarrowCardsView extends ItemView {
     this.cursor = next;
     await this.present(); // Browsing deliberately does not record a 'seen' event.
   }
+  redrawKeepingScroll() {
+    // Switching pen tools should not jump away from the editor on Android.
+    const previous = this.contentEl.querySelector?.('.marrow-review-scroll');
+    const position = previous?.scrollTop || 0;
+    this.draw();
+    const current = this.contentEl.querySelector?.('.marrow-review-scroll');
+    if (current) current.scrollTop = position;
+  }
   drawNoteEditor(parent, card) {
     const note = this.noteData;
     if (!this.notesOpen || !note || note.cardId !== card.id) return;
@@ -738,7 +746,7 @@ class MarrowCardsView extends ItemView {
     const toolbar = holder.createDiv({ cls: 'marrow-note-toolbar' });
     const setMode = mode => {
       note.mode = mode;
-      this.draw(); // preserves the note data and redraws both layers.
+      this.redrawKeepingScroll(); // preserves note data and scroll position.
     };
     for (const [mode, label] of [['type', 'Type'], ['pen', 'Pen'], ['eraser', 'Eraser']]) {
       const button = toolbar.createEl('button', {
@@ -752,7 +760,7 @@ class MarrowCardsView extends ItemView {
       if (!note.strokes.length) return;
       note.strokes.pop();
       note.dirtyInk = true;
-      this.draw();
+      this.redrawKeepingScroll();
       this.scheduleNoteSave();
     });
     const save = toolbar.createEl('button', { text: 'Save note' });
