@@ -166,12 +166,17 @@ function findIndexCheckbox(root) {
   return null;
 }
 
+const findActiveBody = node => {
+  if (node.cls.split(' ').includes('marrow-accordion-body') && !node.hidden) return node;
+  for (const child of node.children) { const f = findActiveBody(child); if (f) return f; }
+  return null;
+};
 // Open medicine, select one index, then open Ophthalmology without leaving the page.
 reviewer.contentEl.findText('▸  Medicine  ·  1 index').handlers.click();
 assert.equal(reviewer.screen, 'subjects', 'Subject opens inline instead of navigating away');
 assert.equal(reviewer.expandedSubject, 'Medicine', 'Medicine should be open');
 assert(reviewer.contentEl.findText(' Approved medicine index'), 'Open subject should show its indexes');
-let checkbox = findIndexCheckbox(reviewer.contentEl.findClass('marrow-accordion-body'));
+let checkbox = findIndexCheckbox(findActiveBody(reviewer.contentEl));
 assert(checkbox, 'Need an index selection checkbox');
 checkbox.checked = true; checkbox.handlers.change();
 assert(reviewer.selected.has('MED-01'), 'Medicine selection should stick');
@@ -187,13 +192,7 @@ assert(!reviewer.contentEl.findText(' Approved medicine index'), 'Opening Ophtha
 assert(reviewer.selected.has('MED-01'), 'Collapsing must not discard Medicine selection');
 assert(reviewer.contentEl.findText(' Anatomy of Retina'), 'Ophthalmology index must be visible');
 assert(reviewer.contentEl.findText(' Unapproved eye index'), 'Full view must also show empty indexes');
-checkbox = findIndexCheckbox(reviewer.contentEl.findClass('marrow-accordion-body'));
-// There are multiple bodies; get the active (non-hidden) body for Ophthalmology.
-const findActiveBody = node => {
-  if (node.cls.split(' ').includes('marrow-accordion-body') && !node.hidden) return node;
-  for (const child of node.children) { const f = findActiveBody(child); if (f) return f; }
-  return null;
-};
+// Locate the expanded (non-hidden) panel for Ophthalmology.
 const activeBody = findActiveBody(reviewer.contentEl);
 assert(activeBody, 'An expanded subject needs an active body');
 checkbox = findIndexCheckbox(activeBody);
