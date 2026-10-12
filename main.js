@@ -88,6 +88,8 @@ function canShuffleCard(card, correct) {
       x.includes('both of the above') || x.includes('either of the above') ||
       x.includes('option a') || x.includes('option b') ||
       x.includes('option c') || x.includes('option d') ||
+      x.includes('both a') || x.includes('both b') || x.includes('a and b') ||
+      x.includes('a or b') || x.includes('all of') || x.includes('none of') ||
       /^[a-d] +(and|or) +[a-d]$/i.test(value);
   })) return false;
   const prompt = String(getQuestion(card) || '').toLowerCase();
