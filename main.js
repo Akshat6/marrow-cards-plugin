@@ -54,7 +54,7 @@ function validatePack(pack) {
 
 
 function optionBody(value) {
-  return String(value).trim().replace(/^[A-Ha-h]\\s*[).:-]\\s*/, '').trim();
+  return String(value).trim().replace(/^[A-Ha-h][).: -]+/, '').trim();
 }
 function correctOptionIndex(card) {
   const options = card.options;
