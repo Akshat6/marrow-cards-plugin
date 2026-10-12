@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: collapsible subject selector, multi-subject index practice and approved-card-only filter.",
+  "description": "Marrow Cards: nested subject subheading accordions, taller index panels and cross-subject review.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
