@@ -322,7 +322,7 @@ class MarrowCardsPlugin extends Plugin {
 
 class MarrowCardsView extends ItemView {
   constructor(leaf, plugin) {
-    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.onlyApprovedIndexes = false;
+    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.expandedSubject = ''; this.onlyApprovedIndexes = false;
   }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return 'Marrow Cards'; }
@@ -347,6 +347,40 @@ class MarrowCardsView extends ItemView {
   }
   countForIndex(indexId) {
     return this.plugin.cards.reduce((n, card) => n + (card.indexIds.includes(indexId) ? 1 : 0), 0);
+  }
+  // Shared index tiles for the accordion (and the legacy index view).
+  // Selection updates the review buttons in place to avoid scroll jumps.
+  drawIndexChoices(container, indexes, onSelectionChange) {
+    const grouped = new Map();
+    for (const idx of indexes) {
+      const system = idx.system || 'Indexes';
+      if (!grouped.has(system)) grouped.set(system, []);
+      grouped.get(system).push(idx);
+    }
+    for (const [system, group] of grouped.entries()) {
+      container.createEl('h4', { cls: 'marrow-system', text: system });
+      for (const idx of group) {
+        const count = this.countForIndex(idx.id);
+        const tile = container.createDiv({ cls: 'marrow-index-tile' });
+        const label = tile.createEl('label', { cls: 'marrow-index-name' });
+        const checkbox = label.createEl('input', {
+          type: 'checkbox', attr: { 'aria-label': 'Select ' + idx.title }
+        });
+        checkbox.checked = this.selected.has(idx.id);
+        checkbox.disabled = count === 0;
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) this.selected.add(idx.id);
+          else this.selected.delete(idx.id);
+          onSelectionChange();
+        });
+        label.createSpan({ text: ' ' + idx.title });
+        tile.createEl('span', { cls: 'marrow-count',
+          text: count ? count + (count === 1 ? ' approved card' : ' approved cards') : 'Awaiting approved cards' });
+        const practice = tile.createEl('button', { text: 'Review', cls: 'marrow-start-single' });
+        practice.disabled = count === 0;
+        practice.addEventListener('click', () => this.startReview([idx.id]));
+      }
+    }
   }
   drawHierarchy(el) {
     const header = el.createDiv({ cls: 'marrow-header' });
@@ -397,21 +431,91 @@ class MarrowCardsView extends ItemView {
     }
     if (this.screen === 'subjects') {
       el.createEl('h3', { text: 'Subjects' });
+      el.createEl('p', { cls: 'marrow-hint',
+        text: 'Open a subject, select its indexes, then open another subject. Your selections are kept across subjects.' });
       if (!subjects.length) {
         el.createEl('p', { cls: 'marrow-hint', text: this.onlyApprovedIndexes
           ? 'No indexes with approved cards yet. Turn off the filter to browse all subjects.'
           : 'No index catalog has been installed yet. Tap Check GitHub after configuring your private data token.' });
       }
-      for (const name of subjects) {
-        const count = visibleIndexes.filter(i => (i.subject || 'Other') === name).length;
-        const tile = el.createEl('button', {
-          cls: 'marrow-tree-tile',
-          text: name + '  ·  ' + count + (count === 1 ? ' index' : ' indexes')
+
+      // A different filter can remove the previously open subject.
+      if (!subjects.includes(this.expandedSubject)) this.expandedSubject = '';
+      const subjectIndexes = new Map(subjects.map(name => [
+        name, visibleIndexes.filter(i => (i.subject || 'Other') === name)
+      ]));
+      const availableSelected = () => [...this.selected].filter(id => approvedIndexIds.has(id));
+      const actionButtons = [];
+      const updateActions = () => {
+        const picked = availableSelected();
+        for (const btn of actionButtons) {
+          btn.setText('Review selected indexes (' + picked.length + ')');
+          btn.disabled = !picked.length;
+        }
+      };
+      const addReviewAction = cls => {
+        const btn = el.createEl('button', {
+          cls: 'mod-cta marrow-start-selected ' + cls, text: 'Review selected indexes (0)'
         });
-        tile.addEventListener('click', () => { this.navSubject = name; this.goLibrary('indexes'); });
+        btn.addEventListener('click', () => {
+          const picked = availableSelected();
+          if (picked.length) void this.startReview(picked);
+        });
+        actionButtons.push(btn);
+        return btn;
+      };
+      addReviewAction('marrow-start-selected-top');
+
+      const sectionNodes = new Map();
+      const labelFor = name => {
+        const indexes = subjectIndexes.get(name);
+        const selectedCount = indexes.filter(idx => this.selected.has(idx.id)).length;
+        return (this.expandedSubject === name ? '▾  ' : '▸  ') + name + '  ·  ' +
+          indexes.length + (indexes.length === 1 ? ' index' : ' indexes') +
+          (selectedCount ? '  ·  ' + selectedCount + ' selected' : '');
+      };
+      const updateSubjectLabels = () => {
+        for (const [name, nodes] of sectionNodes) nodes.button.setText(labelFor(name));
+        updateActions();
+      };
+      const list = el.createDiv({ cls: 'marrow-subject-accordion' });
+      for (const name of subjects) {
+        const section = list.createDiv({ cls: 'marrow-subject-section' });
+        const open = this.expandedSubject === name;
+        const button = section.createEl('button', {
+          cls: 'marrow-tree-tile marrow-subject-toggle',
+          text: labelFor(name), attr: { 'aria-expanded': String(open) }
+        });
+        const body = section.createDiv({ cls: 'marrow-accordion-body' });
+        body.hidden = !open;
+        sectionNodes.set(name, { button, body });
+        if (open) this.drawIndexChoices(body, subjectIndexes.get(name), updateSubjectLabels);
+
+        button.addEventListener('click', () => {
+          const prior = this.expandedSubject;
+          if (prior && sectionNodes.has(prior)) {
+            const old = sectionNodes.get(prior);
+            old.body.empty();
+            old.body.hidden = true;
+            old.button.setAttribute('aria-expanded', 'false');
+          }
+          this.expandedSubject = prior === name ? '' : name;
+          if (this.expandedSubject) {
+            body.hidden = false;
+            this.drawIndexChoices(body, subjectIndexes.get(name), updateSubjectLabels);
+            button.setAttribute('aria-expanded', 'true');
+          }
+          updateSubjectLabels();
+        });
       }
+      addReviewAction('marrow-start-selected-bottom');
+      updateActions();
+      el.createEl('p', { cls: 'marrow-hint', text: this.onlyApprovedIndexes
+        ? 'Only indexes with approved cards are shown. Other selected indexes stay selected.'
+        : 'Indexes without approved cards are shown but cannot be selected for review.' });
       return;
     }
+    // Backward-compatible legacy route; normal browsing now uses the accordion.
     if (this.screen === 'indexes') {
       el.createEl('h3', { text: this.navSubject });
       const matching = visibleIndexes.filter(i => (i.subject || 'Other') === this.navSubject);
@@ -419,41 +523,16 @@ class MarrowCardsView extends ItemView {
         el.createEl('p', { cls: 'marrow-hint',
           text: 'No indexes with approved cards in this subject. Turn off the filter to see all indexes.' });
       }
-      const grouped = new Map();
-      for (const idx of matching) {
-        const key = idx.system || 'Indexes';
-        if (!grouped.has(key)) grouped.set(key, []);
-        grouped.get(key).push(idx);
-      }
-      for (const [system, indexes] of grouped.entries()) {
-        el.createEl('h4', { cls: 'marrow-system', text: system });
-        for (const idx of indexes) {
-          const count = this.countForIndex(idx.id);
-          const tile = el.createDiv({ cls: 'marrow-index-tile' });
-          const label = tile.createEl('label', { cls: 'marrow-index-name' });
-          const checkbox = label.createEl('input', { type: 'checkbox' });
-          checkbox.checked = this.selected.has(idx.id);
-          checkbox.disabled = !count;
-          checkbox.addEventListener('change', () => {
-            if (checkbox.checked) this.selected.add(idx.id);
-            else this.selected.delete(idx.id);
-            this.draw();
-          });
-          label.createSpan({ text: ' ' + idx.title });
-          tile.createEl('span', { cls: 'marrow-count', text: count ? count + (count === 1 ? ' approved card' : ' approved cards') : 'Awaiting approved cards' });
-          const practice = tile.createEl('button', { text: 'Review', cls: 'marrow-start-single' });
-          practice.disabled = !count;
-          practice.addEventListener('click', () => this.startReview([idx.id]));
-        }
-      }
-      const picked = [...this.selected].filter(id => this.countForIndex(id) > 0);
-      const combined = el.createEl('button', { cls: 'mod-cta marrow-start-selected', text: 'Review selected indexes (' + picked.length + ')' });
-      combined.disabled = picked.length === 0;
+      this.drawIndexChoices(el, matching, () => this.draw());
+      const picked = [...this.selected].filter(id => approvedIndexIds.has(id));
+      const combined = el.createEl('button', {
+        cls: 'mod-cta marrow-start-selected',
+        text: 'Review selected indexes (' + picked.length + ')'
+      });
+      combined.disabled = !picked.length;
       combined.addEventListener('click', () => this.startReview(picked));
       el.createEl('p', { cls: 'marrow-hint',
-        text: this.onlyApprovedIndexes
-          ? 'Showing only indexes with approved cards. Selected indexes across subjects remain selected.'
-          : 'You may select indexes across subjects. An index with zero approved cards is visible but cannot start a review.' });
+        text: 'Return to Subjects for the collapsible multi-subject index selector.' });
     }
   }
   filterCards() {
