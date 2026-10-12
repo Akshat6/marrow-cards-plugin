@@ -2,7 +2,7 @@
 
 This supersedes the **retired** first-device dummy-card pilot. The old "Install two DEMO cards" feature and `pilot-example` data were removed on 2026-10-11; **do not re-add them**.
 
-For flashcard extraction and publication, use **[AGENTS.md](../AGENTS.md)** and **[flashcard-workflow.md](flashcard-workflow.md)**.
+For plugin changes or future regressions, use **[plugin-maintenance.md](plugin-maintenance.md)** and **[AGENTS.md](../AGENTS.md)**. For flashcard extraction and publication, follow **[flashcard-workflow.md](flashcard-workflow.md)**.
 
 ## First install / restart checks
 
@@ -21,9 +21,22 @@ For flashcard extraction and publication, use **[AGENTS.md](../AGENTS.md)** and 
 5. Open a card: the question and explanation areas scroll; footer buttons remain visible. Tap **Flip to answer → Show question → Flip to answer**, and confirm neither flip-back nor scroll creates a new Right/Wrong mark. Grade **Right** or **Wrong** once.
 6. Close and reopen Obsidian. Verify approved cards and the most recent review counts persist. Repeat on another day to verify local event logs.
 
+## v0.2.3 regression: multi-card MCQ tapping on Android
+
+1. In **MBBS → Subjects → Anatomy → a subheading → an approved 3-card index**, tap **Review** beside that index (not Browse). Card 1 should display tappable option buttons.
+2. Tap any option. It must immediately record one **Right** or **Wrong**, flip to the answer/explanation, show the chosen and correctly relettered answers, and still allow **My notes**.
+3. Tap **Next card**. **Card 2 must have enabled, tappable options**. Tap one, then Next, and repeat for **card 3**. This directly tests the v0.2.2 bug where cards 2/3 had disabled options after a transition.
+4. Restart the same review. For card 1, use **Flip to answer → Wrong** instead of tapping an option. Confirm that card 2 **still has tappable option buttons** (the async manual-grade path previously had the same risk).
+5. Return to an answered MCQ with **Show question** and ensure another tap **does not create another Right/Wrong event** for that attempt. Displayed options must not reshuffle during flip-back or note editing.
+6. Tap **Browse** for the same index: Previous/Next and flip must **not** change Seen, Right, Wrong or accuracy. Options remain in original source order and are not grading buttons.
+7. Try a personal fact with **no options**. It should still use reversible Flip plus manual Right/Wrong. Verify notes can be opened both in Review and Browse.
+8. Confirm personal typed/stylus notes and review counts remain after an Obsidian cold restart. Test on both phone and tablet after independently updating BRAT. Do **not** delete old reviews to simulate a clean test.
+
+The GitHub Actions regression test covers a synthetic three-card sequence, DOM `disabled` states for second and third cards and the post-manual-grade path. This checklist is the necessary **real Android validation**.
+
 ## Syncthing phone/tablet
 
-1. Sync the dedicated vault's `MarrowCards/packs/`, `MarrowCards/media/`, and `MarrowCards/reviews/`.
+1. Sync the dedicated vault's `MarrowCards/packs/`, `MarrowCards/media/`, `MarrowCards/reviews/`, and **`MarrowCards/notes/`**.
 2. **Exclude `.obsidian`** on both devices; plugin code and settings stay device-local.
 3. Install the plugin on the tablet independently. The tablet should receive already-downloaded card packs and images via Syncthing, normally without a GitHub token.
 4. Tap **Refresh local** after Syncthing finishes, and verify counts include both devices' reviews, stored under distinct `MarrowCards/reviews/<device-id>/` folders.
