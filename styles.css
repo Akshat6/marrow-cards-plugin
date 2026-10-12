@@ -257,9 +257,10 @@
 }
 .marrow-cards .marrow-note-page {
   position: relative;
-  width: 100%;
-  aspect-ratio: 3 / 2;
-  min-height: 260px;
+  width: 720px;
+  min-width: 720px;
+  height: 960px;
+  aspect-ratio: 3 / 4;
   box-sizing: border-box;
   background-color: #fff;
   background-image: repeating-linear-gradient(
@@ -297,10 +298,28 @@
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
 .is-mobile .marrow-cards .marrow-note-page {
-  /* Fixed logical page width retains readable shorthand on narrow phones.
-     Users can scroll horizontally on the phone; drawing fits the tablet. */
-  min-width: 580px;
-  min-height: 386px;
+  /* A fixed coordinate system keeps typed text and stylus annotations aligned
+     across phone and tablet widths; the phone can pan the page horizontally. */
+  width: 720px;
+  min-width: 720px;
+  height: 960px;
 }
 .is-mobile .marrow-cards .marrow-note-editor { padding: 8px; }
 .is-mobile .marrow-cards .marrow-note-toolbar button { min-height: 44px; }
+
+/* Full-width quick typing field on phones; same text is mirrored on the page
+   that gets annotated on the tablet. No duplicate note is stored. */
+.marrow-cards .marrow-note-quick-type { display: none; }
+.is-mobile .marrow-cards .marrow-note-quick-type {
+  display: block;
+  width: 100%;
+  min-height: 115px;
+  margin: 8px 0 12px;
+  padding: 12px;
+  box-sizing: border-box;
+  resize: vertical;
+  font-size: 16px;
+  line-height: 1.45;
+}
+.is-mobile .marrow-cards .marrow-note-text { pointer-events: none; }
+.is-mobile .marrow-cards .marrow-note-viewport { border-radius: 8px; }
