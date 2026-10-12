@@ -759,6 +759,19 @@ class MarrowCardsView extends ItemView {
       () => new Notice('Personal note saved locally.'),
       () => {}
     ));
+    const quick = holder.createEl('textarea', {
+      cls: 'marrow-note-quick-type',
+      attr: { 'aria-label': 'Quick type your card note on phone',
+        placeholder: 'Type shorthand here on your phone. It appears on the pen page below.' }
+    });
+    quick.value = note.text;
+    quick.addEventListener('input', () => {
+      note.text = quick.value;
+      note.dirtyText = true;
+      this.scheduleNoteSave();
+      const pageText = holder.querySelector('.marrow-note-text');
+      if (pageText) pageText.value = note.text;
+    });
     const viewport = holder.createDiv({ cls: 'marrow-note-viewport' });
     const stage = viewport.createDiv({ cls: 'marrow-note-page' });
     const input = stage.createEl('textarea', {
@@ -770,11 +783,12 @@ class MarrowCardsView extends ItemView {
     input.readOnly = note.mode !== 'type';
     input.addEventListener('input', () => {
       note.text = input.value;
+      quick.value = note.text;
       note.dirtyText = true;
       this.scheduleNoteSave();
     });
     const canvas = stage.createEl('canvas', { cls: 'marrow-note-ink' });
-    const width = 900, height = 600;
+    const width = 900, height = 1200;
     canvas.width = width;
     canvas.height = height;
     canvas.style.pointerEvents = note.mode === 'type' ? 'none' : 'auto';
