@@ -75,7 +75,7 @@ function correctOptionIndex(card) {
   ).filter(index => index >= 0);
   return matches.length === 1 ? matches[0] : -1;
 }
-function optionLetter(index) { return String.fromCharCode(65 + index); }
+function optionLetter(index) { return String.fromCharCode(65 + index); } // A, B, C, D
 
 function compareVersions(a, b) {
   const parse = s => String(s || '0.0.0').split('.').slice(0,3).map(x => Number(x) || 0);
