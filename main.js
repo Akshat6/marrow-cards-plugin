@@ -514,10 +514,10 @@ class MarrowCardsView extends ItemView {
           entry.button.disabled = !picked.length;
         }
       };
-      const addReviewAction = (cls, kind = 'review') => {
-        const btn = el.createEl('button', {
+      const addReviewAction = (container, position, kind = 'review') => {
+        const btn = container.createEl('button', {
           cls: (kind === 'browse' ? 'marrow-start-browse-selected ' : 'mod-cta ') +
-            'marrow-start-selected ' + cls,
+            'marrow-start-selected marrow-start-selected-' + position,
           text: (kind === 'browse' ? 'Browse' : 'Review') + ' selected indexes (0)'
         });
         btn.addEventListener('click', () => {
@@ -527,8 +527,12 @@ class MarrowCardsView extends ItemView {
         actionButtons.push({ button: btn, kind });
         return btn;
       };
-      addReviewAction('marrow-start-selected-top');
-      addReviewAction('marrow-start-selected-top', 'browse');
+      const addSelectionActions = position => {
+        const group = el.createDiv({ cls: 'marrow-selection-actions marrow-selection-actions-' + position });
+        addReviewAction(group, position, 'review');
+        addReviewAction(group, position, 'browse');
+      };
+      addSelectionActions('top');
 
       const sectionNodes = new Map();
       const labelFor = name => {
@@ -631,8 +635,7 @@ class MarrowCardsView extends ItemView {
           updateSubjectLabels();
         });
       }
-      addReviewAction('marrow-start-selected-bottom');
-      addReviewAction('marrow-start-selected-bottom', 'browse');
+      addSelectionActions('bottom');
       updateActions();
       el.createEl('p', { cls: 'marrow-hint', text: this.onlyApprovedIndexes
         ? 'Only indexes with approved cards are shown. Other selected indexes stay selected.'
