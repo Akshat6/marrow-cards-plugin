@@ -1095,7 +1095,22 @@ class MarrowCardsView extends ItemView {
         img.src = this.app.vault.getResourcePath(f);
         img.loading = 'eager';
       }
-      for (const option of card.options || []) panel.createEl('div', { cls: 'marrow-option', text: option });
+      for (const sourceIndex of this.optionOrder) {
+        const text = card.options[sourceIndex];
+        const displayIndex = this.optionOrder.indexOf(sourceIndex);
+        if (this.sessionKind === 'review' && this.correctIndex >= 0) {
+          const option = panel.createEl('button', {
+            cls: 'marrow-option marrow-option-choice',
+            text: optionLetter(displayIndex) + '. ' + optionBody(text),
+            attr: { 'aria-label': 'Choose option ' + optionLetter(displayIndex) }
+          });
+          option.disabled = Boolean(this.answerState) || this.busy;
+          if (this.answerState?.sourceIndex === sourceIndex) option.addClass('marrow-option-selected');
+          option.addEventListener('click', () => void this.selectOption(sourceIndex));
+        } else {
+          panel.createEl('div', { cls: 'marrow-option', text });
+        }
+      }
     } else {
       panel.createEl('div', { cls: 'marrow-answer', text: card.answer });
       if (card.explanation) {
