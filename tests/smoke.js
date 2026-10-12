@@ -159,6 +159,28 @@ let chosenForReview;
 reviewer.startReview = ids => { chosenForReview = ids; };
 reviewer.draw();
 
+// v0.2.1: Review and Browse must be adjacent, same-size sibling buttons.
+for (const position of ['top', 'bottom']) {
+  const group = reviewer.contentEl.findClass('marrow-selection-actions-' + position);
+  assert(group, 'Paired action group missing: ' + position);
+  assert.equal(group.children.length, 2, 'Review/Browse should be the only paired actions');
+  assert.equal(group.children[0].text, 'Review selected indexes (0)');
+  assert.equal(group.children[1].text, 'Browse selected indexes (0)');
+  assert(group.children[0].cls.includes('mod-cta'), 'Review keeps accent button');
+  assert(group.children[1].cls.includes('marrow-start-browse-selected'),
+    'Browse keeps neutral button');
+  assert.equal(group.children[0].disabled, true);
+  assert.equal(group.children[1].disabled, true);
+}
+const pairedActionCss = fs.readFileSync('styles.css','utf8');
+assert(!pairedActionCss.includes('.is-mobile .marrow-start-selected { margin-bottom: 110px; }'),
+  'Old mobile button margin would create giant space between Review and Browse');
+assert(pairedActionCss.includes('.marrow-selection-actions .marrow-start-selected'),
+  'Paired buttons must override standalone margins');
+assert(pairedActionCss.includes('gap: 8px'), 'Paired buttons need a consistent small gap');
+console.log('Compact paired Browse/Review UI checks passed.');
+
+
 assert(reviewer.contentEl.findText('▸  ENT  ·  1 index'), 'Unapproved subject should be visible with filter off');
 assert(reviewer.contentEl.findText('▸  Medicine  ·  1 index'), 'Medicine subject should initially be collapsed');
 assert(!reviewer.contentEl.findText(' Approved medicine index'), 'Collapsed subjects should not render indexes');
