@@ -36,7 +36,7 @@ console.log("Bundle import and no-downgrade smoke checks passed.");
 class MockElement {
   constructor(props = {}) {
     this.props = props; this.children = []; this.handlers = {};
-    this.text = props.text || ''; this.cls = props.cls || '';
+    this.text = props.text || ''; this.cls = props.cls || ''; this.style = {}; this.hidden = false;
   }
   empty() { this.children = []; }
   addClass() {}
@@ -47,6 +47,14 @@ class MockElement {
   addEventListener(event, handler) { this.handlers[event] = handler; }
   setText(value) { this.text = value; }
   setAttribute(name, value) { this.props.attr = { ...(this.props.attr || {}), [name]: value }; }
+  querySelector(selector) { return selector.startsWith('.') ? this.findClass(selector.slice(1)) : null; }
+  getContext() {
+    return { clearRect(){}, beginPath(){}, moveTo(){}, lineTo(){}, stroke(){},
+      arc(){}, fill(){}, lineJoin:'', lineCap:'', strokeStyle:'', fillStyle:'', lineWidth:0 };
+  }
+  getBoundingClientRect() { return { left:0, top:0, width:720, height:960 }; }
+  setPointerCapture() {}
+
 
   findText(text) {
     if (this.text === text) return this;
@@ -70,7 +78,8 @@ vm.runInNewContext(src + '\nmodule.exports.ReviewerForTest = MarrowCardsView;', 
   module: stubModule, exports: stubModule.exports,
   require(name) { if (name === 'obsidian') return mockObsidian; throw new Error('Unexpected module ' + name); },
   console,
-  window: { setInterval: () => 1 }
+  window: { setInterval: () => 1 },
+  setTimeout, clearTimeout
 }, { filename: 'main.js' });
 const Reviewer = stubModule.exports.ReviewerForTest;
 const card = { id: 'TEST-001', type: 'pyq', status: 'approved', indexIds: ['OPH-04'],
@@ -345,3 +354,112 @@ assert(newCss.includes('max-height: min(74vh, 680px)'), 'Subject accordion shoul
 assert(newCss.includes('max-height: min(70vh, 620px)'), 'Mobile subject accordion should be taller');
 assert(newCss.includes('.marrow-system-toggle'), 'Nested subheading styles are missing');
 console.log('Nested system accordion regression checks passed.');
+
+// v0.2.0: Ungraded browsing and typed+ink notes persist independently of GitHub.
+(async () => {
+  const saved = new Map();
+  const writer = new stubModule.exports();
+  writer.initPromise = null;
+  writer.app = {
+    vault: {
+      getAbstractFileByPath(path) { return saved.has(path) ? { path } : null; },
+      async read(file) { return saved.get(file.path); },
+      async modify(file, text) { saved.set(file.path, text); },
+      async create(path, text) { saved.set(path, text); }
+    }
+  };
+  writer.ensureFolder = async () => {};
+  writer.noteWriteQueue = Promise.resolve();
+  await writer.saveCardNotePart('OPH-04', 'text', 'Quick shorthand');
+  await writer.saveCardNotePart('OPH-04', 'ink', [
+    { id:'ink-1', color:'#286ab7', width:2.8, points:[[15,30],[25,40]] }
+  ]);
+  const local = await writer.readCardNote('OPH-04');
+  assert.equal(local.text, 'Quick shorthand', 'Typed shorthand should reopen');
+  assert.equal(local.strokes[0].points.length, 2, 'Vector pen coordinates should reopen');
+  assert(saved.has('MarrowCards/notes/OPH-04/text.json'));
+  assert(saved.has('MarrowCards/notes/OPH-04/ink.json'));
+  assert(!Array.from(saved.keys()).some(path => path.includes('packs/') || path.includes('media/')),
+    'Personal notes must not be stored in card or image packs');
+  const independent = await writer.readCardNote('OPH-04');
+  assert.equal(independent.strokes[0].points[1][0], 25);
+  await assert.rejects(writer.saveCardNotePart('../unsafe', 'text', 'bad'), /Invalid note save/);
+
+  const events = [];
+  const notes = new Map();
+  reviewer.plugin = {
+    cards: [card, secondCard],
+    indexes: [
+      {id:'OPH-04', title:'Anatomy of Retina', subject:'Ophthalmology'},
+      {id:'MED-01', title:'Medicine test', subject:'Medicine'}
+    ],
+    stats: new Map(),
+    async recordEvent(id, action) { events.push({id, action}); },
+    async readCardNote(cardId) {
+      return notes.get(cardId) || {cardId, text:'', strokes:[]};
+    },
+    async saveCardNotePart(cardId, part, value) {
+      const prev = notes.get(cardId) || {cardId, text:'', strokes:[]};
+      const next = {...prev, [part === 'ink' ? 'strokes' : 'text']: JSON.parse(JSON.stringify(value))};
+      notes.set(cardId, next);
+    }
+  };
+  reviewer.screen = 'subjects';
+  reviewer.selected = new Set();
+  reviewer.notesOpen = false;
+  reviewer.noteData = null;
+  await reviewer.startBrowse(['OPH-04','MED-01']);
+  assert.equal(reviewer.sessionKind, 'browse');
+  assert.equal(events.length, 0, 'Starting Browse must never count Seen');
+  assert(reviewer.contentEl.findText('Previous'));
+  assert(reviewer.contentEl.findText('Show answer'));
+  assert(reviewer.contentEl.findText('Next'));
+  assert(!reviewer.contentEl.findText('Wrong'), 'Browse must never offer Wrong grading');
+  assert(!reviewer.contentEl.findText('Right'), 'Browse must never offer Right grading');
+  reviewer.contentEl.findText('Show answer').handlers.click();
+  assert.equal(reviewer.flipped, true);
+  assert(reviewer.contentEl.findText('Show question'));
+  assert.equal(events.length, 0);
+
+  const first = reviewer.queue[0];
+  await reviewer.toggleNote(first);
+  assert(reviewer.notesOpen, 'My notes must open on Browse cards');
+  const quick = reviewer.contentEl.findClass('marrow-note-quick-type');
+  assert(quick, 'Quick-typing editor missing');
+  quick.value = 'Phone shorthand for later';
+  quick.handlers.input();
+  assert.equal(reviewer.noteData.text, 'Phone shorthand for later');
+  assert.equal(reviewer.contentEl.findClass('marrow-note-text').value, 'Phone shorthand for later');
+  const pen = reviewer.contentEl.findText('Pen');
+  pen.handlers.click();
+  const ink = reviewer.contentEl.findClass('marrow-note-ink');
+  assert(ink, 'Stylus canvas should be available');
+  ink.handlers.pointerdown({pointerType:'pen', pointerId:7, clientX:16, clientY:20, preventDefault(){}});
+  ink.handlers.pointermove({pointerType:'pen', pointerId:7, clientX:80, clientY:90, preventDefault(){}});
+  ink.handlers.pointerup({pointerType:'pen', pointerId:7});
+  assert.equal(reviewer.noteData.strokes.length, 1, 'Stylus strokes should be retained');
+  assert(reviewer.noteData.strokes[0].points.length >= 2);
+  await reviewer.flushNote();
+  assert.equal(notes.get(first.id).text, 'Phone shorthand for later');
+  assert.equal(notes.get(first.id).strokes.length, 1, 'Ink and text should both be saved');
+  assert.equal(events.length, 0, 'Writing notes must not count as practising');
+
+  await reviewer.browseStep(1);
+  assert.equal(reviewer.cursor, 1, 'Browse Next should move to the next card');
+  assert.equal(reviewer.flipped, false, 'Next card should start on question');
+  assert.equal(events.length, 0, 'Browse navigation must not write Seen events');
+  await reviewer.browseStep(-1);
+  assert.equal(reviewer.cursor, 0, 'Browse Previous should work');
+  await reviewer.toggleNote(reviewer.queue[0]);
+  assert.equal(reviewer.noteData.text, 'Phone shorthand for later', 'Note should reopen after navigation');
+  assert.equal(reviewer.noteData.strokes.length, 1, 'Saved ink should reopen for editing');
+  await reviewer.toggleNote(reviewer.queue[0]);
+  assert.equal(events.length, 0);
+
+  await reviewer.startReview(['OPH-04']);
+  assert.equal(reviewer.sessionKind, 'review');
+  assert(events.some(event => event.action === 'seen'), 'Ordinary reviews must still count Seen');
+  assert(reviewer.contentEl.findText('Flip to answer'));
+  assert(reviewer.contentEl.findText('My notes (type / pen)'), 'Notes must also be available during reviews');
+  console.log('No-grade Browse and phone+stylus note save/reopen checks passed.');
+})().catch(err => { console.error(err); process.exitCode = 1; });
