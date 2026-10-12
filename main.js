@@ -52,6 +52,31 @@ function validatePack(pack) {
   return pack;
 }
 
+
+function optionBody(value) {
+  return String(value).trim().replace(/^[A-Ha-h]\\s*[).:-]\\s*/, '').trim();
+}
+function correctOptionIndex(card) {
+  const options = card.options;
+  if (!Array.isArray(options) || options.length < 2 || options.length > 8) return -1;
+  const answer = String(card.answer || '').trim();
+  const match = answer.match(/^([A-Ha-h])\\s*[).:-]\\s*(.*)$/s);
+  if (match) {
+    const idx = match[1].toUpperCase().charCodeAt(0) - 65;
+    if (idx >= options.length) return -1;
+    const body = optionBody(options[idx]).toLowerCase().replace(/\\s+/g, ' ');
+    const detail = match[2].trim().toLowerCase().replace(/\\s+/g, ' ');
+    if (!detail || detail === body || detail.startsWith(body + ' -') ||
+        detail.startsWith(body + ' (') || detail.startsWith(body + ':')) return idx;
+    return -1;
+  }
+  const matches = options.map((option, index) =>
+    optionBody(option).toLowerCase() === answer.toLowerCase() ? index : -1
+  ).filter(index => index >= 0);
+  return matches.length === 1 ? matches[0] : -1;
+}
+function optionLetter(index) { return String.fromCharCode(65 + index); }
+
 function compareVersions(a, b) {
   const parse = s => String(s || '0.0.0').split('.').slice(0,3).map(x => Number(x) || 0);
   const x = parse(a), y = parse(b);
