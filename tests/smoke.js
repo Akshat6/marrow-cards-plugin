@@ -574,3 +574,57 @@ console.log('Nested system accordion regression checks passed.');
     'Unverifiable MCQ must remain readable with manual grading');
   console.log('MCQ tap-to-grade, changed letters, single count and fact fallback checks passed.');
 })().catch(err=>{console.error(err);process.exitCode=1;});
+
+
+// v0.2.3: the second and third cards must be tappable after Next.
+// Previously, nextAfterOption() and grade() drew the subsequent question
+// while busy=true and left its options permanently disabled in the DOM.
+(async () => {
+  const three = [1, 2, 3].map(i => ({
+    id: 'SEQUENTIAL-DEMO-' + i, type: 'pyq', status: 'approved',
+    indexIds: ['THREE-CARDS'], question: 'Dummy question ' + i,
+    options: ['a) First','b) Second','c) Third','d) Fourth'],
+    answer: i === 2 ? 'D. Fourth' : 'B. Second',
+    images: [], explanation: 'Dummy explanation ' + i
+  }));
+  const events = [];
+  const plugin = {
+    cards: three, indexes: [{id:'THREE-CARDS',subject:'Test',title:'Three-card index'}],
+    stats: new Map(),
+    async recordEvent(id, action) { events.push({id,action}); },
+    async readCardNote(id) { return {cardId:id,text:'',strokes:[]}; },
+    async saveCardNotePart() {}
+  };
+  const v = new Reviewer(mockLeaf, plugin);
+  await v.startReview(['THREE-CARDS']);
+  function currentChoice() {
+    const originalIndex = v.correctIndex;
+    const displayedIndex = v.optionOrder.indexOf(originalIndex);
+    const letter = String.fromCharCode(65 + displayedIndex);
+    const text = ['First','Second','Third','Fourth'][originalIndex];
+    return v.contentEl.findText(letter + '. ' + text);
+  }
+  for (let i = 0; i < three.length; i++) {
+    assert.equal(v.queue[v.cursor].id,three[i].id,'Expected sequence card ' + (i + 1));
+    const choice = currentChoice();
+    assert(choice && choice.handlers.click,'Choice must be interactive for card ' + (i + 1));
+    assert.equal(choice.disabled,false,
+      'Option button must not remain disabled after Next: card ' + (i + 1));
+    await v.selectOption(v.correctIndex);
+    assert.equal(v.flipped,true);
+    assert(v.contentEl.findText('Correct — saved as Right'));
+    if (i < three.length - 1) await v.nextAfterOption();
+  }
+  assert.equal(events.filter(e=>e.action==='right').length,3,
+    'All three cards should be correctly auto-graded exactly once');
+  assert.equal(events.filter(e=>e.action==='seen').length,3);
+
+  // A manual Right/Wrong attempt must also leave the next MCQ enabled.
+  await v.startReview(['THREE-CARDS']);
+  v.contentEl.findText('Flip to answer').handlers.click();
+  await v.grade('wrong');
+  const afterManual = currentChoice();
+  assert(afterManual && afterManual.disabled === false,
+    'MCQ options should be enabled after manually grading the prior card');
+  console.log('Multiple consecutive MCQ controls regression passed.');
+})().catch(error=>{console.error(error);process.exitCode=1;});
