@@ -456,7 +456,7 @@ console.log('Nested system accordion regression checks passed.');
   await reviewer.toggleNote(reviewer.queue[0]);
   assert.equal(events.length, 0);
 
-  await reviewer.startReview(['OPH-04']);
+  await Reviewer.prototype.startReview.call(reviewer, ['OPH-04']);
   assert.equal(reviewer.sessionKind, 'review');
   assert(events.some(event => event.action === 'seen'), 'Ordinary reviews must still count Seen');
   assert(reviewer.contentEl.findText('Flip to answer'));
