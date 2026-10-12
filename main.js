@@ -1103,6 +1103,13 @@ class MarrowCardsView extends ItemView {
         img.src = this.app.vault.getResourcePath(f);
         img.loading = 'eager';
       }
+      if (this.sessionKind === 'review' && this.correctIndex >= 0 && !this.answerState) {
+        panel.createEl('p', { cls: 'marrow-hint',
+          text: 'Tap an option to check it automatically, or flip to assess yourself.' });
+      } else if (this.sessionKind === 'review' && (card.options || []).length && this.correctIndex < 0) {
+        panel.createEl('p', { cls: 'marrow-hint',
+          text: 'This answer cannot be verified automatically. Flip and grade it manually.' });
+      }
       for (const sourceIndex of this.optionOrder) {
         const text = card.options[sourceIndex];
         const displayIndex = this.optionOrder.indexOf(sourceIndex);
