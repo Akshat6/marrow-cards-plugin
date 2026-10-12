@@ -322,7 +322,7 @@ class MarrowCardsPlugin extends Plugin {
 
 class MarrowCardsView extends ItemView {
   constructor(leaf, plugin) {
-    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = '';
+    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.onlyApprovedIndexes = false;
   }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return 'Marrow Cards'; }
@@ -367,7 +367,28 @@ class MarrowCardsView extends ItemView {
       subject.addEventListener('click', () => this.goLibrary('subjects'));
     }
     const all = this.plugin.indexes;
-    const subjects = [...new Set(all.map(i => i.subject || 'Other'))].sort((a,b) => a.localeCompare(b));
+    // Active packs are validated before loading, so every card in this array
+    // is approved. Build a set once to avoid scanning the card list per index.
+    const approvedIndexIds = new Set(this.plugin.cards.flatMap(card => card.indexIds));
+    const visibleIndexes = this.onlyApprovedIndexes
+      ? all.filter(index => approvedIndexIds.has(index.id))
+      : all;
+    const subjects = [...new Set(visibleIndexes.map(i => i.subject || 'Other'))].sort((a,b) => a.localeCompare(b));
+
+    if (this.screen === 'subjects' || this.screen === 'indexes') {
+      const filter = el.createDiv({ cls: 'marrow-availability-filter' });
+      const filterLabel = filter.createEl('label', { cls: 'marrow-availability-label' });
+      const toggle = filterLabel.createEl('input', {
+        type: 'checkbox',
+        attr: { 'aria-label': 'Show only indexes with approved cards' }
+      });
+      toggle.checked = this.onlyApprovedIndexes;
+      toggle.addEventListener('change', () => {
+        this.onlyApprovedIndexes = toggle.checked;
+        this.draw();
+      });
+      filterLabel.createSpan({ text: ' Show only indexes with approved cards' });
+    }
     if (this.screen === 'mbbs') {
       el.createEl('p', { cls: 'marrow-hint', text: 'Choose MBBS to browse subjects and then your approved index decks.' });
       const btn = el.createEl('button', { cls: 'marrow-tree-tile', text: 'MBBS  ·  ' + subjects.length + ' subjects' });
@@ -376,17 +397,28 @@ class MarrowCardsView extends ItemView {
     }
     if (this.screen === 'subjects') {
       el.createEl('h3', { text: 'Subjects' });
-      if (!subjects.length) el.createEl('p', { text: 'No index catalog has been installed yet. Tap Check GitHub after configuring your private data token.' });
+      if (!subjects.length) {
+        el.createEl('p', { cls: 'marrow-hint', text: this.onlyApprovedIndexes
+          ? 'No indexes with approved cards yet. Turn off the filter to browse all subjects.'
+          : 'No index catalog has been installed yet. Tap Check GitHub after configuring your private data token.' });
+      }
       for (const name of subjects) {
-        const count = all.filter(i => (i.subject || 'Other') === name).length;
-        const tile = el.createEl('button', { cls: 'marrow-tree-tile', text: name + '  ·  ' + count + ' indexes' });
+        const count = visibleIndexes.filter(i => (i.subject || 'Other') === name).length;
+        const tile = el.createEl('button', {
+          cls: 'marrow-tree-tile',
+          text: name + '  ·  ' + count + (count === 1 ? ' index' : ' indexes')
+        });
         tile.addEventListener('click', () => { this.navSubject = name; this.goLibrary('indexes'); });
       }
       return;
     }
     if (this.screen === 'indexes') {
       el.createEl('h3', { text: this.navSubject });
-      const matching = all.filter(i => (i.subject || 'Other') === this.navSubject);
+      const matching = visibleIndexes.filter(i => (i.subject || 'Other') === this.navSubject);
+      if (!matching.length && this.onlyApprovedIndexes) {
+        el.createEl('p', { cls: 'marrow-hint',
+          text: 'No indexes with approved cards in this subject. Turn off the filter to see all indexes.' });
+      }
       const grouped = new Map();
       for (const idx of matching) {
         const key = idx.system || 'Indexes';
@@ -418,7 +450,10 @@ class MarrowCardsView extends ItemView {
       const combined = el.createEl('button', { cls: 'mod-cta marrow-start-selected', text: 'Review selected indexes (' + picked.length + ')' });
       combined.disabled = picked.length === 0;
       combined.addEventListener('click', () => this.startReview(picked));
-      el.createEl('p', { cls: 'marrow-hint', text: 'You may select indexes across subjects. An index with zero approved cards is visible but cannot start a review.' });
+      el.createEl('p', { cls: 'marrow-hint',
+        text: this.onlyApprovedIndexes
+          ? 'Showing only indexes with approved cards. Selected indexes across subjects remain selected.'
+          : 'You may select indexes across subjects. An index with zero approved cards is visible but cannot start a review.' });
     }
   }
   filterCards() {
