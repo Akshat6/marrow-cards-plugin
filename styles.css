@@ -92,3 +92,31 @@
     padding-inline: 3px;
   }
 }
+
+
+/* v0.1.7: approved-card-only filter for the subject/index browser. */
+.marrow-availability-filter {
+  margin: 12px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+.marrow-availability-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: var(--font-ui-medium);
+  font-weight: 600;
+  line-height: 1.4;
+  min-height: 30px;
+}
+.marrow-availability-label input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--interactive-accent);
+}
+.is-mobile .marrow-availability-label { min-height: 42px; }
