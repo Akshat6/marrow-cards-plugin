@@ -7,6 +7,7 @@ const ROOT = 'MarrowCards';
 const PACKS = ROOT + '/packs';
 const MEDIA = ROOT + '/media';
 const REVIEWS = ROOT + '/reviews';
+const NOTES = ROOT + '/notes';
 const TOKEN_KEY = 'marrow-cards-github-token';
 const REPO = 'Akshat6/marrow-cards-data';
 const ALLOWED_IMAGE = /\.(png|jpe?g|webp|gif)$/i;
@@ -82,6 +83,7 @@ class MarrowCardsPlugin extends Plugin {
     this.indexes = [];
     this.stats = new Map();
     this.writeQueue = Promise.resolve();
+    this.noteWriteQueue = Promise.resolve();
     this.syncing = false;
 
     // Register the plugin with Obsidian before touching the vault.
@@ -132,7 +134,7 @@ class MarrowCardsPlugin extends Plugin {
     }
   }
   async ensureDirectories() {
-    for (const path of [PACKS, MEDIA, REVIEWS, REVIEWS + '/' + this.settings.deviceId]) await this.ensureFolder(path);
+    for (const path of [PACKS, MEDIA, REVIEWS, REVIEWS + '/' + this.settings.deviceId, NOTES]) await this.ensureFolder(path);
   }
   async writeJson(path, data) {
     const content = JSON.stringify(data, null, 2) + '\n';
@@ -140,6 +142,42 @@ class MarrowCardsPlugin extends Plugin {
     if (file) await this.app.vault.modify(file, content);
     else await this.app.vault.create(path, content);
   }
+  // Notes are user-authored local data, intentionally not in GitHub packs.
+  // Split text and ink so a phone text edit and tablet pen edit normally touch
+  // different files. Sync these files via the existing Syncthing vault.
+  async readCardNote(cardId) {
+    if (!safeId(cardId)) throw new Error('Invalid note card ID');
+    if (this.initPromise) await this.initPromise;
+    const directory = NOTES + '/' + cardId;
+    const loadPart = async (file, kind) => {
+      const path = directory + '/' + file;
+      const found = this.app.vault.getAbstractFileByPath(path);
+      if (!found) return kind === 'ink' ? [] : '';
+      const parsed = JSON.parse(await this.app.vault.read(found));
+      if (parsed.schemaVersion !== 1 || parsed.cardId !== cardId) throw new Error('Unexpected note format: ' + path);
+      if (kind === 'ink') {
+        if (!Array.isArray(parsed.strokes)) throw new Error('Invalid saved pen strokes: ' + path);
+        return parsed.strokes.filter(stroke => stroke && Array.isArray(stroke.points));
+      }
+      if (typeof parsed.text !== 'string') throw new Error('Invalid typed note: ' + path);
+      return parsed.text;
+    };
+    return { cardId, text: await loadPart('text.json', 'text'), strokes: await loadPart('ink.json', 'ink') };
+  }
+  async saveCardNotePart(cardId, part, value) {
+    if (!safeId(cardId) || !['text', 'ink'].includes(part)) throw new Error('Invalid note save');
+    const path = NOTES + '/' + cardId + '/' + part + '.json';
+    const payload = part === 'text'
+      ? { schemaVersion: 1, cardId, text: String(value).slice(0, 100000) }
+      : { schemaVersion: 1, cardId, strokes: value };
+    const operation = async () => {
+      await this.ensureFolder(NOTES + '/' + cardId);
+      await this.writeJson(path, payload);
+    };
+    this.noteWriteQueue = this.noteWriteQueue.catch(() => {}).then(operation);
+    return this.noteWriteQueue;
+  }
+
   async loadCollection() {
     if (this.initPromise) await this.initPromise;
     const cards = new Map();
@@ -322,7 +360,7 @@ class MarrowCardsPlugin extends Plugin {
 
 class MarrowCardsView extends ItemView {
   constructor(leaf, plugin) {
-    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.expandedSubject = ''; this.expandedSystem = ''; this.onlyApprovedIndexes = false;
+    super(leaf); this.plugin = plugin; this.selected = new Set(); this.mode = 'all'; this.cursor = 0; this.flipped = false; this.busy = false; this.queue = []; this.screen = 'mbbs'; this.navSubject = ''; this.expandedSubject = ''; this.expandedSystem = ''; this.onlyApprovedIndexes = false; this.sessionKind = 'review'; this.notesOpen = false; this.noteData = null; this.noteTimer = null; this.noteRevision = 0;
   }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return 'Marrow Cards'; }
@@ -335,12 +373,25 @@ class MarrowCardsView extends ItemView {
     else this.draw();
   }
   async startReview(indexIds) {
+    await this.startSession(indexIds, 'review');
+  }
+  async startBrowse(indexIds) {
+    await this.startSession(indexIds, 'browse');
+  }
+  async startSession(indexIds, kind) {
+    await this.flushNote();
     this.selected = new Set(indexIds);
     this.screen = 'review';
+    this.sessionKind = kind;
     this.mode = 'all';
+    this.notesOpen = false;
+    this.noteData = null;
     await this.resetQueue();
   }
   goLibrary(level = 'mbbs') {
+    void this.flushNote();
+    this.notesOpen = false;
+    this.noteData = null;
     this.screen = level;
     this.flipped = false;
     this.draw();
@@ -379,6 +430,9 @@ class MarrowCardsView extends ItemView {
         const practice = tile.createEl('button', { text: 'Review', cls: 'marrow-start-single' });
         practice.disabled = count === 0;
         practice.addEventListener('click', () => this.startReview([idx.id]));
+        const browse = tile.createEl('button', { text: 'Browse', cls: 'marrow-start-single marrow-start-browse' });
+        browse.disabled = count === 0;
+        browse.addEventListener('click', () => this.startBrowse([idx.id]));
       }
     }
   }
@@ -448,23 +502,26 @@ class MarrowCardsView extends ItemView {
       const actionButtons = [];
       const updateActions = () => {
         const picked = availableSelected();
-        for (const btn of actionButtons) {
-          btn.setText('Review selected indexes (' + picked.length + ')');
-          btn.disabled = !picked.length;
+        for (const entry of actionButtons) {
+          entry.button.setText((entry.kind === 'browse' ? 'Browse' : 'Review') + ' selected indexes (' + picked.length + ')');
+          entry.button.disabled = !picked.length;
         }
       };
-      const addReviewAction = cls => {
+      const addReviewAction = (cls, kind = 'review') => {
         const btn = el.createEl('button', {
-          cls: 'mod-cta marrow-start-selected ' + cls, text: 'Review selected indexes (0)'
+          cls: (kind === 'browse' ? 'marrow-start-browse-selected ' : 'mod-cta ') +
+            'marrow-start-selected ' + cls,
+          text: (kind === 'browse' ? 'Browse' : 'Review') + ' selected indexes (0)'
         });
         btn.addEventListener('click', () => {
           const picked = availableSelected();
-          if (picked.length) void this.startReview(picked);
+          if (picked.length) void (kind === 'browse' ? this.startBrowse(picked) : this.startReview(picked));
         });
-        actionButtons.push(btn);
+        actionButtons.push({ button: btn, kind });
         return btn;
       };
       addReviewAction('marrow-start-selected-top');
+      addReviewAction('marrow-start-selected-top', 'browse');
 
       const sectionNodes = new Map();
       const labelFor = name => {
@@ -568,6 +625,7 @@ class MarrowCardsView extends ItemView {
         });
       }
       addReviewAction('marrow-start-selected-bottom');
+      addReviewAction('marrow-start-selected-bottom', 'browse');
       updateActions();
       el.createEl('p', { cls: 'marrow-hint', text: this.onlyApprovedIndexes
         ? 'Only indexes with approved cards are shown. Other selected indexes stay selected.'
@@ -590,6 +648,12 @@ class MarrowCardsView extends ItemView {
       });
       combined.disabled = !picked.length;
       combined.addEventListener('click', () => this.startReview(picked));
+      const browse = el.createEl('button', {
+        cls: 'marrow-start-selected marrow-start-browse-selected',
+        text: 'Browse selected indexes (' + picked.length + ')'
+      });
+      browse.disabled = !picked.length;
+      browse.addEventListener('click', () => this.startBrowse(picked));
       el.createEl('p', { cls: 'marrow-hint',
         text: 'Return to Subjects for the collapsible multi-subject index selector.' });
     }
@@ -607,7 +671,7 @@ class MarrowCardsView extends ItemView {
   async present() {
     const card = this.queue[this.cursor];
     this.flipped = false;
-    if (card) {
+    if (card && this.sessionKind !== 'browse') {
       try { await this.plugin.recordEvent(card.id, 'seen'); } catch (e) { console.error(e); new Notice('Could not record view: ' + e.message); }
     }
     this.draw();
@@ -619,7 +683,7 @@ class MarrowCardsView extends ItemView {
   }
   async grade(action) {
     const card = this.queue[this.cursor];
-    if (!this.flipped || !card || this.busy) return;
+    if (this.sessionKind === 'browse' || !this.flipped || !card || this.busy) return;
     this.busy = true;
     try {
       await this.plugin.recordEvent(card.id, action);
