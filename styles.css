@@ -213,3 +213,94 @@
 }
 .marrow-system-body[hidden] { display: none !important; }
 .is-mobile .marrow-system-toggle { min-height: 52px; }
+
+
+/* v0.2.0: browse cards without review events; type and write over the same page. */
+.marrow-cards .marrow-start-browse {
+  min-height: 40px;
+  background: var(--interactive-normal);
+}
+.marrow-cards .marrow-start-browse-selected {
+  margin: 6px 0 12px;
+  background: var(--interactive-normal);
+}
+.marrow-cards .marrow-note-toggle {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 12px 0 6px;
+  font-weight: 600;
+}
+.marrow-cards .marrow-note-editor {
+  margin: 12px 0 20px;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+.marrow-cards .marrow-note-editor h4 { margin: 0 0 8px; }
+.marrow-cards .marrow-note-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.marrow-cards .marrow-note-toolbar button { min-height: 40px; }
+.marrow-cards .marrow-note-viewport {
+  box-sizing: border-box;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--background-modifier-border);
+  background: #fff;
+}
+.marrow-cards .marrow-note-page {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  min-height: 260px;
+  box-sizing: border-box;
+  background-color: #fff;
+  background-image: repeating-linear-gradient(
+    transparent, transparent 30px, rgba(47, 94, 168, 0.09) 31px);
+}
+.marrow-cards .marrow-note-text,
+.marrow-cards .marrow-note-ink {
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.marrow-cards .marrow-note-text {
+  z-index: 1;
+  padding: 16px 18px;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  background: transparent;
+  color: #20252d;
+  -webkit-text-fill-color: #20252d;
+  font: 16px/1.55 var(--font-text, system-ui, sans-serif);
+  white-space: pre-wrap;
+}
+.marrow-cards .marrow-note-ink {
+  z-index: 2;
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
+.marrow-cards .marrow-actions-browse {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+.is-mobile .marrow-cards .marrow-note-page {
+  /* Fixed logical page width retains readable shorthand on narrow phones.
+     Users can scroll horizontally on the phone; drawing fits the tablet. */
+  min-width: 580px;
+  min-height: 386px;
+}
+.is-mobile .marrow-cards .marrow-note-editor { padding: 8px; }
+.is-mobile .marrow-cards .marrow-note-toolbar button { min-height: 44px; }
