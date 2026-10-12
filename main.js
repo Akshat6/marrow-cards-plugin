@@ -1156,8 +1156,19 @@ class MarrowCardsView extends ItemView {
       next.disabled = this.cursor + 1 >= this.queue.length;
       next.addEventListener('click', () => void this.browseStep(1));
     } else if (!this.flipped) {
-      const flip = actions.createEl('button', { text: 'Flip to answer', cls: 'mod-cta' });
-      flip.addEventListener('click', () => { this.flipped = true; this.draw(); });
+      const flip = actions.createEl('button', {
+        text: this.answerState ? 'Show answer' : 'Flip to answer', cls: 'mod-cta'
+      });
+      flip.addEventListener('click', () => {
+        if (this.busy) return;
+        this.flipped = true;
+        this.draw();
+      });
+    } else if (this.answerState) {
+      const back = actions.createEl('button', { text: 'Show question' });
+      back.addEventListener('click', () => { this.flipped = false; this.draw(); });
+      const next = actions.createEl('button', { text: 'Next card', cls: 'mod-cta' });
+      next.addEventListener('click', () => void this.nextAfterOption());
     } else {
       const showQuestion = actions.createEl('button', { text: 'Show question', cls: 'marrow-flip-back' });
       const wrong = actions.createEl('button', { text: 'Wrong', cls: 'marrow-wrong' });
