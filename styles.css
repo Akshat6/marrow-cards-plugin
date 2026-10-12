@@ -375,3 +375,7 @@
 .marrow-cards .marrow-choice-correct { color: var(--color-green); font-weight: 700; }
 .marrow-cards .marrow-choice-wrong { color: var(--color-red); font-weight: 700; }
 .marrow-cards .marrow-choice-feedback-detail { font-weight: 600; line-height: 1.5; }
+.marrow-cards.marrow-review-mode .marrow-actions-auto {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
