@@ -1,6 +1,12 @@
 # Marrow Cards — instructions for a new ChatGPT session
 
-**Start here whenever a user asks to extract, draft, approve, publish, correct, or review Marrow Cards flashcards.** This file is the GitHub entry point, not a card database.
+**Start here in every new ChatGPT conversation about Marrow Cards — whether the user wants new approved flashcards OR a plugin/interface bug fix or upgrade.** This file is the GitHub entry point, not a card database.
+
+## First choose the task-specific instructions
+
+- **Plugin bug, interface improvement, navigation, reviewer behaviour, MCQ grading/shuffling, Browse, Android startup, stylus notes or Syncthing:** Read **[docs/plugin-maintenance.md](docs/plugin-maintenance.md)** in full *before* editing. Inspect live `main.js`, `styles.css`, `tests/smoke.js`, `manifest.json`, README and latest GitHub Actions runs. Preserve existing user notes/reviews and approved cards, add a regression test that reproduces the reported sequence, then publish/verify a BRAT release. The maintenance guide documents the **v0.2.3 consecutive-card disabled-button bug** and all major current UI contracts.
+- **PYQ extraction, approved personal facts, index mapping, card edits, card/media pack publishing:** Follow **[docs/flashcard-workflow.md](docs/flashcard-workflow.md)** and, for source images, **[docs/publishing-approved-cards.md](docs/publishing-approved-cards.md)**. Show exact card drafts and seek the user's explicit approval before publishing new approved content.
+- **Both changes in one task:** Apply both guides while keeping the public plugin repo and private card data responsibilities completely separate. Do not use an app version bump as an excuse to modify approved private packs.
 
 ## Required first steps
 
@@ -32,6 +38,10 @@
 - IDs are stable and unique. Never overwrite another pack or create duplicate IDs.
 - Publishing packs **does not** require a plugin version bump. BRAT releases are only for plugin code changes.
 - The phone may download via **Check GitHub → Refresh local**. Syncthing delivers `MarrowCards/packs`, `MarrowCards/media`, and `MarrowCards/reviews` to the tablet. Obsidian's `.obsidian` directory stays device-local.
+
+## Plugin-upgrade new-chat user prompt
+
+“Read `https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md` and `https://github.com/Akshat6/marrow-cards-plugin/blob/main/docs/plugin-maintenance.md`. Fix or upgrade **[describe feature/bug]** in the currently published plugin, test affected phone/tablet flows and existing review/notes compatibility, update documentation, and publish only after GitHub Actions succeeds. Preserve approved PYQs and all user files.”
 
 ## New-chat user prompt
 
