@@ -1029,12 +1029,18 @@ class MarrowCardsView extends ItemView {
 
   async nextAfterOption() {
     if (!this.answerState || this.busy || this.sessionKind !== 'review') return;
-    await this.flushNote();
-    this.noteRevision++;
-    this.notesOpen = false;
-    this.noteData = null;
-    this.cursor++;
-    await this.present();
+    this.busy = true;
+    try {
+      await this.flushNote();
+      this.noteRevision++;
+      this.notesOpen = false;
+      this.noteData = null;
+      this.cursor++;
+      await this.present();
+    } catch (error) {
+      console.error('[Marrow Cards] Could not advance', error);
+      new Notice('Could not advance to next card: ' + (error.message || String(error)));
+    } finally { this.busy = false; }
   }
   draw() {
     const el = this.contentEl;
