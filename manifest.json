@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: browse only indexes with approved cards; retain mobile flip controls and offline review.",
+  "description": "Marrow Cards: collapsible subject selector, multi-subject index practice and approved-card-only filter.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
