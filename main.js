@@ -60,6 +60,10 @@ function correctOptionIndex(card) {
   const options = card.options;
   if (!Array.isArray(options) || options.length < 2 || options.length > 8) return -1;
   const answer = String(card.answer || '').trim();
+  if (/^[A-Ha-h]$/.test(answer)) {
+    const index = answer.toUpperCase().charCodeAt(0) - 65;
+    return index < options.length ? index : -1;
+  }
   const match = answer.match(/^([A-Ha-h])[).: -]+(.*)$/s);
   if (match) {
     const idx = match[1].toUpperCase().charCodeAt(0) - 65;
