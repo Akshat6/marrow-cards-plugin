@@ -24,6 +24,10 @@ Suggested first message in a new chat:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Compact Review / Browse action buttons (v0.2.1)
+
+On the **MBBS → Subjects** screen, **Review selected indexes (N)** (purple) and **Browse selected indexes (N)** (neutral grey) are now adjacent in a small, consistent vertical stack at both the top and bottom of the subject list. The old Android 110px per-button bottom gap has been removed; bottom toolbar clearance is reserved at the end of the library page instead. Button functionality, card grading, browsing, personal notes and cross-subject index selection are unchanged.
+
 ## Browse without grading and personal typed + handwritten notes (v0.2.0)
 
 From **MBBS → Subjects → Subheading → Index**, press **Browse** beside an installed index (or **Browse selected indexes (N)** to browse all selected indexes). Browse displays the question, options, and images; use **Show answer / Show question**, **Previous**, and **Next**. Browse NEVER records a `seen`, `right`, or `wrong` event: accuracy and `Ever wrong` history do not change. The familiar **Review** button still does real practice with Right/Wrong and the normal Seen count.
