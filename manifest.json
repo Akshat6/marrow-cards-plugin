@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: fix MCQ option taps on consecutive cards; preserve Browse, notes and safe shuffling.",
+  "description": "Marrow Cards: restore tap-to-grade for Unicode-dash and multiline MCQ answers; preserve reviews and notes.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
