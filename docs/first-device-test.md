@@ -43,6 +43,15 @@ The GitHub Actions regression test covers a synthetic three-card sequence, DOM `
 4. After Syncthing finishes syncing `MarrowCards/notes/`, verify picture geometry and strokes on the second device. Avoid simultaneous edits to the same note and keep file versioning enabled.
 5. Confirm Browse still records no Seen/Right/Wrong and image manipulation never edits the source `MarrowCards/media/` image or the approved GitHub pack.
 
+## v0.2.7 index question overview and accuracy
+
+1. Expand an installed subject and subheading with approved cards. Confirm each index tile has **Review**, **Browse**, and **Questions**; its cumulative accuracy is already visible.
+2. Tap **Questions**. Confirm the list contains only the full *question statements* plus their Seen, Right, Wrong, Accuracy totals. No answer text, choices, solutions, original question figures or private source metadata should be rendered in this view.
+3. Check a previously answered question and an unseen question. Verify the answered card's accuracy agrees with its historical Right and Wrong counts, and the unseen card shows `—`. Index accuracy must use pooled Right / (Right + Wrong), not average card accuracies.
+4. Close with **Hide questions**, then **Review** and **Browse** that same index. Both full-card modes should still work and allow notes, but should **not** show the old per-card stats line. Browse and Questions must never generate new review events.
+5. Confirm switching subjects, collapsing subheadings, selecting indexes across subjects and the approved-only filter still work; no extra blank space or horizontal overflow on Android phone.
+6. After marking a card Right/Wrong, go back to its subject and reopen Questions. The new numbers should reflect the logged result. Repeat after Syncthing completes on the other device.
+
 ## Syncthing phone/tablet
 
 1. Sync the dedicated vault's `MarrowCards/packs/`, `MarrowCards/media/`, `MarrowCards/reviews/`, and **`MarrowCards/notes/`**.
