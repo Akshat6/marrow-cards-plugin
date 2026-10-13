@@ -628,3 +628,92 @@ console.log('Nested system accordion regression checks passed.');
     'MCQ options should be enabled after manually grading the prior card');
   console.log('Multiple consecutive MCQ controls regression passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
+
+// v0.2.4: New cards may encode correct answers with Unicode dashes or
+// multiline numbered sequences. Test actual Review option controls, not only
+// an isolated parser. Use synthetic questions only (no private PYQ text).
+(async () => {
+  const examples = [
+    {
+      id: 'FORMAT-EMDASH', options: ['a) Alpha', 'b) Beta', 'c) Gamma', 'd) Delta'],
+      answer: 'B — Beta', correct: 1
+    },
+    {
+      id: 'FORMAT-ENDASH', options: ['a) Alpha', 'b) Beta', 'c) Gamma', 'd) Delta'],
+      answer: 'C – Gamma', correct: 2
+    },
+    {
+      id: 'FORMAT-HYPHEN', options: ['a) Alpha', 'b) Beta', 'c) Gamma', 'd) Delta'],
+      answer: 'D - Delta', correct: 3
+    },
+    {
+      id: 'FORMAT-MULTILINE',
+      options: ['a) 1- Alpha; 2- Beta; 3- Gamma',
+        'b) 1- Beta; 2- Alpha; 3- Gamma',
+        'c) 1- Beta; 2- Gamma; 3- Alpha',
+        'd) 1- Gamma; 2- Alpha; 3- Beta'],
+      answer: 'A\n1 — Alpha\n2 — Beta\n3 — Gamma', correct: 0, preserveOrder: true
+    },
+    {
+      id: 'FORMAT-EXPLANATION', options: ['a) A', 'b) B', 'c) C', 'd) D'],
+      answer: 'D. D - Synthetic extra explanation', correct: 3
+    },
+    {
+      id: 'FORMAT-LEGACY', options: ['a) Alpha', 'b) Beta', 'c) Gamma', 'd) Delta'],
+      answer: 'A. Alpha', correct: 0
+    }
+  ];
+  const cards = examples.map(c => ({
+    id: c.id, type: 'pyq', status: 'approved', indexIds: ['FORMAT-TEST'],
+    question: 'Synthetic source question?', options: c.options,
+    answer: c.answer, images: [], explanation: 'Synthetic explanation'
+  }));
+  const events = [];
+  const plugin = {
+    cards, indexes: [{id:'FORMAT-TEST',subject:'Test',title:'Format test'}],
+    stats: new Map(),
+    async recordEvent(id, action) { events.push({id, action}); },
+    async readCardNote(id) { return {cardId:id, text:'', strokes:[]}; },
+    async saveCardNotePart() {}
+  };
+  const v = new Reviewer(mockLeaf, plugin);
+  await v.startReview(['FORMAT-TEST']);
+  for (let i = 0; i < examples.length; i++) {
+    const expected = examples[i];
+    assert.equal(v.queue[v.cursor].id,expected.id);
+    assert.equal(v.correctIndex,expected.correct,
+      'Verify answer text and source choice for ' + expected.id);
+    if (expected.preserveOrder) {
+      assert.deepEqual([...v.optionOrder],[0,1,2,3],
+        'Sequence/numbered image choices must not reshuffle');
+    }
+    const shownAt = v.optionOrder.indexOf(expected.correct);
+    const letter = String.fromCharCode(65 + shownAt);
+    const original = expected.options[expected.correct].replace(/^[a-d][).:\- ]+/, '');
+    const button = v.contentEl.findText(letter + '. ' + original);
+    assert(button && button.handlers.click && button.disabled === false,
+      'Option must be clickable for ' + expected.id);
+    await v.selectOption(expected.correct);
+    assert(v.contentEl.findText('Correct — saved as Right'));
+    if (i + 1 < examples.length) await v.nextAfterOption();
+  }
+  assert.equal(events.filter(e => e.action === 'seen').length, examples.length);
+  assert.equal(events.filter(e => e.action === 'right').length, examples.length);
+  assert.equal(events.filter(e => e.action === 'wrong').length, 0);
+
+  for (const answer of ['B — Wrong text', 'A — Beta', 'F — Alpha']) {
+    plugin.cards = [{...cards[0], id:'FORMAT-MISMATCH', answer}];
+    await v.startReview(['FORMAT-TEST']);
+    assert.equal(v.correctIndex,-1, 'Do not trust a letter when option text mismatches');
+    assert(v.contentEl.findText('a) Alpha'),
+      'Unverifiable choices remain read-only for manual grading');
+  }
+  plugin.cards = cards;
+  const priorEvents = events.length;
+  await v.startBrowse(['FORMAT-TEST']);
+  assert.equal(events.length, priorEvents, 'Browse must not add events');
+  assert.equal(v.correctIndex,examples[0].correct);
+  assert(v.contentEl.findText('a) Alpha'), 'Browse keeps original choice order');
+  console.log('Unicode dash, multiline answer, safe option tap and Browse regressions passed.');
+})().catch(error => { console.error(error); process.exitCode = 1; });
