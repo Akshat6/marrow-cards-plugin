@@ -28,6 +28,15 @@ For **plugin upgrades or bug fixes** in a new chat, use:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Add a source or device picture to My notes (v0.2.5)
+
+Open **My notes (type / pen)** in Browse or Review. If the card includes original question images, tap **Use question image** (or **Use question image 1/2** for multiple figures) to copy one to that card's personal note. Alternatively, choose **Choose image from device** to open the Android/desktop file picker (PNG/JPEG/WebP, up to 15 MB). The picture is displayed on the fixed notes page *beneath* the existing pen layer, and the typed text area sits below it. Use **Pen** to annotate the picture, **Eraser** or **Undo ink** to edit strokes, and **Remove note image** to clear the displayed picture without deleting text or ink. A note supports **one displayed picture at a time** in this version; choosing another replaces its display, not its saved annotations.
+
+The plugin copies images into the **local vault** at `MarrowCards/notes/<card-id>/images/note-*.png|jpg|webp` and stores the current image reference in `MarrowCards/notes/<card-id>/image.json`. Approved PYQ media, private GitHub card packs and review logs are **never modified**. Image metadata and local copies sync through Syncthing with `MarrowCards/notes/`; on the other device, let both files finish syncing before opening the note. An image that has not synced appears as a missing-image notice, not a silently erased attachment. Old text/ink-only notes continue to load unchanged. Image removal does not delete the stored copy, to avoid accidental data loss during sync; use your backup/versioning policy for orphan cleanup.
+
+Images are placed on a fixed 720 × 960 page so existing vector-stroke coordinates remain stable. They cannot yet be moved, resized or cropped, and an image change does **not** reset annotations. Finger drawing is still ignored in Pen mode to limit palm strokes; use a stylus on Android tablet or mouse on desktop. As with previous note features, physical stylus latency and Android file picker behavior require on-device verification.
+
+
 ## Unicode-dash and multiline PYQ answers (v0.2.4)
 
 The plugin now recognizes verified correct answers written with an em dash (such as `B — answer`), en dash, hyphen, period, or a line break followed by a numbered answer list. It checks the full answer text against the selected source option before enabling tap-to-grade; mismatched answer text still falls back to manual Flip and Right/Wrong. Numbered/image sequence options remain in their original order instead of being shuffled. This restores one-tap grading for the newly published Ophthalmology OPH-32 and OPH-33 MCQs **without changing their approved card data**.
