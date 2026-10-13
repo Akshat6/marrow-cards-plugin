@@ -9,6 +9,32 @@ const MEDIA = ROOT + '/media';
 const REVIEWS = ROOT + '/reviews';
 const NOTES = ROOT + '/notes';
 const MAX_NOTE_IMAGE_SIZE = 15 * 1024 * 1024;
+const NOTE_PAGE_WIDTH = 720;
+const NOTE_PAGE_HEIGHT = 960;
+const DEFAULT_NOTE_IMAGE_PLACEMENT = Object.freeze({ x: 22, y: 22, width: 676, height: 624 });
+const NOTE_PEN_COLORS = Object.freeze([
+  { name: 'Blue', value: '#286ab7' },
+  { name: 'Black', value: '#20252d' },
+  { name: 'Red', value: '#d73a49' },
+  { name: 'Green', value: '#258a4b' },
+  { name: 'Purple', value: '#8a4ce0' },
+  { name: 'Orange', value: '#ec8731' }
+]);
+function validPenColor(value) { return NOTE_PEN_COLORS.some(choice => choice.value === value); }
+function validNoteImagePlacement(rect) {
+  return Boolean(rect && ['x', 'y', 'width', 'height'].every(key =>
+    typeof rect[key] === 'number' && Number.isFinite(rect[key])) &&
+    rect.x >= 0 && rect.y >= 0 && rect.width >= 120 && rect.height >= 100 &&
+    rect.x + rect.width <= NOTE_PAGE_WIDTH + 0.001 &&
+    rect.y + rect.height <= NOTE_PAGE_HEIGHT + 0.001);
+}
+function noteImagePlacement(value) {
+  return validNoteImagePlacement(value)
+    ? { x: value.x, y: value.y, width: value.width, height: value.height }
+    : { ...DEFAULT_NOTE_IMAGE_PLACEMENT };
+}
+
+
 const TOKEN_KEY = 'marrow-cards-github-token';
 const REPO = 'Akshat6/marrow-cards-data';
 const ALLOWED_IMAGE = /\.(png|jpe?g|webp|gif)$/i;
@@ -178,7 +204,7 @@ function tally(events) {
 
 class MarrowCardsPlugin extends Plugin {
   onload() {
-    this.settings = { deviceId: uniqueId(), autoSync: true };
+    this.settings = { deviceId: uniqueId(), autoSync: true, penColor: NOTE_PEN_COLORS[0].value };
     this.cards = [];
     this.indexes = [];
     this.stats = new Map();
@@ -258,7 +284,7 @@ class MarrowCardsPlugin extends Plugin {
       if (kind === 'image') {
         if (parsed.filename === null) return null;
         if (!safeNoteImageName(parsed.filename)) throw new Error('Invalid note image reference: ' + path);
-        return { filename: parsed.filename };
+        return { filename: parsed.filename, placement: noteImagePlacement(parsed.placement) };
       }
       if (kind === 'ink') {
         if (!Array.isArray(parsed.strokes)) throw new Error('Invalid saved pen strokes: ' + path);
@@ -297,11 +323,29 @@ class MarrowCardsPlugin extends Plugin {
       await this.ensureFolder(dir + '/images');
       await this.app.vault.createBinary(dir + '/images/' + filename, binary);
       // Publish the pointer only after its actual image file exists.
-      await this.writeJson(dir + '/image.json', { schemaVersion: 1, cardId, filename });
+      await this.writeJson(dir + '/image.json', { schemaVersion: 1, cardId, filename, placement: noteImagePlacement(null) });
     };
     this.noteWriteQueue = this.noteWriteQueue.catch(() => {}).then(operation);
     await this.noteWriteQueue;
-    return { filename };
+    return { filename, placement: noteImagePlacement(null) };
+  }
+
+  async saveCardNoteImagePlacement(cardId, image) {
+    if (!safeId(cardId) || !image || !safeNoteImageName(image.filename) ||
+        !validNoteImagePlacement(image.placement)) throw new Error('Invalid note image position');
+    if (this.initPromise) await this.initPromise;
+    const path = NOTES + '/' + cardId + '/image.json';
+    const placement = { ...image.placement };
+    const operation = async () => {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (!file) throw new Error('Note image reference missing');
+      const current = JSON.parse(await this.app.vault.read(file));
+      if (current.schemaVersion !== 1 || current.cardId !== cardId ||
+          current.filename !== image.filename) throw new Error('Note image changed before position saved');
+      await this.writeJson(path, { schemaVersion: 1, cardId, filename: image.filename, placement });
+    };
+    this.noteWriteQueue = this.noteWriteQueue.catch(() => {}).then(operation);
+    return this.noteWriteQueue;
   }
 
   async clearCardNoteImage(cardId) {
@@ -832,6 +876,12 @@ class MarrowCardsView extends ItemView {
         await this.plugin.saveCardNotePart(note.cardId, 'ink', snapshot);
         if (JSON.stringify(note.strokes) === JSON.stringify(snapshot)) note.dirtyInk = false;
       }
+      if (note.dirtyImage && note.image) {
+        const snapshot = { filename: note.image.filename, placement: { ...note.image.placement } };
+        await this.plugin.saveCardNoteImagePlacement(note.cardId, snapshot);
+        if (note.image && note.image.filename === snapshot.filename &&
+            JSON.stringify(note.image.placement) === JSON.stringify(snapshot.placement)) note.dirtyImage = false;
+      }
     } catch (error) {
       console.error('[Marrow Cards] Note save failed', error);
       new Notice('Personal note not saved: ' + (error.message || String(error)), 9000);
@@ -852,7 +902,9 @@ class MarrowCardsView extends ItemView {
       const revision = ++this.noteRevision;
       const data = await this.plugin.readCardNote(card.id);
       if (revision !== this.noteRevision || this.queue[this.cursor]?.id !== card.id) return;
-      this.noteData = { ...data, mode: 'type', dirtyText: false, dirtyInk: false };
+      this.noteData = { ...data, mode: 'type', dirtyText: false, dirtyInk: false,
+        dirtyImage: false, penColor: validPenColor(this.plugin.settings?.penColor)
+          ? this.plugin.settings.penColor : NOTE_PEN_COLORS[0].value };
       this.notesOpen = true;
       this.redrawKeepingScroll();
     } catch (error) {
@@ -884,9 +936,11 @@ class MarrowCardsView extends ItemView {
     const note = this.noteData;
     if (!this.notesOpen || !note || note.cardId !== card.id) return;
     try {
+      await this.flushNote();
       const image = await this.plugin.addCardNoteImage(card.id, binary);
       if (this.notesOpen && this.noteData === note) {
         note.image = image;
+        note.dirtyImage = false;
         this.redrawKeepingScroll();
       }
       new Notice('Note image saved locally. Use Pen to annotate.');
@@ -934,9 +988,11 @@ class MarrowCardsView extends ItemView {
     const note = this.noteData;
     if (!this.notesOpen || !note || note.cardId !== card.id || !note.image) return;
     try {
+      await this.flushNote();
       await this.plugin.clearCardNoteImage(card.id);
       if (this.notesOpen && this.noteData === note) {
         note.image = null;
+        note.dirtyImage = false;
         this.redrawKeepingScroll();
       }
       new Notice('Image removed from note page. Ink and text retained.');
@@ -962,6 +1018,32 @@ class MarrowCardsView extends ItemView {
       });
       button.addEventListener('click', () => setMode(mode));
     }
+    const colorPicker = holder.createDiv({ cls: 'marrow-note-pen-colors',
+      attr: { role: 'group', 'aria-label': 'Pen color selector' } });
+    colorPicker.createSpan({ text: 'Pen color:' });
+    for (const color of NOTE_PEN_COLORS) {
+      const isSelected = note.penColor === color.value;
+      const button = colorPicker.createEl('button', {
+        cls: 'marrow-note-color-choice' + (isSelected ? ' is-selected' : ''),
+        attr: { 'aria-label': 'Pen color ' + color.name, 'aria-pressed': String(isSelected),
+          title: color.name }
+      });
+      button.style.backgroundColor = color.value;
+      button.addEventListener('click', () => {
+        note.penColor = color.value;
+        note.mode = 'pen';
+        if (this.plugin.settings) {
+          this.plugin.settings.penColor = color.value;
+          if (typeof this.plugin.saveData === 'function') {
+            void this.plugin.saveData(this.plugin.settings).catch(error => {
+              console.error('[Marrow Cards] Pen color setting was not saved', error);
+              new Notice('Pen color preference could not be saved.');
+            });
+          }
+        }
+        this.redrawKeepingScroll();
+      });
+    }
     const undo = toolbar.createEl('button', { text: 'Undo ink' });
     undo.disabled = !note.strokes.length;
     undo.addEventListener('click', () => {
@@ -986,6 +1068,12 @@ class MarrowCardsView extends ItemView {
     const pickImage = imageTools.createEl('button', { text: 'Choose image from device' });
     pickImage.addEventListener('click', () => this.chooseNoteImage(card));
     if (note.image) {
+      const arrange = imageTools.createEl('button', {
+        text: note.mode === 'image' ? 'Done moving image' : 'Move / resize image',
+        cls: note.mode === 'image' ? 'mod-cta' : '',
+        attr: { 'aria-pressed': String(note.mode === 'image') }
+      });
+      arrange.addEventListener('click', () => setMode(note.mode === 'image' ? 'pen' : 'image'));
       const removeImage = imageTools.createEl('button', { text: 'Remove note image' });
       removeImage.addEventListener('click', () => void this.removeNoteImage(card));
     }
@@ -1006,6 +1094,7 @@ class MarrowCardsView extends ItemView {
     const stage = viewport.createDiv({
       cls: 'marrow-note-page' + (note.image ? ' marrow-note-page-with-image' : '')
     });
+    let referenceImage = null;
     if (note.image) {
       const path = NOTES + '/' + card.id + '/images/' + note.image.filename;
       const file = this.app.vault.getAbstractFileByPath(path);
@@ -1014,6 +1103,12 @@ class MarrowCardsView extends ItemView {
           attr: { alt: 'Image attached to notes for ' + card.id } });
         image.src = this.app.vault.getResourcePath(file);
         image.draggable = false;
+        referenceImage = image;
+        const r = noteImagePlacement(note.image.placement);
+        Object.assign(image.style, {
+          left: r.x + 'px', top: r.y + 'px',
+          width: r.width + 'px', height: r.height + 'px'
+        });
       } else {
         stage.createEl('p', { cls: 'marrow-note-image-missing',
           text: 'Note image is not on this device yet. Check Syncthing.' });
@@ -1036,7 +1131,7 @@ class MarrowCardsView extends ItemView {
     const width = 900, height = 1200;
     canvas.width = width;
     canvas.height = height;
-    canvas.style.pointerEvents = note.mode === 'type' ? 'none' : 'auto';
+    canvas.style.pointerEvents = (note.mode === 'pen' || note.mode === 'eraser') ? 'auto' : 'none';
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       holder.createEl('p', { text: 'Drawing canvas is unavailable on this device.' });
@@ -1074,7 +1169,7 @@ class MarrowCardsView extends ItemView {
     let active = null;
     let pointer = null;
     canvas.addEventListener('pointerdown', event => {
-      if (note.mode === 'type' || event.pointerType === 'touch') return; // reject palms/fingers
+      if ((note.mode !== 'pen' && note.mode !== 'eraser') || event.pointerType === 'touch') return; // reject palms/fingers
       event.preventDefault();
       const point = coords(event);
       if (note.mode === 'eraser') {
@@ -1099,7 +1194,7 @@ class MarrowCardsView extends ItemView {
         new Notice('This note has reached the first-version ink limit.');
         return;
       }
-      active = { id: uniqueId(), color: '#286ab7', width: 2.8, points: [point] };
+      active = { id: uniqueId(), color: validPenColor(note.penColor) ? note.penColor : NOTE_PEN_COLORS[0].value, width: 2.8, points: [point] };
       pointer = event.pointerId;
       note.strokes.push(active);
       canvas.setPointerCapture?.(event.pointerId);
@@ -1125,8 +1220,80 @@ class MarrowCardsView extends ItemView {
     canvas.addEventListener('pointerup', finish);
     canvas.addEventListener('pointercancel', finish);
     render();
+    // In image mode the selection frame sits ABOVE the ink canvas; touch or pen
+    // moves the copied note image, while dragging its corner keeps aspect ratio.
+    // Neither operation transforms vector strokes or approved source media.
+    if (note.image && referenceImage && note.mode === 'image') {
+      const frame = stage.createDiv({
+        cls: 'marrow-note-image-selection',
+        attr: { 'aria-label': 'Drag to move note image' }
+      });
+      const handle = frame.createDiv({
+        cls: 'marrow-note-image-resize-handle',
+        attr: { 'aria-label': 'Drag to resize note image' }
+      });
+      const applyPlacement = () => {
+        const r = note.image.placement;
+        for (const element of [referenceImage, frame]) {
+          element.style.left = r.x + 'px';
+          element.style.top = r.y + 'px';
+          element.style.width = r.width + 'px';
+          element.style.height = r.height + 'px';
+        }
+      };
+      applyPlacement();
+      let gesture = null;
+      const begin = (kind, target, event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        if (gesture) return;
+        const stageRect = stage.getBoundingClientRect();
+        gesture = {
+          kind, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+          scaleX: NOTE_PAGE_WIDTH / Math.max(1, stageRect.width),
+          scaleY: NOTE_PAGE_HEIGHT / Math.max(1, stageRect.height),
+          original: { ...note.image.placement }
+        };
+        target.setPointerCapture?.(event.pointerId);
+      };
+      const drag = event => {
+        if (!gesture || event.pointerId !== gesture.pointerId) return;
+        event.preventDefault?.();
+        const old = gesture.original;
+        const dx = (event.clientX - gesture.startX) * gesture.scaleX;
+        const dy = (event.clientY - gesture.startY) * gesture.scaleY;
+        if (gesture.kind === 'move') {
+          note.image.placement.x = Math.max(0, Math.min(NOTE_PAGE_WIDTH - old.width, old.x + dx));
+          note.image.placement.y = Math.max(0, Math.min(NOTE_PAGE_HEIGHT - old.height, old.y + dy));
+        } else {
+          const aspect = old.width / old.height;
+          const change = Math.abs(dx) >= Math.abs(dy) ? dx : dy * aspect;
+          const maxWidth = Math.min(NOTE_PAGE_WIDTH - old.x,
+            (NOTE_PAGE_HEIGHT - old.y) * aspect);
+          const nextWidth = Math.max(120, Math.min(maxWidth, old.width + change));
+          note.image.placement.width = nextWidth;
+          note.image.placement.height = nextWidth / aspect;
+        }
+        applyPlacement();
+      };
+      const finish = event => {
+        if (!gesture || event.pointerId !== gesture.pointerId) return;
+        drag(event);
+        gesture = null;
+        note.dirtyImage = true;
+        this.scheduleNoteSave();
+      };
+      frame.addEventListener('pointerdown', event => begin('move', frame, event));
+      handle.addEventListener('pointerdown', event => begin('resize', handle, event));
+      for (const element of [frame, handle]) {
+        element.addEventListener('pointermove', drag);
+        element.addEventListener('pointerup', finish);
+        element.addEventListener('pointercancel', finish);
+      }
+    }
     holder.createEl('p', { cls: 'marrow-hint',
-      text: 'Pen/Eraser accepts stylus or mouse input; touch is ignored to reduce accidental palm marks. Keep Syncthing file versioning enabled and avoid simultaneous edits on both devices.' });
+      text: 'Select a pen color; Pen uses a stylus or mouse, not finger touch. Use Move / resize image to drag an image with finger, stylus or mouse, then switch back to Pen. Let Syncthing finish before editing on another device.' });
   }
 
   filterCards() {
