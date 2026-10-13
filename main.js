@@ -56,6 +56,11 @@ function validatePack(pack) {
 function optionBody(value) {
   return String(value).trim().replace(/^[A-Ha-h][).: -]+/, '').trim();
 }
+function comparableOptionText(value) {
+  // Equivalent punctuation and line breaks are common in verified source answers.
+  // Compare the full option text, not merely a claimed A/B/C/D answer letter.
+  return String(value).trim().toLowerCase().replace(/[\s,;:\-–—]+/g, ' ').trim();
+}
 function correctOptionIndex(card) {
   const options = card.options;
   if (!Array.isArray(options) || options.length < 2 || options.length > 8) return -1;
@@ -64,26 +69,40 @@ function correctOptionIndex(card) {
     const index = answer.toUpperCase().charCodeAt(0) - 65;
     return index < options.length ? index : -1;
   }
-  const match = answer.match(/^([A-Ha-h])[).: -]+(.*)$/s);
+  // Examples: "B. Choice", "B — Choice", "B – Choice", "B - Choice",
+  // or "A\n1 — First item\n2 — Second item" (source's numbered list).
+  const match = answer.match(/^([A-Ha-h])(?:[).:\-–—]|\s*[-–—]|\r?\n| +)\s*([\s\S]*)$/);
   if (match) {
     const idx = match[1].toUpperCase().charCodeAt(0) - 65;
     if (idx >= options.length) return -1;
-    const body = optionBody(options[idx]).toLowerCase().replace(/\\s+/g, ' ');
-    const detail = match[2].trim().toLowerCase().replace(/\\s+/g, ' ');
-    if (!detail || detail === body || detail.startsWith(body + ' -') ||
-        detail.startsWith(body + ' (') || detail.startsWith(body + ':')) return idx;
+    const body = optionBody(options[idx]);
+    const detail = match[2].trim();
+    if (!detail || comparableOptionText(detail) === comparableOptionText(body)) return idx;
+
+    // Preserve verified answer formats that append an explanation after the
+    // exact source option, e.g. "D. D - Right phrenic nerve".
+    const bodyText = body.toLowerCase().replace(/\s+/g, ' ');
+    const detailText = detail.toLowerCase().replace(/\s+/g, ' ');
+    if (detailText.startsWith(bodyText + ' -') ||
+        detailText.startsWith(bodyText + ' –') ||
+        detailText.startsWith(bodyText + ' —') ||
+        detailText.startsWith(bodyText + ' (') ||
+        detailText.startsWith(bodyText + ':')) return idx;
     return -1;
   }
   const matches = options.map((option, index) =>
-    optionBody(option).toLowerCase() === answer.toLowerCase() ? index : -1
+    comparableOptionText(optionBody(option)) === comparableOptionText(answer) ? index : -1
   ).filter(index => index >= 0);
   return matches.length === 1 ? matches[0] : -1;
 }
+
 function optionLetter(index) { return String.fromCharCode(65 + index); } // A, B, C, D
 
 function canShuffleCard(card, correct) {
   if (correct < 0 || !Array.isArray(card.options) || card.options.length < 2) return false;
   const labels = card.options.map(optionBody);
+  // Numbered image/sequence answers remain in printed option order.
+  if (labels.some(value => /(?:^|[;\n])\s*\d+\s*[-–—]\s*\S/.test(value))) return false;
   // A deliberately conservative opt-out for positional and referential MCQs.
   if (labels.some(value => {
     const x = value.toLowerCase();
