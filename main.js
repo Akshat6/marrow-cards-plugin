@@ -185,6 +185,29 @@ function compareVersions(a, b) {
   return 0;
 }
 
+
+function accuracyPercent(right, wrong) {
+  const attempts = right + wrong;
+  return attempts > 0 ? Math.round(100 * right / attempts) + '%' : '—';
+}
+function cardReviewTotals(card, stats) {
+  const data = stats.get(card.id);
+  return {
+    seen: data?.seen || 0,
+    right: data?.right || 0,
+    wrong: data?.wrong || 0
+  };
+}
+function indexReviewTotals(cards, stats) {
+  return cards.reduce((totals, card) => {
+    const counts = cardReviewTotals(card, stats);
+    totals.seen += counts.seen;
+    totals.right += counts.right;
+    totals.wrong += counts.wrong;
+    return totals;
+  }, { seen: 0, right: 0, wrong: 0 });
+}
+
 function tally(events) {
   const result = new Map();
   const eventIds = new Set();
@@ -602,7 +625,8 @@ class MarrowCardsView extends ItemView {
     for (const [system, group] of grouped.entries()) {
       if (showHeadings) container.createEl('h4', { cls: 'marrow-system', text: system });
       for (const idx of group) {
-        const count = this.countForIndex(idx.id);
+        const cards = this.plugin.cards.filter(card => card.indexIds.includes(idx.id));
+        const count = cards.length;
         const tile = container.createDiv({ cls: 'marrow-index-tile' });
         const label = tile.createEl('label', { cls: 'marrow-index-name' });
         const checkbox = label.createEl('input', {
@@ -624,6 +648,46 @@ class MarrowCardsView extends ItemView {
         const browse = tile.createEl('button', { text: 'Browse', cls: 'marrow-start-single marrow-start-browse' });
         browse.disabled = count === 0;
         browse.addEventListener('click', () => this.startBrowse([idx.id]));
+
+        // A third index action: question statements and local review statistics
+        // only. It never opens a review session, reveals answer fields, fetches
+        // figure media, or writes a Seen/Right/Wrong event.
+        const totals = indexReviewTotals(cards, this.plugin.stats);
+        tile.createEl('p', { cls: 'marrow-index-accuracy',
+          text: 'Index accuracy: ' + accuracyPercent(totals.right, totals.wrong) +
+            '  ·  Seen: ' + totals.seen + '  ·  Right: ' + totals.right +
+            '  ·  Wrong: ' + totals.wrong
+        });
+        const questionsButton = tile.createEl('button', {
+          cls: 'marrow-start-single marrow-start-questions',
+          text: 'Questions',
+          attr: { 'aria-label': 'Show questions in ' + idx.title, 'aria-expanded': 'false' }
+        });
+        questionsButton.disabled = count === 0;
+        const questionsList = tile.createDiv({ cls: 'marrow-index-question-list' });
+        questionsList.hidden = true;
+        let expanded = false;
+        questionsButton.addEventListener('click', () => {
+          if (!count) return;
+          expanded = !expanded;
+          questionsButton.setText(expanded ? 'Hide questions' : 'Questions');
+          questionsButton.setAttribute('aria-expanded', String(expanded));
+          questionsList.hidden = !expanded;
+          questionsList.empty();
+          if (!expanded) return;
+          questionsList.createEl('p', { cls: 'marrow-index-question-heading',
+            text: 'Questions · ' + count + (count === 1 ? ' card' : ' cards') });
+          for (const card of cards) {
+            const line = questionsList.createDiv({ cls: 'marrow-index-question-row' });
+            // No options, answer, explanation, images, source IDs or thumbnails.
+            line.createEl('div', { cls: 'marrow-index-question-text', text: getQuestion(card) });
+            const s = cardReviewTotals(card, this.plugin.stats);
+            line.createEl('div', { cls: 'marrow-index-question-stats',
+              text: 'Accuracy: ' + accuracyPercent(s.right, s.wrong) +
+                '  ·  Seen: ' + s.seen + '  ·  Right: ' + s.right + '  ·  Wrong: ' + s.wrong
+            });
+          }
+        });
       }
     }
   }
@@ -1489,8 +1553,6 @@ class MarrowCardsView extends ItemView {
         panel.createEl('div', { cls: 'marrow-explanation', text: card.explanation });
       }
     }
-    const s = this.plugin.stats.get(card.id) || { seen: 0, right: 0, wrong: 0 };
-    scroll.createEl('p', { cls: 'marrow-stats', text: 'Seen: ' + s.seen + '    Right: ' + s.right + '    Wrong: ' + s.wrong + '    Accuracy: ' + ((s.right + s.wrong) ? Math.round(100 * s.right / (s.right + s.wrong)) + '%' : '—') });
     const noteButton = scroll.createEl('button', {
       text: this.notesOpen ? 'Close my notes' : 'My notes (type / pen)',
       cls: 'marrow-note-toggle'
