@@ -67,6 +67,19 @@ class MockElement {
     return null;
   }
 }
+const mockDocument = {
+  lastPicker: null,
+  body: { appendChild() {} },
+  createElement(tag) {
+    if (tag !== 'input') throw new Error('Unexpected document element ' + tag);
+    const picker = { style: {}, files: [], handlers: {}, removed: false, clicked: false,
+      addEventListener(name, fn) { this.handlers[name] = fn; },
+      remove() { this.removed = true; }, click() { this.clicked = true; }
+    };
+    this.lastPicker = picker;
+    return picker;
+  }
+};
 const stubModule = { exports: {} };
 const mockLeaf = { app: { vault: { getAbstractFileByPath: () => null } } };
 const mockObsidian = {
@@ -79,6 +92,7 @@ vm.runInNewContext(src + '\nmodule.exports.ReviewerForTest = MarrowCardsView;', 
   require(name) { if (name === 'obsidian') return mockObsidian; throw new Error('Unexpected module ' + name); },
   console,
   window: { setInterval: () => 1 },
+  document: mockDocument,
   setTimeout, clearTimeout
 }, { filename: 'main.js' });
 const Reviewer = stubModule.exports.ReviewerForTest;
@@ -717,3 +731,105 @@ console.log('Nested system accordion regression checks passed.');
   assert(v.contentEl.findText('a) Alpha'), 'Browse keeps original choice order');
   console.log('Unicode dash, multiline answer, safe option tap and Browse regressions passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
+
+
+// v0.2.5: Two ways to attach an image to a card note. Image bytes must
+// remain in notes/, never overwrite a PYQ image, and survive note reopen.
+(async () => {
+  const storage = new Map();
+  const png = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,1,2,3,4]).buffer;
+  const jpg = new Uint8Array([255,216,255,224,0,16,74,70,73,70,0,0,1,2,3,4]).buffer;
+  const media = 'MarrowCards/media/source-figure.png';
+  storage.set(media, png);
+  const vault = {
+    getAbstractFileByPath(path) { return storage.has(path) ? {path} : null; },
+    async read(file) { return storage.get(file.path); },
+    async readBinary(file) { return storage.get(file.path); },
+    async modify(file, data) { storage.set(file.path,data); },
+    async create(path, data) { storage.set(path,data); },
+    async createBinary(path,data) { storage.set(path,data); },
+    getResourcePath(file) { return 'app://marrow/' + file.path; }
+  };
+  const writer = new stubModule.exports();
+  writer.initPromise = null;
+  writer.app = {vault};
+  writer.noteWriteQueue = Promise.resolve();
+  writer.ensureFolder = async () => {};
+  const imageCard = {
+    id: 'NOTE-IMAGE-01', type:'pyq',status:'approved',indexIds:['IMG-INDEX'],
+    question:'Synthetic picture question?',options:['a) First','b) Second'],
+    answer:'A. First',images:['source-figure.png']
+  };
+  writer.cards = [imageCard];
+  writer.indexes = [{id:'IMG-INDEX',subject:'Test',title:'Image annotations'}];
+  writer.stats = new Map();
+  writer.recordEvent = async () => { throw new Error('Browse must not grade'); };
+  const v = new Reviewer({app:{vault}},writer);
+  await v.startBrowse(['IMG-INDEX']);
+  await v.toggleNote(imageCard);
+  assert.equal(v.noteData.image,null, 'Existing notes without image.json should still load');
+  assert(v.contentEl.findText('Use question image'), 'Question image action missing');
+  assert(v.contentEl.findText('Choose image from device'), 'Device picture picker missing');
+
+  v.noteData.text = 'Typed explanation stays';
+  v.noteData.dirtyText = true;
+  v.noteData.strokes = [{id:'stroke-1',color:'#286ab7',width:2.8,points:[[22,24],[80,95]]}];
+  v.noteData.dirtyInk = true;
+  await v.flushNote();
+  await v.attachQuestionImage(imageCard,'source-figure.png');
+  assert(v.noteData.image?.filename?.endsWith('.png'), 'Copied source PNG was not saved');
+  const noteImagePath = 'MarrowCards/notes/NOTE-IMAGE-01/images/' + v.noteData.image.filename;
+  assert(storage.has(noteImagePath), 'Source image copy should live under card notes');
+  assert.equal(storage.get(media),png,'Original approved media bytes must stay untouched');
+  assert(storage.has('MarrowCards/notes/NOTE-IMAGE-01/image.json'));
+  assert(v.contentEl.findClass('marrow-note-reference-image'),
+    'Saved image must appear below note ink canvas');
+  assert(v.contentEl.findClass('marrow-note-ink'), 'Pen canvas must remain present');
+  assert(v.contentEl.findClass('marrow-note-page-with-image'),
+    'Text should be repositioned below an attached figure');
+  const note1 = await writer.readCardNote(imageCard.id);
+  assert.equal(note1.text,'Typed explanation stays');
+  assert.equal(note1.strokes.length,1);
+  assert.equal(note1.image.filename,v.noteData.image.filename);
+
+  await v.toggleNote(imageCard);
+  await v.toggleNote(imageCard);
+  assert(v.contentEl.findClass('marrow-note-reference-image'),
+    'Image must render after closing/reopening notes');
+  assert.equal(v.noteData.strokes.length,1,'Ink annotations must persist after reopening');
+  assert.equal(v.noteData.text,'Typed explanation stays');
+
+  // An image chosen from the device replaces the display pointer without
+  // deleting original source media or existing typed/vector annotations.
+  v.contentEl.findText('Choose image from device').handlers.click();
+  const picker = mockDocument.lastPicker;
+  assert(picker && picker.clicked, 'Device image action must launch file picker');
+  assert(picker.accept.includes('image/jpeg'));
+  picker.files = [{name:'picked.jpg',size:jpg.byteLength,
+    async arrayBuffer(){return jpg;}}];
+  await picker.handlers.change();
+  assert(picker.removed, 'Temporary file picker must clean itself up');
+  assert(v.noteData.image.filename.endsWith('.jpg'));
+  assert(storage.has('MarrowCards/notes/NOTE-IMAGE-01/images/' + v.noteData.image.filename));
+  assert.equal(storage.get(media),png, 'Picking a new image cannot modify approved media');
+  assert.equal(v.noteData.strokes.length,1, 'Replacing image must not clear vector ink');
+
+  await v.removeNoteImage(imageCard);
+  assert.equal(v.noteData.image,null);
+  assert(!v.contentEl.findClass('marrow-note-reference-image'),
+    'Removed picture should disappear from note page');
+  const remaining = await writer.readCardNote(imageCard.id);
+  assert.equal(remaining.image,null);
+  assert.equal(remaining.text,'Typed explanation stays');
+  assert.equal(remaining.strokes.length,1);
+  assert(![...storage.keys()].some(path => path.startsWith('MarrowCards/packs/')),
+    'Personal note images must never enter published packs');
+
+  // Invalid or oversized files must be rejected before writing any bytes.
+  await assert.rejects(writer.addCardNoteImage(imageCard.id,new Uint8Array(20).buffer),
+    /Unsupported image/);
+  await assert.rejects(writer.addCardNoteImage('../bad',png), /Invalid note card ID/);
+  await assert.rejects(writer.addCardNoteImage(imageCard.id,{byteLength:16*1024*1024}),
+    /15 MB/);
+  console.log('Source-image, device picker, image persistence, note/ink safety and remove-image checks passed.');
+})().catch(err => { console.error(err); process.exitCode = 1; });
