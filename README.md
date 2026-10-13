@@ -28,6 +28,16 @@ For **plugin upgrades or bug fixes** in a new chat, use:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Pen colors and movable/resizable note images (v0.2.6)
+
+**Pen color selector:** Open **My notes** and tap one of six preset swatches — **Blue, Black, Red, Green, Purple or Orange**. Selecting a swatch switches to **Pen**. Each new vector stroke saves its own color, so old handwritten notes and previously drawn strokes retain their original colors. The most recently selected color is saved in that device's local Obsidian plugin settings; it is not uploaded to GitHub.
+
+**Image layout controls:** After adding an image through **Use question image** or **Choose image from device**, tap **Move / resize image**. Drag the highlighted image with **a finger, stylus or mouse** to reposition it anywhere inside the fixed 720 × 960 note page. Drag the square at its bottom-right corner to make it smaller or larger while preserving its displayed proportions. Tap **Done moving image** or **Pen** to return to handwriting. The image's position and dimensions auto-save in that card's local `MarrowCards/notes/<card-id>/image.json`; reopening the note restores the saved placement on synced devices.
+
+The picture is still a **separate layer beneath typed text and vector ink**. Moving or resizing a picture does not move ink strokes already drawn on the page — position the picture before annotating it for best alignment. One image can be displayed per note at a time; pictures still cannot be cropped, rotated or layered together. Previously saved v0.2.5 `image.json` files without image geometry load in the original position automatically; no migration or re-import is necessary. Pen strokes, source image bytes, approved card packs, review events and old typed notes remain unchanged.
+
+**Android:** Image-moving mode permits finger drag/resize; drawing mode continues to ignore finger input to reduce accidental palm strokes. Mobile touch interactions still require confirmation on a physical device after the BRAT update.
+
 ## Add a source or device picture to My notes (v0.2.5)
 
 Open **My notes (type / pen)** in Browse or Review. If the card includes original question images, tap **Use question image** (or **Use question image 1/2** for multiple figures) to copy one to that card's personal note. Alternatively, choose **Choose image from device** to open the Android/desktop file picker (PNG/JPEG/WebP, up to 15 MB). The picture is displayed on the fixed notes page *beneath* the existing pen layer, and the typed text area sits below it. Use **Pen** to annotate the picture, **Eraser** or **Undo ink** to edit strokes, and **Remove note image** to clear the displayed picture without deleting text or ink. A note supports **one displayed picture at a time** in this version; choosing another replaces its display, not its saved annotations.
