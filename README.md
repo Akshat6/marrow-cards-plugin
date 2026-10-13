@@ -28,6 +28,12 @@ For **plugin upgrades or bug fixes** in a new chat, use:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Unicode-dash and multiline PYQ answers (v0.2.4)
+
+The plugin now recognizes verified correct answers written with an em dash (such as `B — answer`), en dash, hyphen, period, or a line break followed by a numbered answer list. It checks the full answer text against the selected source option before enabling tap-to-grade; mismatched answer text still falls back to manual Flip and Right/Wrong. Numbered/image sequence options remain in their original order instead of being shuffled. This restores one-tap grading for the newly published Ophthalmology OPH-32 and OPH-33 MCQs **without changing their approved card data**.
+
+Regression tests cover consecutive cards with mixed answer separators, numbered multiline answers, mismatch fallback, and Browse remaining no-grade. Update **the plugin** through BRAT to receive this fix; refreshing packs alone cannot update old option-recognition code. Verify taps on the actual phone after the update.
+
 ## Consecutive MCQ tap-to-answer fix (v0.2.3)
 
 **Reported Android bug in v0.2.2:** The first MCQ accepted a tap, but later cards in an index could stop responding to option taps. Root cause: `nextAfterOption()` and manual `grade()` render the next card while the reviewer is temporarily `busy`; the old button-rendering code used `option.disabled = Boolean(this.answerState) || this.busy`. The newly rendered options therefore remained disabled even after the asynchronous transition completed. The fixed renderer disables options only when that **same card has already been graded**, while `selectOption()` continues to check the live `busy` flag to prevent premature or double taps.
