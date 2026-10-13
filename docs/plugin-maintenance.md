@@ -2,7 +2,7 @@
 
 **Purpose:** A future ChatGPT session or developer can safely maintain the Obsidian plugin **without access to previous chats**. This file covers **plugin/UI/code** changes. For extracting and approving new PYQs, follow [flashcard-workflow.md](flashcard-workflow.md). Both workflows start at [../AGENTS.md](../AGENTS.md).
 
-_Last checked: 2026-10-13, during the v0.2.4 Unicode-answer fix._
+_Last checked: 2026-10-13, during the v0.2.5 note-image feature._
 
 ## 1. Re-read live source and preserve boundaries
 
@@ -28,6 +28,8 @@ _Last checked: 2026-10-13, during the v0.2.4 Unicode-answer fix._
 **Browse:** `startBrowse` → `startSession(...,'browse')`. No `seen`, Right, Wrong, accuracy changes or clickable answer options. The UI offers Previous / Show answer–Show question / Next, preserving *original* source option order. `My notes` works in Browse and Review, including after flipping/answering.
 
 **Personal notes:** Every card has `My notes (type / pen)`. Notes are **local** under `MarrowCards/notes/<stable-card-id>/text.json` and `ink.json`, separate from downloaded `packs/`, `media/` and per-device `reviews/<device-id>/*.jsonl`. Typed text + vector ink are two editable layers on the same fixed 720×960 page; quick shorthand typing works on narrow phones, stylus pen/whole-stroke eraser/undo on tablet, autosave plus manual save, and pending writes flush on navigation. These files sync through **Syncthing**, not GitHub. Do not reset, move, delete or overwrite existing notes or review events for a plugin/UI upgrade. Avoid editing on two devices before the vault finishes syncing; file versioning/backups are recommended but optional. `.obsidian/` remains excluded from Syncthing on both devices.
+
+**v0.2.5 image-backed personal notes:** The reader supports two sources in Browse and Review: **Use question image** for an already-downloaded `MarrowCards/media/<name>` source and **Choose image from device** (file input; PNG/JPEG/WebP up to 15 MB). The source is **copied**, never edited. `MarrowCardsPlugin.addCardNoteImage` validates magic bytes and size, creates `MarrowCards/notes/<card-id>/images/note-<id>.<ext>`, then writes `image.json` with that filename. `readCardNote` returns an optional image reference; older notes without `image.json` still work. The note editor draws an absolutely positioned image behind text and vector ink on the original 720x960 page; with an image, type below it. Removing the image writes a null pointer but intentionally leaves the image file and all handwritten/typed notes alone. One picture is displayed per note page; replace it to use another. Sync the entire notes folder recursively through Syncthing. Missing image assets are shown as missing rather than deleting metadata. Test on actual Android phone/tablet for file picker, display scaling, note reopen, Pen/Erase and screen navigation. **Never update the private data repo or rewrite `MarrowCards/media` for this feature.**
 
 **Device startup:** `onload()` registers views/settings/commands synchronously *before* async `initializeRuntime()`; this prevents the original Android cold-start issue where the settings tab disappeared. Do not reintroduce old pilot cleanup on startup or block registration behind vault I/O. Plugin code updates are distributed with **BRAT separately on each device**; card pack refresh uses Check GitHub / Refresh local, then Syncthing for the vault. The phone's private read-only GitHub token belongs in local Obsidian SecretStorage and **never** in chat or synced files.
 
