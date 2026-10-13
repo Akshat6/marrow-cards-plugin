@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: annotate note images copied from questions or chosen on device; preserve existing notes and reviews.",
+  "description": "Marrow Cards: six pen colors and movable, resizable images in personal notes; preserve existing study data.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
