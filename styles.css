@@ -414,3 +414,52 @@
   height: 290px;
   z-index: 1;
 }
+
+
+/* v0.2.6: quick preset pen colors and direct manipulation of the local note image. */
+.marrow-cards .marrow-note-pen-colors {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+.marrow-cards .marrow-note-pen-colors span { font-size: var(--font-ui-small); }
+.marrow-cards .marrow-note-color-choice {
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--background-modifier-border);
+  cursor: pointer;
+}
+.marrow-cards .marrow-note-color-choice.is-selected {
+  box-shadow: 0 0 0 3px var(--interactive-accent);
+}
+.marrow-cards .marrow-note-image-selection {
+  position: absolute;
+  z-index: 4;
+  border: 2px dashed var(--interactive-accent);
+  background: rgba(50, 100, 220, 0.035);
+  box-sizing: border-box;
+  cursor: move;
+  touch-action: none;
+}
+.marrow-cards .marrow-note-image-resize-handle {
+  box-sizing: border-box;
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  right: -8px;
+  bottom: -8px;
+  border: 3px solid #fff;
+  border-radius: 8px;
+  background: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--background-modifier-border);
+  cursor: nwse-resize;
+  touch-action: none;
+}
