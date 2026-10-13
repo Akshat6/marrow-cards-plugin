@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: restore tap-to-grade for Unicode-dash and multiline MCQ answers; preserve reviews and notes.",
+  "description": "Marrow Cards: annotate note images copied from questions or chosen on device; preserve existing notes and reviews.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
