@@ -842,3 +842,126 @@ console.log('Nested system accordion regression checks passed.');
     /15 MB/);
   console.log('Source-image, device picker, image persistence, note/ink safety and remove-image checks passed.');
 })().catch(err => { console.error(err); process.exitCode = 1; });
+
+
+// v0.2.6: Pen color buttons, image drag / corner-resize, saved geometry, and
+// existing image.json files without a placement field remain compatible.
+(async () => {
+  const storage = new Map();
+  const png = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,1,2,3,4]).buffer;
+  const vault = {
+    getAbstractFileByPath(path) { return storage.has(path) ? {path} : null; },
+    async read(file) { return storage.get(file.path); },
+    async readBinary(file) { return storage.get(file.path); },
+    async modify(file, content) { storage.set(file.path,content); },
+    async create(path, content) { storage.set(path,content); },
+    async createBinary(path, content) { storage.set(path,content); },
+    getResourcePath(file) { return 'app://marrow/' + file.path; }
+  };
+  const writer = new stubModule.exports();
+  writer.app = { vault };
+  writer.initPromise = null;
+  writer.settings = {penColor:'#286ab7'};
+  writer.saveData = async settings => { writer.savedColor = settings.penColor; };
+  writer.ensureFolder = async () => {};
+  writer.noteWriteQueue = Promise.resolve();
+  writer.stats = new Map();
+  const card = {id:'COLOR-IMAGE-TEST',type:'pyq',status:'approved',indexIds:['NOTES-ID'],
+    question:'Synthetic study question?',options:['a) Sample','b) Other'],
+    answer:'A. Sample',images:[]};
+  writer.cards = [card];
+  writer.indexes = [{id:'NOTES-ID',title:'Color and layout',subject:'Test'}];
+  writer.recordEvent = async ()=>{throw new Error('Browse should not grade');};
+  const v = new Reviewer({app:{vault}},writer);
+  await v.startBrowse(['NOTES-ID']);
+  await v.toggleNote(card);
+  assert(v.contentEl.findClass('marrow-note-pen-colors'),'Color selector not shown');
+  const red = v.contentEl.findClass('marrow-note-pen-colors').children
+    .find(item => item.props.attr?.['aria-label'] === 'Pen color Red');
+  assert(red && red.handlers.click,'Red preset is missing');
+  red.handlers.click();
+  await Promise.resolve();
+  assert.equal(v.noteData.mode,'pen');
+  assert.equal(v.noteData.penColor,'#d73a49');
+  assert.equal(writer.savedColor,'#d73a49','Color preference should persist locally');
+  const redButton = v.contentEl.findClass('marrow-note-pen-colors').children
+    .find(item => item.props.attr?.['aria-label'] === 'Pen color Red');
+  assert.equal(redButton.props.attr['aria-pressed'],'true');
+  const pen = v.contentEl.findClass('marrow-note-ink');
+  pen.handlers.pointerdown({pointerType:'pen',pointerId:91,clientX:40,clientY:45,
+    preventDefault(){}});
+  pen.handlers.pointermove({pointerType:'pen',pointerId:91,clientX:70,clientY:75,
+    preventDefault(){}});
+  pen.handlers.pointerup({pointerType:'pen',pointerId:91});
+  await v.flushNote();
+  assert.equal(v.noteData.strokes[0].color,'#d73a49');
+  assert.equal(writer.settings.penColor,'#d73a49');
+
+  // Simulate a legacy v0.2.5 note: just the filename, no geometry.
+  const fileName = 'note-legacytest.png';
+  storage.set('MarrowCards/notes/'+card.id+'/image.json',
+    JSON.stringify({schemaVersion:1,cardId:card.id,filename:fileName}));
+  storage.set('MarrowCards/notes/'+card.id+'/images/'+fileName,png);
+  await v.toggleNote(card);
+  await v.toggleNote(card);
+  assert.deepEqual([...Object.values(v.noteData.image.placement)], [22,22,676,624],
+    'Legacy attachment must get a non-destructive default placement');
+  assert.equal(v.noteData.penColor,'#d73a49');
+  const imageButton = v.contentEl.findText('Move / resize image');
+  assert(imageButton && imageButton.handlers.click,'Image move mode missing');
+  imageButton.handlers.click();
+  assert.equal(v.noteData.mode,'image');
+  assert.equal(v.contentEl.findClass('marrow-note-ink').style.pointerEvents,'none',
+    'Ink must not draw when moving an image');
+  const frame = v.contentEl.findClass('marrow-note-image-selection');
+  assert(frame && frame.handlers.pointerdown,'Image selection frame missing');
+  const start = {...v.noteData.image.placement};
+  frame.handlers.pointerdown({pointerId:41,pointerType:'touch',
+    clientX:80,clientY:90,preventDefault(){},stopPropagation(){}});
+  frame.handlers.pointermove({pointerId:41,clientX:94,clientY:112,preventDefault(){}});
+  frame.handlers.pointerup({pointerId:41,clientX:94,clientY:112,preventDefault(){}});
+  assert.equal(v.noteData.image.placement.x,start.x+14);
+  assert.equal(v.noteData.image.placement.y,start.y+22);
+  assert.equal(v.noteData.strokes.length,1,'Moving image must not move/clear handwriting');
+  await v.flushNote();
+  const moved = await writer.readCardNote(card.id);
+  assert.equal(moved.image.placement.x,start.x+14);
+  assert.equal(moved.image.placement.y,start.y+22);
+  const handle = v.contentEl.findClass('marrow-note-image-resize-handle');
+  assert(handle && handle.handlers.pointerdown,'Resize corner missing');
+  handle.handlers.pointerdown({pointerId:42,pointerType:'pen',
+    clientX:230,clientY:250,preventDefault(){},stopPropagation(){}});
+  handle.handlers.pointermove({pointerId:42,clientX:150,clientY:170,preventDefault(){}});
+  handle.handlers.pointerup({pointerId:42,clientX:150,clientY:170,preventDefault(){}});
+  assert(v.noteData.image.placement.width<start.width,'Resize should shrink image');
+  const resized = {...v.noteData.image.placement};
+  assert(Math.abs(resized.width/resized.height - start.width/start.height)<0.000001,
+    'Resize must preserve its box proportions');
+  await v.flushNote();
+  await v.toggleNote(card);
+  await v.toggleNote(card);
+  assert.equal(v.noteData.image.placement.width,resized.width);
+  assert.equal(v.noteData.image.placement.height,resized.height);
+  assert.equal(v.noteData.strokes.length,1);
+  assert.equal(v.noteData.strokes[0].color,'#d73a49');
+
+  // Image bounds stay on 720x960 page even after a large drag, and
+  // changing image layout cannot alter approved source media or grades.
+  v.contentEl.findText('Move / resize image').handlers.click();
+  const boundedFrame=v.contentEl.findClass('marrow-note-image-selection');
+  boundedFrame.handlers.pointerdown({pointerId:43,clientX:1,clientY:1,preventDefault(){}});
+  boundedFrame.handlers.pointermove({pointerId:43,clientX:10001,clientY:10001,preventDefault(){}});
+  boundedFrame.handlers.pointerup({pointerId:43,clientX:10001,clientY:10001,preventDefault(){}});
+  await v.flushNote();
+  const bounded=v.noteData.image.placement;
+  assert(bounded.x+bounded.width<=720.001 && bounded.y+bounded.height<=960.001);
+  await assert.rejects(writer.saveCardNoteImagePlacement(card.id,{
+    filename:fileName,placement:{x:-1,y:2,width:300,height:300}
+  }),/Invalid note image position/);
+  assert(![...storage.keys()].some(path=>path.startsWith('MarrowCards/media/')||
+    path.startsWith('MarrowCards/packs/')||path.startsWith('MarrowCards/reviews/')),
+    'Moving local note images should not edit source media, packs or review logs');
+  assert(newCss.includes('.marrow-note-image-resize-handle'));
+  assert(newCss.includes('.marrow-note-color-choice'));
+  console.log('Pen palette, image drag/resize, bounds, legacy notes and saved geometry regressions passed.');
+})().catch(err => {console.error(err);process.exitCode=1;});
