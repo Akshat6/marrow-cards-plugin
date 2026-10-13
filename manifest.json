@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: six pen colors and movable, resizable images in personal notes; preserve existing study data.",
+  "description": "Marrow Cards: question-only index overviews with per-card and cumulative accuracy, preserving notes and reviews.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
