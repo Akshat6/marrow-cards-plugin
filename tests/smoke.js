@@ -1067,6 +1067,35 @@ console.log('Nested system accordion regression checks passed.');
   assert.equal(list.children.length,0,'Closed previews should clear their question DOM');
   assert.equal(touchedReview,0);
   assert(v.contentEl.findText('Review selected indexes (0)'), 'Combined actions must stay available');
+
+  // The same shared index tile must work inside the real subject accordion,
+  // not only the legacy indexes screen.
+  v.screen='subjects';
+  v.expandedSubject='';
+  v.expandedSystem='';
+  v.draw();
+  v.contentEl.findText('▸  Demo  ·  3 indexes').handlers.click();
+  const modernIndex = v.contentEl.findText(' Questions overview index');
+  assert(modernIndex,'Modern subject hierarchy must render index tile');
+  const modernQuestions=v.contentEl.findText('Questions');
+  assert(modernQuestions && modernQuestions.handlers.click);
+  modernQuestions.handlers.click();
+  assert(v.contentEl.findText('Question about the first structure?'));
+  assert(v.contentEl.findText('Index accuracy: 50%  ·  Seen: 9  ·  Right: 3  ·  Wrong: 3'));
+  assert.equal(touchedReview,0,'Opening Questions in the subject hierarchy is no-grade');
+  assert.equal(v.selected.size,0,'Question preview must not add the index to bulk review selection');
+
+  // Card statistics are deliberately no longer displayed during Review/Browse.
+  v.screen='review';
+  v.selected=new Set(['IDX-A']);
+  v.sessionKind='browse';
+  v.queue=[a];
+  v.cursor=0;
+  v.flipped=false;
+  v.draw();
+  assert(!v.contentEl.findClass('marrow-stats'),
+    'Seen, Right, Wrong and Accuracy should live under Questions, not in the card viewer');
+
   assert(newCss.includes('.marrow-index-question-list'));
   assert(newCss.includes('.marrow-index-question-stats'));
   console.log('Index Questions third-action, hidden answer/media, cumulative accuracy and zero-grade checks passed.');
