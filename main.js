@@ -8,9 +8,26 @@ const PACKS = ROOT + '/packs';
 const MEDIA = ROOT + '/media';
 const REVIEWS = ROOT + '/reviews';
 const NOTES = ROOT + '/notes';
+const MAX_NOTE_IMAGE_SIZE = 15 * 1024 * 1024;
 const TOKEN_KEY = 'marrow-cards-github-token';
 const REPO = 'Akshat6/marrow-cards-data';
 const ALLOWED_IMAGE = /\.(png|jpe?g|webp|gif)$/i;
+
+
+function noteImageExtension(binary) {
+  if (!binary || !Number.isInteger(binary.byteLength) || binary.byteLength < 12 ||
+      binary.byteLength > MAX_NOTE_IMAGE_SIZE) throw new Error('Choose an image up to 15 MB.');
+  const b = new Uint8Array(binary);
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 &&
+      b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) return 'png';
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'webp';
+  throw new Error('Unsupported image. Choose PNG, JPEG or WebP.');
+}
+function safeNoteImageName(name) {
+  return typeof name === 'string' && /^note-[A-Za-z0-9_-]{1,100}\.(png|jpg|webp)$/.test(name);
+}
 
 function safeId(value) { return typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value); }
 function safePath(value) {
@@ -235,9 +252,14 @@ class MarrowCardsPlugin extends Plugin {
     const loadPart = async (file, kind) => {
       const path = directory + '/' + file;
       const found = this.app.vault.getAbstractFileByPath(path);
-      if (!found) return kind === 'ink' ? [] : '';
+      if (!found) return kind === 'ink' ? [] : kind === 'image' ? null : '';
       const parsed = JSON.parse(await this.app.vault.read(found));
       if (parsed.schemaVersion !== 1 || parsed.cardId !== cardId) throw new Error('Unexpected note format: ' + path);
+      if (kind === 'image') {
+        if (parsed.filename === null) return null;
+        if (!safeNoteImageName(parsed.filename)) throw new Error('Invalid note image reference: ' + path);
+        return { filename: parsed.filename };
+      }
       if (kind === 'ink') {
         if (!Array.isArray(parsed.strokes)) throw new Error('Invalid saved pen strokes: ' + path);
         return parsed.strokes.filter(stroke => stroke && Array.isArray(stroke.points));
@@ -245,7 +267,8 @@ class MarrowCardsPlugin extends Plugin {
       if (typeof parsed.text !== 'string') throw new Error('Invalid typed note: ' + path);
       return parsed.text;
     };
-    return { cardId, text: await loadPart('text.json', 'text'), strokes: await loadPart('ink.json', 'ink') };
+    return { cardId, text: await loadPart('text.json', 'text'),
+      strokes: await loadPart('ink.json', 'ink'), image: await loadPart('image.json', 'image') };
   }
   async saveCardNotePart(cardId, part, value) {
     if (!safeId(cardId) || !['text', 'ink'].includes(part)) throw new Error('Invalid note save');
@@ -256,6 +279,40 @@ class MarrowCardsPlugin extends Plugin {
     const operation = async () => {
       await this.ensureFolder(NOTES + '/' + cardId);
       await this.writeJson(path, payload);
+    };
+    this.noteWriteQueue = this.noteWriteQueue.catch(() => {}).then(operation);
+    return this.noteWriteQueue;
+  }
+
+
+  // A private, per-card copy: never modify approved source packs or media.
+  // Image bytes and the reference file sync via MarrowCards/notes through Syncthing.
+  async addCardNoteImage(cardId, binary) {
+    if (!safeId(cardId)) throw new Error('Invalid note card ID');
+    if (this.initPromise) await this.initPromise;
+    const ext = noteImageExtension(binary);
+    const filename = 'note-' + uniqueId().replace(/[^A-Za-z0-9_-]/g, '') + '.' + ext;
+    const dir = NOTES + '/' + cardId;
+    const operation = async () => {
+      await this.ensureFolder(dir + '/images');
+      await this.app.vault.createBinary(dir + '/images/' + filename, binary);
+      // Publish the pointer only after its actual image file exists.
+      await this.writeJson(dir + '/image.json', { schemaVersion: 1, cardId, filename });
+    };
+    this.noteWriteQueue = this.noteWriteQueue.catch(() => {}).then(operation);
+    await this.noteWriteQueue;
+    return { filename };
+  }
+
+  async clearCardNoteImage(cardId) {
+    if (!safeId(cardId)) throw new Error('Invalid note card ID');
+    if (this.initPromise) await this.initPromise;
+    const operation = async () => {
+      await this.ensureFolder(NOTES + '/' + cardId);
+      // Do not delete image bytes: an old Syncthing version/backup may still
+      // reference them. Removing an image must not erase pen or text notes.
+      await this.writeJson(NOTES + '/' + cardId + '/image.json',
+        { schemaVersion: 1, cardId, filename: null });
     };
     this.noteWriteQueue = this.noteWriteQueue.catch(() => {}).then(operation);
     return this.noteWriteQueue;
@@ -822,13 +879,78 @@ class MarrowCardsView extends ItemView {
     const current = this.contentEl.querySelector?.('.marrow-review-scroll');
     if (current) current.scrollTop = position;
   }
+
+  async attachNoteImage(card, binary) {
+    const note = this.noteData;
+    if (!this.notesOpen || !note || note.cardId !== card.id) return;
+    try {
+      const image = await this.plugin.addCardNoteImage(card.id, binary);
+      if (this.notesOpen && this.noteData === note) {
+        note.image = image;
+        this.redrawKeepingScroll();
+      }
+      new Notice('Note image saved locally. Use Pen to annotate.');
+    } catch (error) {
+      console.error('[Marrow Cards] Image attachment failed', error);
+      new Notice('Could not add note image: ' + (error.message || String(error)), 9000);
+    }
+  }
+  async attachQuestionImage(card, filename) {
+    if (!(card.images || []).includes(filename)) return;
+    const file = this.app.vault.getAbstractFileByPath(MEDIA + '/' + filename);
+    if (!file) {
+      new Notice('Question image not installed yet. Check GitHub and Refresh local.');
+      return;
+    }
+    try {
+      const binary = await this.app.vault.readBinary(file);
+      await this.attachNoteImage(card, binary);
+    } catch (error) {
+      new Notice('Could not open question image: ' + (error.message || String(error)), 9000);
+    }
+  }
+  chooseNoteImage(card) {
+    if (!this.notesOpen || this.noteData?.cardId !== card.id) return;
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
+    picker.style.display = 'none';
+    document.body.appendChild(picker);
+    const cleanup = () => picker.remove();
+    picker.addEventListener('change', async () => {
+      try {
+        const file = picker.files?.[0];
+        if (!file) return;
+        if (file.size > MAX_NOTE_IMAGE_SIZE) throw new Error('Image exceeds 15 MB.');
+        await this.attachNoteImage(card, await file.arrayBuffer());
+      } catch (error) {
+        new Notice('Could not read selected image: ' + (error.message || String(error)), 9000);
+      } finally { cleanup(); }
+    }, { once: true });
+    picker.addEventListener('cancel', cleanup, { once: true });
+    picker.click();
+  }
+  async removeNoteImage(card) {
+    const note = this.noteData;
+    if (!this.notesOpen || !note || note.cardId !== card.id || !note.image) return;
+    try {
+      await this.plugin.clearCardNoteImage(card.id);
+      if (this.notesOpen && this.noteData === note) {
+        note.image = null;
+        this.redrawKeepingScroll();
+      }
+      new Notice('Image removed from note page. Ink and text retained.');
+    } catch (error) {
+      new Notice('Could not remove image: ' + (error.message || String(error)), 9000);
+    }
+  }
   drawNoteEditor(parent, card) {
     const note = this.noteData;
     if (!this.notesOpen || !note || note.cardId !== card.id) return;
     const holder = parent.createDiv({ cls: 'marrow-note-editor' });
     holder.createEl('h4', { text: 'My notes · ' + card.id });
     holder.createEl('p', { cls: 'marrow-hint',
-      text: 'Type on your phone; switch to Pen on your tablet to write over the text. Saved locally for Syncthing.' });
+      text: 'Add a question image or a picture from your device, then use Pen to annotate it. Text, ink and images are saved locally for Syncthing.' });
     const toolbar = holder.createDiv({ cls: 'marrow-note-toolbar' });
     const setMode = mode => {
       note.mode = mode;
@@ -854,6 +976,19 @@ class MarrowCardsView extends ItemView {
       () => new Notice('Personal note saved locally.'),
       () => {}
     ));
+    const imageTools = holder.createDiv({ cls: 'marrow-note-image-actions' });
+    for (const [index, filename] of (card.images || []).entries()) {
+      const button = imageTools.createEl('button', {
+        text: (card.images.length === 1 ? 'Use question image' : 'Use question image ' + (index + 1))
+      });
+      button.addEventListener('click', () => void this.attachQuestionImage(card, filename));
+    }
+    const pickImage = imageTools.createEl('button', { text: 'Choose image from device' });
+    pickImage.addEventListener('click', () => this.chooseNoteImage(card));
+    if (note.image) {
+      const removeImage = imageTools.createEl('button', { text: 'Remove note image' });
+      removeImage.addEventListener('click', () => void this.removeNoteImage(card));
+    }
     const quick = holder.createEl('textarea', {
       cls: 'marrow-note-quick-type',
       attr: { 'aria-label': 'Quick type your card note on phone',
@@ -868,7 +1003,22 @@ class MarrowCardsView extends ItemView {
       if (pageText) pageText.value = note.text;
     });
     const viewport = holder.createDiv({ cls: 'marrow-note-viewport' });
-    const stage = viewport.createDiv({ cls: 'marrow-note-page' });
+    const stage = viewport.createDiv({
+      cls: 'marrow-note-page' + (note.image ? ' marrow-note-page-with-image' : '')
+    });
+    if (note.image) {
+      const path = NOTES + '/' + card.id + '/images/' + note.image.filename;
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (file) {
+        const image = stage.createEl('img', { cls: 'marrow-note-reference-image',
+          attr: { alt: 'Image attached to notes for ' + card.id } });
+        image.src = this.app.vault.getResourcePath(file);
+        image.draggable = false;
+      } else {
+        stage.createEl('p', { cls: 'marrow-note-image-missing',
+          text: 'Note image is not on this device yet. Check Syncthing.' });
+      }
+    }
     const input = stage.createEl('textarea', {
       cls: 'marrow-note-text',
       attr: { 'aria-label': 'Editable typed note for ' + card.id,
