@@ -965,3 +965,109 @@ console.log('Nested system accordion regression checks passed.');
   assert(newCss.includes('.marrow-note-color-choice'));
   console.log('Pen palette, image drag/resize, bounds, legacy notes and saved geometry regressions passed.');
 })().catch(err => {console.error(err);process.exitCode=1;});
+
+
+// v0.2.7: the third per-index action lists only question statements and
+// historical stats; full card details and review attempts must not leak.
+(() => {
+  const a = {id:'INDEX-OV-01',type:'pyq',status:'approved',indexIds:['IDX-A'],
+    question:'Question about the first structure?',options:['SECRET_OPTION_ALPHA','SECRET_OPTION_BETA'],
+    answer:'SECRET_ANSWER_ALPHA',explanation:'SECRET_EXPLANATION_ALPHA',
+    images:['SECRET_IMAGE_ALPHA.png']};
+  const b = {id:'INDEX-OV-02',type:'pyq',status:'approved',indexIds:['IDX-A'],
+    question:'A second study question?',options:['SECRET_OPTION_GAMMA','SECRET_OPTION_DELTA'],
+    answer:'SECRET_ANSWER_BETA',explanation:'SECRET_EXPLANATION_BETA',
+    images:['SECRET_IMAGE_BETA.png']};
+  const c = {id:'INDEX-OV-03',type:'fact',status:'approved',indexIds:['IDX-A'],
+    question:'An unattempted recall question?',answer:'SECRET_ANSWER_GAMMA',images:[]};
+  const d = {id:'INDEX-OV-04',type:'pyq',status:'approved',indexIds:['IDX-B'],
+    question:'Question in another index?',options:['SECRET_OTHER_OPTION'],
+    answer:'SECRET_OTHER_ANSWER',images:['SECRET_OTHER_IMAGE.png']};
+  const stats = new Map([
+    [a.id,{seen:3,right:2,wrong:0}],
+    [b.id,{seen:6,right:1,wrong:3}],
+    [d.id,{seen:9,right:9,wrong:0}]
+  ]);
+  let touchedReview = 0;
+  const plugin = {cards:[a,b,c,d],
+    indexes:[
+      {id:'IDX-A',title:'Questions overview index',subject:'Demo',system:'Single topic'},
+      {id:'IDX-B',title:'Separate index',subject:'Demo',system:'Single topic'},
+      {id:'IDX-EMPTY',title:'Empty index',subject:'Demo',system:'Single topic'}
+    ],stats,
+    async recordEvent(){touchedReview++;throw new Error('Question overview must not log reviews');}
+  };
+  const v = new Reviewer(mockLeaf,plugin);
+  v.screen='indexes';
+  v.navSubject='Demo';
+  v.draw();
+  function walk(node,visit) {
+    visit(node);
+    for (const child of node.children) walk(child,visit);
+  }
+  function tileFor(label) {
+    let result=null;
+    walk(v.contentEl,node=>{
+      if(node.cls.split(' ').includes('marrow-index-tile') && node.findText(' '+label)) result=node;
+    });
+    return result;
+  }
+  const tile=tileFor('Questions overview index');
+  assert(tile,'Index tile should exist');
+  const summary=tile.findClass('marrow-index-accuracy');
+  assert(summary,'Cumulative index accuracy should be visible even when collapsed');
+  assert.equal(summary.text,'Index accuracy: 50%  ·  Seen: 9  ·  Right: 3  ·  Wrong: 3',
+    'Aggregate accuracy is attempt-weighted: (2+1) / (2+0+1+3), not mean of card percentages');
+  const separate=tileFor('Separate index');
+  assert.equal(separate.findClass('marrow-index-accuracy').text,
+    'Index accuracy: 100%  ·  Seen: 9  ·  Right: 9  ·  Wrong: 0',
+    'Other indexes must not be included in this index');
+  const empty=tileFor('Empty index');
+  assert.equal(empty.findClass('marrow-index-accuracy').text,
+    'Index accuracy: —  ·  Seen: 0  ·  Right: 0  ·  Wrong: 0');
+  assert.equal(empty.findText('Questions').disabled,true,
+    'Empty indexes should not have a question preview');
+  const controls = tile.children.filter(el=>el.props.tag==='button');
+  assert.deepEqual(controls.map(c=>c.text), ['Review','Browse','Questions'],
+    'Keep one-index review/browse while adding Questions as third action');
+  const toggle=tile.findText('Questions');
+  assert.equal(toggle.props.attr['aria-expanded'],'false');
+  assert(tile.findClass('marrow-index-question-list').hidden, 'Preview should start collapsed');
+  toggle.handlers.click();
+  assert.equal(toggle.text,'Hide questions');
+  assert.equal(toggle.props.attr['aria-expanded'],'true');
+  const list=tile.findClass('marrow-index-question-list');
+  assert.equal(list.hidden,false);
+  for(const question of [a.question,b.question,c.question]) {
+    assert(list.findText(question),'Question statement should appear in preview: '+question);
+  }
+  assert.equal(list.findClass('marrow-index-question-row').findClass('marrow-index-question-stats').text,
+    'Accuracy: 100%  ·  Seen: 3  ·  Right: 2  ·  Wrong: 0');
+  const rowStats=[];
+  const forbidden=[];
+  let imageElements=0;
+  walk(list,node=>{
+    if(node.cls.split(' ').includes('marrow-index-question-stats'))rowStats.push(node.text);
+    if(node.props.tag==='img')imageElements++;
+    if(/SECRET_|(INDEX-OV-0)/.test(node.text))forbidden.push(node.text);
+  });
+  assert.equal(rowStats.length,3,'One accuracy row per approved card');
+  assert.deepEqual(rowStats, [
+    'Accuracy: 100%  ·  Seen: 3  ·  Right: 2  ·  Wrong: 0',
+    'Accuracy: 25%  ·  Seen: 6  ·  Right: 1  ·  Wrong: 3',
+    'Accuracy: —  ·  Seen: 0  ·  Right: 0  ·  Wrong: 0'
+  ]);
+  assert.equal(forbidden.length,0,'Question overview must hide all answer, option, explanation and source IDs');
+  assert.equal(imageElements,0,'Question overview must not render source images');
+  assert.equal(touchedReview,0,'Viewing question list must never record Seen or grades');
+  assert.equal(v.screen,'indexes','Preview must remain in the library, not enter Review/Browse');
+  toggle.handlers.click();
+  assert.equal(list.hidden,true,'Questions should collapse again');
+  assert.equal(toggle.text,'Questions');
+  assert.equal(list.children.length,0,'Closed previews should clear their question DOM');
+  assert.equal(touchedReview,0);
+  assert(v.contentEl.findText('Review selected indexes (0)'), 'Combined actions must stay available');
+  assert(newCss.includes('.marrow-index-question-list'));
+  assert(newCss.includes('.marrow-index-question-stats'));
+  console.log('Index Questions third-action, hidden answer/media, cumulative accuracy and zero-grade checks passed.');
+})();
