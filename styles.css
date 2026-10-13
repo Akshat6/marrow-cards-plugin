@@ -463,3 +463,62 @@
   cursor: nwse-resize;
   touch-action: none;
 }
+
+
+/* v0.2.7: per-index question-only overview with aggregate and card accuracy.
+   No card answer/option/figure is displayed by this library feature. */
+.marrow-cards .marrow-index-accuracy {
+  flex: 1 1 100%;
+  margin: 2px 0 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  line-height: 1.45;
+}
+.marrow-cards .marrow-start-questions {
+  background: var(--interactive-normal);
+}
+.marrow-cards .marrow-index-question-list {
+  box-sizing: border-box;
+  flex: 1 1 100%;
+  min-width: 0;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 10px;
+}
+.marrow-cards .marrow-index-question-list[hidden] {
+  display: none !important;
+}
+.marrow-cards .marrow-index-question-heading {
+  margin: 4px 0 10px;
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.marrow-cards .marrow-index-question-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.marrow-cards .marrow-index-question-text {
+  flex: 1 1 270px;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  color: var(--text-normal);
+}
+.marrow-cards .marrow-index-question-stats {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.is-mobile .marrow-cards .marrow-index-question-stats {
+  flex: 1 1 100%;
+}
