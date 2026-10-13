@@ -34,6 +34,15 @@ For plugin changes or future regressions, use **[plugin-maintenance.md](plugin-m
 
 The GitHub Actions regression test covers a synthetic three-card sequence, DOM `disabled` states for second and third cards and the post-manual-grade path. This checklist is the necessary **real Android validation**.
 
+
+## v0.2.6 pen colors and image movement
+
+1. On Android tablet, open an existing image-bearing note and tap the red pen swatch; draw a stroke using the stylus, then change to green and draw another. Both strokes must keep their own colors after closing/reopening the note.
+2. Tap **Move / resize image**. Drag the image with a finger, drag its corner handle with a stylus to resize, and confirm that it stays within the page. Verify **Pen** stops image moving and returns to handwriting.
+3. Close the notes/editor and restart Obsidian. Confirm the image position and size, typed text, and vector strokes all persist. Confirm the old image-notes from v0.2.5 that did not have placement metadata still open in their original position.
+4. After Syncthing finishes syncing `MarrowCards/notes/`, verify picture geometry and strokes on the second device. Avoid simultaneous edits to the same note and keep file versioning enabled.
+5. Confirm Browse still records no Seen/Right/Wrong and image manipulation never edits the source `MarrowCards/media/` image or the approved GitHub pack.
+
 ## Syncthing phone/tablet
 
 1. Sync the dedicated vault's `MarrowCards/packs/`, `MarrowCards/media/`, `MarrowCards/reviews/`, and **`MarrowCards/notes/`**.
