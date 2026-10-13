@@ -28,6 +28,14 @@ For **plugin upgrades or bug fixes** in a new chat, use:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Question-only index overview and cumulative accuracy (v0.2.7)
+
+From **MBBS → Subject → System/subheading → Index**, each index now shows three actions: **Review**, **Browse**, and **Questions**. **Questions** expands in place to show only approved question *statements*, never option choices, answer keys, solutions/explanations, card IDs or figures. Beside each question, see its **Accuracy, Seen, Right and Wrong** totals from your already stored per-device review events. An unattempted card displays **Accuracy: —** rather than inventing an outcome. Close with **Hide questions**, without altering the selected indexes or creating review events.
+
+Every index tile also displays its cumulative **Index accuracy** alongside summed Seen/Right/Wrong. The index value is calculated from **total Right ÷ (total Right + total Wrong)** over all its approved cards, not from an unweighted average of card percentages. Indexes without any graded attempts display `—`. Only approved cards contribute; separate indexes are not mixed together. These are displays of existing review history, not new metadata stored in packs.
+
+As requested, the **Seen / Right / Wrong / Accuracy** information has moved **out of the individual Review/Browse card viewer** and into the question overview and index tile. Review and Browse still display questions, options, figures, answer/explanation as before; their grading and note tools are unchanged. Opening the Questions overview is *not* reviewing or browsing and does **not** increment Seen. Multi-index Review/Browse and the approved-only filter still work.
+
 ## Pen colors and movable/resizable note images (v0.2.6)
 
 **Pen color selector:** Open **My notes** and tap one of six preset swatches — **Blue, Black, Red, Green, Purple or Orange**. Selecting a swatch switches to **Pen**. Each new vector stroke saves its own color, so old handwritten notes and previously drawn strokes retain their original colors. The most recently selected color is saved in that device's local Obsidian plugin settings; it is not uploaded to GitHub.
