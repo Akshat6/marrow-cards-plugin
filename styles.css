@@ -379,3 +379,38 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+
+
+/* v0.2.5: image-backed note page. Image is below the independently editable
+   typed and vector-ink layers and never modifies the source PYQ image. */
+.marrow-cards .marrow-note-image-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 12px;
+}
+.marrow-cards .marrow-note-image-actions button { min-height: 44px; }
+.marrow-cards .marrow-note-reference-image {
+  position: absolute;
+  z-index: 0;
+  top: 22px;
+  left: 22px;
+  width: 676px;
+  height: 624px;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.marrow-cards .marrow-note-image-missing {
+  position: absolute;
+  top: 25px;
+  left: 25px;
+  max-width: 640px;
+  color: #9b2828;
+}
+.marrow-cards .marrow-note-page-with-image .marrow-note-text {
+  top: 670px;
+  bottom: 0;
+  height: 290px;
+  z-index: 1;
+}
