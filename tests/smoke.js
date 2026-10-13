@@ -787,16 +787,25 @@ console.log('Nested system accordion regression checks passed.');
   assert(v.contentEl.findClass('marrow-note-ink'), 'Pen canvas must remain present');
   assert(v.contentEl.findClass('marrow-note-page-with-image'),
     'Text should be repositioned below an attached figure');
+  v.contentEl.findText('Pen').handlers.click();
+  const penOnImage = v.contentEl.findClass('marrow-note-ink');
+  penOnImage.handlers.pointerdown({pointerType:'pen',pointerId:21,
+    clientX:100,clientY:110,preventDefault(){}});
+  penOnImage.handlers.pointermove({pointerType:'pen',pointerId:21,
+    clientX:200,clientY:210,preventDefault(){}});
+  penOnImage.handlers.pointerup({pointerType:'pen',pointerId:21});
+  await v.flushNote();
+  assert.equal(v.noteData.strokes.length,2,'Stylus must draw over the attached image');
   const note1 = await writer.readCardNote(imageCard.id);
   assert.equal(note1.text,'Typed explanation stays');
-  assert.equal(note1.strokes.length,1);
+  assert.equal(note1.strokes.length,2);
   assert.equal(note1.image.filename,v.noteData.image.filename);
 
   await v.toggleNote(imageCard);
   await v.toggleNote(imageCard);
   assert(v.contentEl.findClass('marrow-note-reference-image'),
     'Image must render after closing/reopening notes');
-  assert.equal(v.noteData.strokes.length,1,'Ink annotations must persist after reopening');
+  assert.equal(v.noteData.strokes.length,2,'Ink annotations must persist after reopening');
   assert.equal(v.noteData.text,'Typed explanation stays');
 
   // An image chosen from the device replaces the display pointer without
@@ -812,7 +821,7 @@ console.log('Nested system accordion regression checks passed.');
   assert(v.noteData.image.filename.endsWith('.jpg'));
   assert(storage.has('MarrowCards/notes/NOTE-IMAGE-01/images/' + v.noteData.image.filename));
   assert.equal(storage.get(media),png, 'Picking a new image cannot modify approved media');
-  assert.equal(v.noteData.strokes.length,1, 'Replacing image must not clear vector ink');
+  assert.equal(v.noteData.strokes.length,2, 'Replacing image must not clear vector ink');
 
   await v.removeNoteImage(imageCard);
   assert.equal(v.noteData.image,null);
@@ -821,7 +830,7 @@ console.log('Nested system accordion regression checks passed.');
   const remaining = await writer.readCardNote(imageCard.id);
   assert.equal(remaining.image,null);
   assert.equal(remaining.text,'Typed explanation stays');
-  assert.equal(remaining.strokes.length,1);
+  assert.equal(remaining.strokes.length,2);
   assert(![...storage.keys()].some(path => path.startsWith('MarrowCards/packs/')),
     'Personal note images must never enter published packs');
 
