@@ -1100,3 +1100,52 @@ console.log('Nested system accordion regression checks passed.');
   assert(newCss.includes('.marrow-index-question-stats'));
   console.log('Index Questions third-action, hidden answer/media, cumulative accuracy and zero-grade checks passed.');
 })();
+
+
+// Integrated is a single cross-subject Pulmonology tile, with pending question-only
+// entries and the same stable card IDs. Synthetic data only (never source PYQs).
+(function integratedPulmonologyContract() {
+  const approved = {
+    id:'TEST-INTEGRATED-01',type:'pyq',status:'approved',
+    indexIds:['ANAT-TEST','INT-PULM'],question:'Synthetic lung question?',
+    options:['a) First','b) Second'],answer:'Answer key verification pending',
+    answerStatus:'unverified'
+  };
+  let grades = 0;
+  const plugin = {
+    cards:[approved],stats:new Map(),pendingQuestions:[
+      {pyqCode:'TEST-PENDING-01',collectionIndexId:'INT-PULM',
+       questionPreview:'Synthetic respiratory question topic',
+       status:'pulmonology_index_pending'}
+    ],
+    indexes:[
+      {id:'ANAT-TEST',subject:'Anatomy',system:'Thorax',title:'Synthetic Thorax'},
+      {id:'INT-PULM',subject:'Integrated',system:'Pulmonology',title:'Pulmonology'}
+    ],
+    async recordEvent(){grades++;}
+  };
+  const view = new Reviewer(mockLeaf,plugin);
+  view.screen='subjects';
+  view.draw();
+  const integratedButton=view.contentEl.findText('▸  Integrated  ·  1 index');
+  assert(integratedButton,'Integrated should appear as its own subject-level entry');
+  integratedButton.handlers.click();
+  assert(view.contentEl.findText(' Pulmonology'),'Integrated has one Pulmonology tile');
+  const questions=view.contentEl.findText('Questions');
+  assert(questions && !questions.disabled,'Pending questions remain visible through Questions');
+  questions.handlers.click();
+  assert(view.contentEl.findText('TEST-PENDING-01 · Synthetic respiratory question topic'),
+    'Integrated question list includes index-pending entries');
+  view.screen='review';
+  view.selected=new Set(['INT-PULM']);
+  view.sessionKind='review';
+  view.queue=[approved];
+  view.cursor=0;
+  view.flipped=true;
+  view.draw();
+  assert(view.contentEl.findText('Next without grading'),'Unverified key must get no-grade advance');
+  assert(!view.contentEl.findText('Right'),'Unverified key must not get Right grade');
+  assert(!view.contentEl.findText('Wrong'),'Unverified key must not get Wrong grade');
+  assert.equal(grades,0,'Neither pending preview nor drawing an unverified card grades');
+  console.log('Integrated Pulmonology one-tile, pending-only preview and safe no-grade contract passed.');
+})();
