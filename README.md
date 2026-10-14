@@ -177,3 +177,11 @@ Approved card IDs are stable, pack versions increase when edited, and only appro
 - For **new approved cards**, update **only the private data repository** per [the workflow](docs/flashcard-workflow.md); do not bump the public plugin version.
 - See [first-device pilot test checklist](docs/first-device-test.md) for optional regression checks and [media publishing procedure](docs/publishing-approved-cards.md) for binary-image uploads.
 
+
+## Integrated Pulmonology (v0.2.8)
+
+In **MBBS → Subjects → Integrated → Pulmonology**, all linked approved Anatomy, Pediatrics and Medicine respiratory cards appear under one Pulmonology tile, with no subject-level subdivisions. Existing cards keep their unique IDs and local review/notes history; the same card can also appear at its original subject index.
+
+**Questions** includes the reviewed-but-index-pending Medicine PYQ registry and figure-blocked question records alongside active cards. These pending entries show an abbreviated topic label and stable PYQ code, not a fabricated full question, correct option, or review grade. Pending entries are not added to the review queue. Cards labelled with an unverified answer or incomplete source data may be browsed and flipped, but Review advances them without recording Right/Wrong, protecting accuracy statistics.
+
+Updating the private cards uses **Check GitHub → Refresh local**. This new integrated pending-question view additionally requires a BRAT plugin update to v0.2.8 on each device.
