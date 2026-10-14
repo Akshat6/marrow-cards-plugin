@@ -105,6 +105,7 @@ function comparableOptionText(value) {
   return String(value).trim().toLowerCase().replace(/[\s,;:\-–—]+/g, ' ').trim();
 }
 function correctOptionIndex(card) {
+  if (['unverified','source_incomplete'].includes(card.answerStatus)) return -1;
   const options = card.options;
   if (!Array.isArray(options) || options.length < 2 || options.length > 8) return -1;
   const answer = String(card.answer || '').trim();
@@ -389,6 +390,7 @@ class MarrowCardsPlugin extends Plugin {
     if (this.initPromise) await this.initPromise;
     const cards = new Map();
     const indexes = new Map();
+    const pendingQuestions = new Map();
     const files = this.app.vault.getFiles().filter((f) => f.path.startsWith(PACKS + '/') && f.extension === 'json');
     for (const file of files) {
       try {
@@ -396,9 +398,19 @@ class MarrowCardsPlugin extends Plugin {
         for (const card of pack.cards) if (cards.has(card.id)) throw new Error('Duplicate card ID across packs: ' + card.id);
         for (const item of pack.indexes) indexes.set(item.id, item);
         for (const card of pack.cards) cards.set(card.id, card);
+        for (const item of pack.pendingQuestions || []) {
+          if (!item || !safeId(item.pyqCode) || !safeId(item.collectionIndexId) ||
+              !pack.indexes.some(idx => idx.id === item.collectionIndexId) ||
+              !['pulmonology_index_pending','assigned_card_waiting_for_source_image'].includes(item.status) ||
+              typeof item.questionPreview !== 'string' || pendingQuestions.has(item.pyqCode)) {
+            throw new Error('Invalid or duplicate pending question in ' + pack.packId);
+          }
+          pendingQuestions.set(item.pyqCode, item);
+        }
       } catch (err) { console.error('[Marrow Cards] skipped pack', file.path, err); new Notice('Invalid pack: ' + file.name); }
     }
     this.cards = [...cards.values()].sort((a, b) => a.id.localeCompare(b.id));
+    this.pendingQuestions = [...pendingQuestions.values()];
     this.indexes = [...indexes.values()].sort((a, b) => (a.subject || '').localeCompare(b.subject || '') || a.title.localeCompare(b.title));
     await this.loadStats();
   }
@@ -626,6 +638,7 @@ class MarrowCardsView extends ItemView {
       if (showHeadings) container.createEl('h4', { cls: 'marrow-system', text: system });
       for (const idx of group) {
         const cards = this.plugin.cards.filter(card => card.indexIds.includes(idx.id));
+        const pending = (this.plugin.pendingQuestions || []).filter(item => item.collectionIndexId === idx.id);
         const count = cards.length;
         const tile = container.createDiv({ cls: 'marrow-index-tile' });
         const label = tile.createEl('label', { cls: 'marrow-index-name' });
@@ -641,7 +654,8 @@ class MarrowCardsView extends ItemView {
         });
         label.createSpan({ text: ' ' + idx.title });
         tile.createEl('span', { cls: 'marrow-count',
-          text: count ? count + (count === 1 ? ' approved card' : ' approved cards') : 'Awaiting approved cards' });
+          text: (count ? count + (count === 1 ? ' approved card' : ' approved cards') : 'No approved cards') +
+            (pending.length ? ' · ' + pending.length + ' pending questions' : '') });
         const practice = tile.createEl('button', { text: 'Review', cls: 'marrow-start-single' });
         practice.disabled = count === 0;
         practice.addEventListener('click', () => this.startReview([idx.id]));
@@ -663,12 +677,12 @@ class MarrowCardsView extends ItemView {
           text: 'Questions',
           attr: { 'aria-label': 'Show questions in ' + idx.title, 'aria-expanded': 'false' }
         });
-        questionsButton.disabled = count === 0;
+        questionsButton.disabled = count === 0 && pending.length === 0;
         const questionsList = tile.createDiv({ cls: 'marrow-index-question-list' });
         questionsList.hidden = true;
         let expanded = false;
         questionsButton.addEventListener('click', () => {
-          if (!count) return;
+          if (!count && !pending.length) return;
           expanded = !expanded;
           questionsButton.setText(expanded ? 'Hide questions' : 'Questions');
           questionsButton.setAttribute('aria-expanded', String(expanded));
@@ -676,7 +690,7 @@ class MarrowCardsView extends ItemView {
           questionsList.empty();
           if (!expanded) return;
           questionsList.createEl('p', { cls: 'marrow-index-question-heading',
-            text: 'Questions · ' + count + (count === 1 ? ' card' : ' cards') });
+            text: 'Questions · ' + (count + pending.length) + ' total (' + count + ' cards, ' + pending.length + ' pending)' });
           for (const card of cards) {
             const line = questionsList.createDiv({ cls: 'marrow-index-question-row' });
             // No options, answer, explanation, images, source IDs or thumbnails.
@@ -686,6 +700,15 @@ class MarrowCardsView extends ItemView {
               text: 'Accuracy: ' + accuracyPercent(s.right, s.wrong) +
                 '  ·  Seen: ' + s.seen + '  ·  Right: ' + s.right + '  ·  Wrong: ' + s.wrong
             });
+          }
+          for (const item of pending) {
+            const line = questionsList.createDiv({ cls: 'marrow-index-question-row' });
+            line.createEl('div', { cls: 'marrow-index-question-text',
+              text: item.pyqCode + ' · ' + item.questionPreview });
+            line.createEl('div', { cls: 'marrow-index-question-stats',
+              text: item.status === 'pulmonology_index_pending'
+                ? 'Pulmonology confirmed · exact index undecided · abridged topic label'
+                : 'Chapter assigned · original figure still required' });
           }
         });
       }
@@ -805,7 +828,7 @@ class MarrowCardsView extends ItemView {
           groups.get(key).push(idx);
         }
         if (groups.size <= 1) {
-          this.drawIndexChoices(body, subjectIndexes.get(name), updateSubjectLabels);
+          this.drawIndexChoices(body, subjectIndexes.get(name), updateSubjectLabels, name !== 'Integrated');
           return;
         }
         if (!groups.has(this.expandedSystem)) this.expandedSystem = '';
@@ -1401,7 +1424,8 @@ class MarrowCardsView extends ItemView {
   }
   async grade(action) {
     const card = this.queue[this.cursor];
-    if (this.sessionKind === 'browse' || !this.flipped || !card || this.busy || this.answerState) return;
+    if (this.sessionKind === 'browse' || !this.flipped || !card || this.busy || this.answerState ||
+        ['unverified','source_incomplete'].includes(card.answerStatus)) return;
     this.busy = true;
     try {
       await this.flushNote();
@@ -1412,6 +1436,21 @@ class MarrowCardsView extends ItemView {
       this.cursor += 1;
       await this.present();
     } catch (e) { new Notice('Review not saved: ' + e.message); this.draw(); }
+    finally { this.busy = false; }
+  }
+  async skipUnverifiedCard() {
+    const card = this.queue[this.cursor];
+    if (this.sessionKind !== 'review' || !this.flipped || !card || this.busy ||
+        !['unverified','source_incomplete'].includes(card.answerStatus)) return;
+    this.busy = true;
+    try {
+      await this.flushNote();
+      this.notesOpen = false;
+      this.noteData = null;
+      this.noteRevision += 1;
+      this.cursor += 1;
+      await this.present();
+    } catch (e) { new Notice('Could not advance: ' + e.message); }
     finally { this.busy = false; }
   }
   async selectOption(sourceIndex) {
@@ -1512,7 +1551,9 @@ class MarrowCardsView extends ItemView {
           text: 'Tap an option to check it automatically, or flip to assess yourself.' });
       } else if (this.sessionKind === 'review' && (card.options || []).length && this.correctIndex < 0) {
         panel.createEl('p', { cls: 'marrow-hint',
-          text: 'This answer cannot be verified automatically. Flip and grade it manually.' });
+          text: ['unverified','source_incomplete'].includes(card.answerStatus)
+             ? 'Answer/source data unverified. Flip and move to the next card without grading.'
+             : 'This answer cannot be verified automatically. Flip and grade it manually.' });
       }
       for (const sourceIndex of this.optionOrder) {
         const text = card.options[sourceIndex];
@@ -1592,6 +1633,12 @@ class MarrowCardsView extends ItemView {
       next.addEventListener('click', () => void this.nextAfterOption());
     } else {
       const showQuestion = actions.createEl('button', { text: 'Show question', cls: 'marrow-flip-back' });
+      if (['unverified','source_incomplete'].includes(card.answerStatus)) {
+        const next = actions.createEl('button', { text: 'Next without grading', cls: 'mod-cta' });
+        showQuestion.addEventListener('click', () => { this.flipped = false; this.draw(); });
+        next.addEventListener('click', () => void this.skipUnverifiedCard());
+        return;
+      }
       const wrong = actions.createEl('button', { text: 'Wrong', cls: 'marrow-wrong' });
       const right = actions.createEl('button', { text: 'Right', cls: 'marrow-right' });
       // Going back to the question is not a new review attempt.
