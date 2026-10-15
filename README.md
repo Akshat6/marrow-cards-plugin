@@ -185,3 +185,7 @@ In **MBBS → Subjects → Integrated → Pulmonology**, all linked approved Ana
 **Questions** includes the reviewed-but-index-pending Medicine PYQ registry and figure-blocked question records alongside active cards. These pending entries show an abbreviated topic label and stable PYQ code, not a fabricated full question, correct option, or review grade. Pending entries are not added to the review queue. Cards labelled with an unverified answer or incomplete source data may be browsed and flipped, but Review advances them without recording Right/Wrong, protecting accuracy statistics.
 
 Updating the private cards uses **Check GitHub → Refresh local**. This new integrated pending-question view additionally requires a BRAT plugin update to v0.2.8 on each device.
+
+### Check GitHub feedback (v0.2.9)
+
+Manual **Check GitHub** now immediately shows **Checking GitHub for card updates...**. If an earlier sync is still active, tapping again says **A GitHub card check is already in progress** instead of silently returning. After a successful check, it still reports the number of updated packs or that everything is already current; failures continue to display an error. Background automatic checks remain quiet unless they download new packs. This UI change does not edit card packs, source images, notes or per-device review logs.
