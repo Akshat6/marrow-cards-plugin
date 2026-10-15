@@ -529,10 +529,14 @@ class MarrowCardsPlugin extends Plugin {
     return asBinary ? decoded : new TextDecoder().decode(decoded);
   }
   async syncPacks(silent = false) {
-    if (this.initPromise) await this.initPromise;
-    if (this.syncing) return;
+    if (this.syncing) {
+      if (!silent) new Notice('A GitHub card check is already in progress.', 5000);
+      return;
+    }
     this.syncing = true;
+    if (!silent) new Notice('Checking GitHub for card updates...', 4000);
     try {
+      if (this.initPromise) await this.initPromise;
       await this.ensureDirectories();
       const manifest = JSON.parse(await this.fetchGithub('manifest.json'));
       if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.packs)) throw new Error('Bad data repository manifest');
