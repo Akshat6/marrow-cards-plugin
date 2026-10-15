@@ -82,9 +82,10 @@ const mockDocument = {
 };
 const stubModule = { exports: {} };
 const mockLeaf = { app: { vault: { getAbstractFileByPath: () => null } } };
+const capturedNotices = [];
 const mockObsidian = {
   Plugin: class {}, ItemView: class { constructor(leaf) { this.app = leaf.app; this.contentEl = new MockElement(); } },
-  PluginSettingTab: class {}, Setting: class {}, Notice: class {},
+  PluginSettingTab: class {}, Setting: class {}, Notice: class { constructor(message) { capturedNotices.push(String(message)); } },
   requestUrl() {}, base64ToArrayBuffer() {}, normalizePath(p) { return p; }
 };
 vm.runInNewContext(src + '\nmodule.exports.ReviewerForTest = MarrowCardsView;', {
@@ -1149,3 +1150,45 @@ console.log('Nested system accordion regression checks passed.');
   assert.equal(grades,0,'Neither pending preview nor drawing an unverified card grades');
   console.log('Integrated Pulmonology one-tile, pending-only preview and safe no-grade contract passed.');
 })();
+
+
+// Regression: every manual Check GitHub tap gives immediate feedback, even when
+// a previous synchronization is already in progress. Never access private cards.
+(async function manualSyncFeedbackContract() {
+  const PluginClass = stubModule.exports;
+  const alreadyBusy = { syncing: true };
+  const a = capturedNotices.length;
+  await PluginClass.prototype.syncPacks.call(alreadyBusy, false);
+  assert.equal(capturedNotices.length, a + 1, 'Busy manual check must notify instead of silently returning');
+  assert.match(capturedNotices.at(-1), /already in progress/i);
+  assert.equal(alreadyBusy.syncing, true, 'A second manual tap must not disrupt the active sync');
+
+  const noPacks = {
+    syncing: false,
+    initPromise: Promise.resolve(),
+    ensureDirectories: async () => {},
+    fetchGithub: async () => JSON.stringify({ schemaVersion: 1, packs: [] }),
+    refreshOpenViews: async () => {}
+  };
+  const b = capturedNotices.length;
+  const action = PluginClass.prototype.syncPacks.call(noPacks, false);
+  assert.match(capturedNotices.at(-1), /checking github/i,
+    'Manual check should immediately say it has started');
+  await action;
+  assert.equal(noPacks.syncing, false);
+  assert(capturedNotices.slice(b).some(s => /already up to date/i.test(s)),
+    'A successful manual check should give an up-to-date result');
+
+  const rejectedStartup = {
+    syncing: false,
+    initPromise: Promise.reject(new Error('Synthetic startup failure')),
+    ensureDirectories: async () => { throw new Error('Unexpected directory access'); }
+  };
+  const c = capturedNotices.length;
+  await PluginClass.prototype.syncPacks.call(rejectedStartup, false);
+  assert(capturedNotices.slice(c).some(s => /card update failed/i.test(s)),
+    'Startup failure should display an error rather than fail silently');
+  assert.equal(rejectedStartup.syncing, false, 'Startup failure must release syncing flag');
+
+  console.log('Manual GitHub sync busy/start/success/failure notice checks passed.');
+})().catch(error => { console.error(error); process.exitCode = 1; });
