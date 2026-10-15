@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: integrated Pulmonology cross-subject view, index-pending PYQ list and safe unverified-answer browsing.",
+  "description": "Marrow Cards: Integrated Pulmonology plus clear Check GitHub sync notifications.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
