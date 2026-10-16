@@ -178,14 +178,19 @@ reviewer.draw();
 for (const position of ['top', 'bottom']) {
   const group = reviewer.contentEl.findClass('marrow-selection-actions-' + position);
   assert(group, 'Paired action group missing: ' + position);
-  assert.equal(group.children.length, 2, 'Review/Browse should be the only paired actions');
+  assert.equal(group.children.length, 3,
+    'Review/Browse and Clear all selection should share the action group');
   assert.equal(group.children[0].text, 'Review selected indexes (0)');
   assert.equal(group.children[1].text, 'Browse selected indexes (0)');
+  assert.equal(group.children[2].text, 'Clear all selection');
   assert(group.children[0].cls.includes('mod-cta'), 'Review keeps accent button');
   assert(group.children[1].cls.includes('marrow-start-browse-selected'),
     'Browse keeps neutral button');
+  assert(group.children[2].cls.includes('marrow-clear-selection'),
+    'Clear all must be neutral and visually separate from Review');
   assert.equal(group.children[0].disabled, true);
   assert.equal(group.children[1].disabled, true);
+  assert.equal(group.children[2].disabled, true);
 }
 const pairedActionCss = fs.readFileSync('styles.css','utf8');
 assert(!pairedActionCss.includes('.is-mobile .marrow-start-selected { margin-bottom: 110px; }'),
@@ -1192,3 +1197,97 @@ console.log('Nested system accordion regression checks passed.');
 
   console.log('Manual GitHub sync busy/start/success/failure notice checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
+
+
+// v0.2.10: a single tap clears the index selection Set across subjects,
+// including collapsed/filtered sections, and updates all visible controls.
+// It must never delete PYQs, notes, reviews, or trigger a review action.
+(() => {
+  const demoCards = [
+    {id:'CLEAR-A',type:'fact',status:'approved',indexIds:['CLEAR-S1'],
+      question:'Synthetic one?',answer:'First'},
+    {id:'CLEAR-B',type:'fact',status:'approved',indexIds:['CLEAR-S2'],
+      question:'Synthetic two?',answer:'Second'},
+    {id:'CLEAR-C',type:'fact',status:'approved',indexIds:['CLEAR-S3'],
+      question:'Synthetic three?',answer:'Third'}
+  ];
+  const originals = JSON.stringify(demoCards);
+  let events = 0;
+  const demoPlugin = {
+    cards:demoCards,
+    indexes:[
+      {id:'CLEAR-S1',subject:'Alpha',system:'Group 1',title:'First index'},
+      {id:'CLEAR-S2',subject:'Beta',system:'Group 1',title:'Second index'},
+      {id:'CLEAR-S3',subject:'Beta',system:'Group 2',title:'Third index'}
+    ],
+    stats:new Map([['CLEAR-A',{seen:2,right:1,wrong:1}]]),
+    recordEvent(){events++;}
+  };
+  const v = new Reviewer(mockLeaf,demoPlugin);
+  v.screen='subjects';
+  v.draw();
+  const findButton = placement => v.contentEl.findClass('marrow-selection-actions-'+placement)
+    .findText('Clear all selection');
+  assert(findButton('top') && findButton('bottom'));
+  assert(findButton('top').disabled && findButton('bottom').disabled,
+    'Clear selection buttons should be disabled when nothing is selected');
+  v.contentEl.findText('▸  Alpha  ·  1 index').handlers.click();
+  let checkbox = findIndexCheckbox(v.contentEl);
+  assert(checkbox && checkbox.props.attr['aria-label']==='Select First index');
+  checkbox.checked=true; checkbox.handlers.change();
+  v.contentEl.findText('▸  Beta  ·  2 indexes').handlers.click();
+  v.contentEl.findText('▸  Group 1  ·  1 index').handlers.click();
+  checkbox=findIndexCheckbox(v.contentEl);
+  assert(checkbox && checkbox.props.attr['aria-label']==='Select Second index');
+  checkbox.checked=true; checkbox.handlers.change();
+  assert(v.selected.has('CLEAR-S1') && v.selected.has('CLEAR-S2'),
+    'Selection must persist while switching subjects');
+  assert(!findButton('top').disabled && !findButton('bottom').disabled);
+  assert.equal(v.contentEl.findClass('marrow-start-selected-top').text,
+    'Review selected indexes (2)');
+  assert.equal(v.contentEl.findClass('marrow-start-browse-selected').disabled,false);
+
+  // The top Clear action clears the offscreen Alpha index too.
+  findButton('top').handlers.click();
+  assert.equal(v.selected.size,0);
+  assert(v.contentEl.findText('▾  Beta  ·  2 indexes'),
+    'Opened subject should remain opened and its selected count should reset');
+  assert(v.contentEl.findText('▾  Group 1  ·  1 index'),
+    'Expanded system selected count should also reset');
+  checkbox=findIndexCheckbox(v.contentEl);
+  assert(checkbox && !checkbox.checked,'Visible checkbox must update after clearing');
+  for (const pos of ['top','bottom']) {
+    assert(v.contentEl.findClass('marrow-selection-actions-'+pos).findText('Clear all selection').disabled);
+    assert.equal(v.contentEl.findClass('marrow-selection-actions-'+pos).children[0].text,
+      'Review selected indexes (0)');
+    assert.equal(v.contentEl.findClass('marrow-selection-actions-'+pos).children[1].text,
+      'Browse selected indexes (0)');
+    assert(v.contentEl.findClass('marrow-selection-actions-'+pos).children[0].disabled);
+    assert(v.contentEl.findClass('marrow-selection-actions-'+pos).children[1].disabled);
+  }
+  // A second press is a no-op; re-selection should still work.
+  findButton('top').handlers.click();
+  assert.equal(v.selected.size,0);
+  checkbox.checked=true;checkbox.handlers.change();
+  assert(v.selected.has('CLEAR-S2'));
+  v.contentEl.findText('▸  Group 2  ·  1 index').handlers.click();
+  checkbox=findIndexCheckbox(v.contentEl);
+  assert(checkbox && checkbox.props.attr['aria-label']==='Select Third index');
+  checkbox.checked=true;checkbox.handlers.change();
+  assert.equal(v.selected.size,2);
+  v.onlyApprovedIndexes=true;
+  v.draw();
+  assert(!findButton('bottom').disabled,
+    'Clear must remain usable while the approved-only filter is enabled');
+  findButton('bottom').handlers.click();
+  assert.equal(v.selected.size,0,
+    'Bottom button must also clear selections across all subheadings');
+  assert.equal(findButton('bottom').disabled,true);
+  assert.equal(v.onlyApprovedIndexes,true,'Clearing must not change approved-only filter');
+  assert.equal(events,0,'Clear all must not produce review events');
+  assert.equal(JSON.stringify(demoPlugin.cards),originals,'Do not mutate approved card objects');
+  assert.equal(demoPlugin.stats.get('CLEAR-A').right,1,
+    'Clear all must not reset historical accuracy');
+  assert(newCss.includes('.marrow-clear-selection'),'Clear selection styling must be available');
+  console.log('Clear-all selection across subjects/systems, both buttons and no-data-loss checks passed.');
+})();
