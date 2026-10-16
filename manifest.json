@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: Integrated Pulmonology plus clear Check GitHub sync notifications.",
+  "description": "Marrow Cards: Clear all selected indexes across subjects while preserving reviews, notes and cards.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
