@@ -782,12 +782,14 @@ class MarrowCardsView extends ItemView {
       ]));
       const availableSelected = () => [...this.selected].filter(id => approvedIndexIds.has(id));
       const actionButtons = [];
+      const clearButtons = [];
       const updateActions = () => {
         const picked = availableSelected();
         for (const entry of actionButtons) {
           entry.button.setText((entry.kind === 'browse' ? 'Browse' : 'Review') + ' selected indexes (' + picked.length + ')');
           entry.button.disabled = !picked.length;
         }
+        for (const button of clearButtons) button.disabled = this.selected.size === 0;
       };
       const addReviewAction = (container, position, kind = 'review') => {
         const btn = container.createEl('button', {
@@ -806,6 +808,20 @@ class MarrowCardsView extends ItemView {
         const group = el.createDiv({ cls: 'marrow-selection-actions marrow-selection-actions-' + position });
         addReviewAction(group, position, 'review');
         addReviewAction(group, position, 'browse');
+        const clear = group.createEl('button', {
+          cls: 'marrow-clear-selection',
+          text: 'Clear all selection',
+          attr: { 'aria-label': 'Clear all selected indexes' }
+        });
+        clear.addEventListener('click', () => {
+          if (!this.selected.size) return;
+          // Clear selections across *all* subjects, including collapsed or
+          // hidden ones. Rebuild visible checkbox/heading state immediately;
+          // never touch the approved cards, note files or review history.
+          this.selected.clear();
+          this.draw();
+        });
+        clearButtons.push(clear);
       };
       addSelectionActions('top');
 
