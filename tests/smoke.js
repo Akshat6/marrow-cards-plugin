@@ -48,6 +48,17 @@ class MockElement {
   setText(value) { this.text = value; }
   setAttribute(name, value) { this.props.attr = { ...(this.props.attr || {}), [name]: value }; }
   querySelector(selector) { return selector.startsWith('.') ? this.findClass(selector.slice(1)) : null; }
+  querySelectorAll(selector) {
+    if (!selector.startsWith('.')) return [];
+    const cls = selector.slice(1);
+    const found = [];
+    const visit = el => {
+      if (el.cls.split(' ').includes(cls)) found.push(el);
+      for (const child of el.children) visit(child);
+    };
+    visit(this);
+    return found;
+  }
   getContext() {
     return { clearRect(){}, beginPath(){}, moveTo(){}, lineTo(){}, stroke(){},
       arc(){}, fill(){}, lineJoin:'', lineCap:'', strokeStyle:'', fillStyle:'', lineWidth:0 };
@@ -1247,8 +1258,16 @@ console.log('Nested system accordion regression checks passed.');
     'Review selected indexes (2)');
   assert.equal(v.contentEl.findClass('marrow-start-browse-selected').disabled,false);
 
-  // The top Clear action clears the offscreen Alpha index too.
+  // The top Clear action clears the offscreen Alpha index too, while
+  // keeping the current subject scroll position on the long mobile list.
+  v.contentEl.scrollTop = 45;
+  const openedBody = v.contentEl.querySelectorAll('.marrow-accordion-body')
+    .find(el => !el.hidden);
+  openedBody.scrollTop = 120;
   findButton('top').handlers.click();
+  assert.equal(v.contentEl.scrollTop,45);
+  assert.equal(v.contentEl.querySelectorAll('.marrow-accordion-body')
+    .find(el => !el.hidden).scrollTop,120);
   assert.equal(v.selected.size,0);
   assert(v.contentEl.findText('▾  Beta  ·  2 indexes'),
     'Opened subject should remain opened and its selected count should reset');
