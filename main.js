@@ -818,8 +818,18 @@ class MarrowCardsView extends ItemView {
           // Clear selections across *all* subjects, including collapsed or
           // hidden ones. Rebuild visible checkbox/heading state immediately;
           // never touch the approved cards, note files or review history.
+          const libraryScroll = el.scrollTop;
+          const activeBody = Array.from(el.querySelectorAll('.marrow-accordion-body'))
+            .find(body => !body.hidden);
+          const bodyScroll = activeBody?.scrollTop || 0;
           this.selected.clear();
           this.draw();
+          // Re-render resets checkboxes and all subject/system counts; restore
+          // the scrolled location in a long subject list on Android.
+          el.scrollTop = libraryScroll;
+          const refreshedBody = Array.from(el.querySelectorAll('.marrow-accordion-body'))
+            .find(body => !body.hidden);
+          if (refreshedBody) refreshedBody.scrollTop = bodyScroll;
         });
         clearButtons.push(clear);
       };
