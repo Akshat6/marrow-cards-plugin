@@ -28,6 +28,13 @@ For **plugin upgrades or bug fixes** in a new chat, use:
 - Download approved card packs and original image files from the private repository, caching locally for offline access.
 - Sync the vault's downloaded packs/media and separate review logs through Syncthing. The ChatGPT workflow prepares the packs; the plugin does **not** extract PDFs by itself.
 
+## Clear all selected indexes (v0.2.10)
+
+In the **MBBS → Subjects → System/subheading → Indexes** selector, a neutral **Clear all selection** button appears directly below the existing **Review selected indexes (N)** and **Browse selected indexes (N)** controls, both at the top and bottom of the list. It is disabled when no indexes are selected. One tap removes all checked index selections **across every subject and collapsed subheading**, not just the currently visible ones.
+
+The open subject, subheading, approved-only filter and current scroll position stay in place. All visible checkboxes, subject/subheading selected counts, and combined Review/Browse button counts update immediately to zero. You can select indexes again at once; nothing is permanently reset. **No card data, approved packs, notes, images, statistics or review-event logs are changed.** Clearing is only a temporary multi-index selection UI action.
+
+
 ## Question-only index overview and cumulative accuracy (v0.2.7)
 
 From **MBBS → Subject → System/subheading → Index**, each index now shows three actions: **Review**, **Browse**, and **Questions**. **Questions** expands in place to show only approved question *statements*, never option choices, answer keys, solutions/explanations, card IDs or figures. Beside each question, see its **Accuracy, Seen, Right and Wrong** totals from your already stored per-device review events. An unattempted card displays **Accuracy: —** rather than inventing an outcome. Close with **Hide questions**, without altering the selected indexes or creating review events.
