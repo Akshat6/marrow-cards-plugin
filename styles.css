@@ -522,3 +522,23 @@
 .is-mobile .marrow-cards .marrow-index-question-stats {
   flex: 1 1 100%;
 }
+
+
+/* v0.2.10: neutral, touch-friendly deselect-all control in both action groups. */
+.marrow-cards .marrow-selection-actions .marrow-clear-selection {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-weight: 550;
+  touch-action: manipulation;
+}
+.marrow-cards .marrow-selection-actions .marrow-clear-selection:disabled {
+  opacity: 0.55;
+}
