@@ -52,6 +52,15 @@ The GitHub Actions regression test covers a synthetic three-card sequence, DOM `
 5. Confirm switching subjects, collapsing subheadings, selecting indexes across subjects and the approved-only filter still work; no extra blank space or horizontal overflow on Android phone.
 6. After marking a card Right/Wrong, go back to its subject and reopen Questions. The new numbers should reflect the logged result. Repeat after Syncthing completes on the other device.
 
+## v0.2.10 Clear all selection
+
+1. Select an approved index in one subject, open another subject/subheading, and select a second index. Verify both **Review selected indexes** and **Browse selected indexes** counts increase.
+2. Tap **Clear all selection** near the top controls. Confirm *every* selection is cleared (including collapsed subjects), all displayed selected counts reset to zero, and both combined Review/Browse buttons are disabled.
+3. Confirm the currently opened subject and subheading remain expanded, the scroll position does not jump, and the approved-only filter stays unchanged.
+4. Repeat after selecting two other indexes using the **bottom** Clear all selection control. Confirm clearing is disabled when nothing is selected, and that new indexes can be selected immediately afterward.
+5. Reopen a previously reviewed index and check that accuracy, questions, review history and personal notes still exist; clearing should not generate Seen, Right or Wrong events.
+
+
 ## Syncthing phone/tablet
 
 1. Sync the dedicated vault's `MarrowCards/packs/`, `MarrowCards/media/`, `MarrowCards/reviews/`, and **`MarrowCards/notes/`**.
