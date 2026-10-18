@@ -147,3 +147,8 @@ Open GitHub repo Akshat6/marrow-cards-plugin, branch feature/dynamic-recall-groq
 - `dynamicRoundPlan` is derived from existing append-only scores and stable KU IDs with attempt counts, not separate round state. A manually overridden score does not add an attempt. Weak/due priority matters **within** the active round, never overrides the coverage floor. A 31-KU index with 20 attempted has an 11-KU eligible pool even if the requested session size is 25. After all 31 reach 1 attempt, the next session opens Round 2 and prioritizes low scores. Newly verified KUs begin at 0 and catch up.
 - Show clear `Round n, completed/total, remaining` counters at index and integrated collection level. Integrated Pulmonology remains a special approved cross-index KU pool, original IDs and histories shared. Do not introduce arbitrary multi-index selection or offline AI question cache.
 - Daily approximate remaining-question display applies **10%** buffer (e.g., 20 → 18), down from 25%. Still not guaranteed account-wide Groq allowance.
+
+## v0.3.6: Optional KU stats in the index library
+
+- User requested less clutter from the KU counts, round/progress text, scores and attempt statistics on the library screen. The top button toggles visibility globally across normal indexes and Integrated Pulmonology; hidden is default, and Review/Browse remain visible. No data or session logic changes.
+- This new stats toggle is separate from the existing collapsible daily token/API budget. Round details inside Review still explain the current session's eligible KUs; neither history nor review scheduling is changed.
