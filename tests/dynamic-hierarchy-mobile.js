@@ -91,8 +91,8 @@ view.units=units;view.selectedIndex='ANAT-R3-067';view.screen='library';view.dra
 const summaries=walk(view.contentEl,e=>e.tag==='summary').map(e=>e.text);
 assert(summaries.some(x=>x.startsWith('Anatomy')));
 assert(summaries.some(x=>x.startsWith('Integrated')));
-assert(!summaries.some(x=>x.startsWith('Pulmonology')),
-  'Pulmonology itself is a directly actionable integrated tile, not another accordion');
+assert.equal(summaries.filter(x=>x.startsWith('Pulmonology')).length,1,
+  'The single Pulmonology accordion is the normal Medicine system; Integrated Pulmonology is a direct tile');
 const reviews=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review Pulmonology');
 const browses=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse Pulmonology');
 assert.equal(reviews.length,1);assert.equal(browses.length,1);
