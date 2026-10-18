@@ -16,11 +16,11 @@ class Element{
 class ItemView{constructor(leaf){this.app=leaf.app;this.contentEl=new Element();}}
 const fake={Plugin:class{},ItemView,PluginSettingTab:class{},Setting:class{},Notice:class{},normalizePath:x=>x,base64ToArrayBuffer(){}};
 const m={exports:{}};
-vm.runInNewContext(source+'\nmodule.exports.check={validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,dynamicRoundPlan,MarrowDynamicRecallView};',{
+vm.runInNewContext(source+'\nmodule.exports.check={validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,dynamicRoundPlan,dynamicRevisionAnalysis,dynamicRevisionReport,dynamicReviewSummary,MarrowDynamicRecallView};',{
  module:m,exports:m.exports,require:n=>{if(n==='obsidian')return fake;throw Error(n);},
  console,TextDecoder,Promise,Date,JSON,setTimeout,clearTimeout
 });
-const {validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,dynamicRoundPlan,MarrowDynamicRecallView}=m.exports.check;
+const {validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,dynamicRoundPlan,dynamicRevisionAnalysis,dynamicRevisionReport,dynamicReviewSummary,MarrowDynamicRecallView}=m.exports.check;
 function unit(indexId,subject,system,title,n=1,links=[]){
  return {id:'K-TEST-'+indexId+'-'+n,indexId,subject,system,indexTitle:title,
    answer:'synthetic alpha beta',promptTarget:'Recall two facts',verification:'Verified',
@@ -124,6 +124,50 @@ const example20=dynamicUsageForecast({requests:103,grades:55,tokens:12000,
 assert.equal(example20.estimate,20);
 assert.equal(example20.safeEstimate,18,'20 estimated questions must display as 18');
 assert.equal(dynamicUsageForecast({requests:0,grades:0,tokens:0,providerRemainingRequests:null},0).hasSample,false);
+
+// A revision report must connect scores to verified KU headings/locators and
+// avoid treating one high score as durable mastery.
+const sourceUnits=[
+ {...anatomy[0],heading:'Ribs',sourceLocator:'PDF p.1 / Ribs',answer:'SECRET VERIFIED FACT'},
+ {...anatomy[1],heading:'Ribs',sourceLocator:'PDF p.2 / Ribs'},
+ {...anatomy[2],heading:'Pleura',sourceLocator:'PDF p.3 / Pleura'},
+ {...anatomy[3],heading:'Pleura',sourceLocator:'PDF p.4 / Pleura'},
+ {...extra,heading:'Other',sourceLocator:'PDF p.5 / Other'}
+];
+const graded=(i,score,attemptId,at,extra={})=>({
+ type:'graded',attemptId,kuId:sourceUnits[i].id,at,score,
+ grade:score<=3?'wrong':score<=7?'partial':'correct',
+ missing:'',incorrect:'',...extra
+});
+const rows=[
+ graded(0,2,'G1','2026-01-01T10:00:00Z'),
+ graded(0,1,'G2','2026-02-01T10:00:00Z',{missing:'Verified specific qualifier'}),
+ graded(1,9,'G3','2026-01-01T10:00:00Z'),
+ graded(1,10,'G4','2026-02-01T10:00:00Z'),
+ graded(2,5,'G5','2026-01-01T10:00:00Z'),
+ graded(2,9,'G6','2026-02-01T10:00:00Z'),
+ graded(3,9,'G7','2026-02-01T10:00:00Z')
+];
+const analysisHistory=dynamicReviewSummary(rows).attempts;
+const analysis=dynamicRevisionAnalysis(sourceUnits,analysisHistory);
+assert.equal(analysis.total,5);
+assert.equal(analysis.assessed,4);
+for(const category of ['weak','revise','monitor','strong','unseen'])
+ assert.equal(analysis.groups[category].length,1,category);
+assert.equal(analysis.groups.weak[0].heading,'Ribs');
+assert.equal(analysis.groups.strong[0].lastScore,10);
+assert.equal(analysis.headings[0].heading,'Ribs','Weakest note heading first');
+const report=dynamicRevisionReport('Osteology of Thorax','ANAT-R3-067',analysis);
+assert(report.includes('PDF p.1 / Ribs'));
+assert(report.includes('Verified specific qualifier'));
+assert(report.includes('KU-TEST-ANAT-R3-067-1'));
+assert(!report.includes('SECRET VERIFIED FACT'),'Report never exports canonical note answers');
+assert(report.includes('Consistently strong — can defer for now'));
+assert(!report.includes('gsk_'),'No provider token in analysis exports');
+const corrected=rows.concat([{type:'override',attemptId:'G2',score:10,grade:'correct',at:'2026-02-01T10:05:00Z'}]);
+const afterOverride=dynamicRevisionAnalysis(sourceUnits,dynamicReviewSummary(corrected).attempts);
+assert.equal(afterOverride.groups.weak.length,0,'Manual overrides must change analysis without adding attempts');
+assert.equal(afterOverride.groups.revise.length,2,'Past weak score still merits review');
 function walk(el,fn,out=[]){if(fn(el))out.push(el);for(const x of el.children)walk(x,fn,out);return out;}
 const plugin={indexes:catalog,cards,settings:{deviceId:'synthetic-device'}};
 const view=new MarrowDynamicRecallView({app:{}},plugin);
@@ -224,6 +268,21 @@ assert.equal(indexReviewFromBrowse.length,1);
 indexReviewFromBrowse[0].events.click();
 assert.equal(view.screen,'index','Return to original index Review chooser');
 assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text.startsWith('Study ')).length,4);
+view.screen='library';view.draw();
+const gotoAnalysis=walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='Review Anatomy 067')[0];
+gotoAnalysis.events.click();
+assert.equal(view.screen,'index');
+const openAnalysis=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Revision analysis');
+assert.equal(openAnalysis.length,1);
+view.attemptHistory=analysisHistory;
+openAnalysis[0].events.click();
+assert.equal(view.screen,'analysis');
+assert(walk(view.contentEl,e=>e.text.includes('Revision analysis —')).length>0);
+assert(walk(view.contentEl,e=>e.text.includes('Automatically updated Markdown report')).length>0);
+const goBack=walk(view.contentEl,e=>e.tag==='button'&&e.text==='← Back to Review');
+assert.equal(goBack.length,1);
+goBack[0].events.click();
+assert.equal(view.screen,'index');
 view.screen='library';view.draw();
 assert(css.includes('.marrow-dynamic.marrow-dynamic-study.is-answer-focused .marrow-dynamic-header'));
 assert(css.includes('.marrow-dynamic .marrow-dynamic-question'));
