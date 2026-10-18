@@ -1,8 +1,8 @@
 # Dynamic Recall — Phase 1 Groq integration
 
-**Status on 2026-10-18: development branch only. NOT a BRAT release.**
+**Status on 2026-10-18: user approved direct v0.3.0 without beta; release handoff updated. Actual device validation is pending.**
 Branch: feature/dynamic-recall-groq-phase1
-Current installed stable branch: main, plugin version 0.2.10.
+Pre-release stable baseline: main, plugin version 0.2.10. Preserve its release assets indefinitely as rollback.
 
 This file is the canonical **new-chat handoff**. Future developers and ChatGPT sessions must read this file, docs/plugin-maintenance.md, current branch, open PR and live Google Sheets before changing the plugin. Existing PYQ functionality and user data must not be disrupted.
 
@@ -113,3 +113,11 @@ Open GitHub repo Akshat6/marrow-cards-plugin, branch feature/dynamic-recall-groq
 - Source data for test runner are independent common public anatomy/physiology facts ONLY. Private knowledge units, user notes, PYQ packs, proprietary PDFs, user review history and device sync data were never loaded by this test. The audit artifact contains sanitized IDs, numeric scores, pass/fail and token totals; no test key.
 - **Still pending:** larger clinically reviewed sample of actual (privately held) verified KUs, long-run repeated scoring consistency, provider 50–75 grades/day rate/token limits, free-plan billing/rate-limit validation, Android phone and tablet Obsidian experience, Syncthing and offline/restart device testing. Never treat this green test as permission to merge/release.
 - Dedicated key can be revoked by user after no further live testing is desired; the original device-local Obsidian Groq key is separate.
+
+## Direct v0.3.0 release decision (2026-10-18)
+
+- The user explicitly requested an update directly to **Marrow Cards v0.3.0** inside the same existing plugin and rejected a separate beta. The user accepts iterative fixes if devices reveal problems and wants the option to return to the preserved v0.2.10 release.
+- Device-facing Android, restart, Syncthing and actual free-tier 50–75 grading/day tests are **still unverified**. Do not imply otherwise. Controlled Groq audit: 14 real requests, 13 graded answers all in expected ranges, 7,602 tokens; synthetic CI green.
+- The GitHub release assets/tag for 0.2.10 remain available. See [rollback-v0.3.0.md](rollback-v0.3.0.md). Code rollback uses BRAT frozen `0.2.10`, but existing vault data is not automatically reverted. Back up the entire vault and settings **before installing** v0.3.0, especially Syncthing-shared files.
+- Do not remove verified KUs, accepted PYQ cards, private packs, local legacy reviews, notes or media. The newer version must be the same plugin ID and keep both reviewer commands, strictly separate Dynamic Recall logs, and unchanged private KU/approved PYQ database.
+- All postponed features remain out-of-scope until the user asks.
