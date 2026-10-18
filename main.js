@@ -2104,7 +2104,7 @@ class MarrowDynamicRecallView extends ItemView {
     this.queue=[];this.index=0;this.questions=new Map();this.recent=new Map();
     this.stats=new Map();this.usage={requests:0,grades:0,tokens:0};this.typed='';this.result=null;this.busy=false;this.error='';
     this.expandedGroups=new Set();this.completedToday=0;this.browseUnits=[];
-    this.usageExpanded=false;
+    this.usageExpanded=false;this.showIndexDetails=false;
   }
   getViewType(){return DYNAMIC_VIEW_TYPE;}
   getDisplayText(){return 'Dynamic Recall';}
@@ -2254,10 +2254,24 @@ class MarrowDynamicRecallView extends ItemView {
     if(this.busy)el.createEl('p',{cls:'marrow-hint',text:'Working…'});
     if(this.screen==='library'){
       const summary=el.createDiv({cls:'marrow-dynamic-body'});
-      summary.createEl('p',{text:this.units.length+' verified Knowledge Units installed. New KUs are added through the versioned private knowledge pack.'});
+      const controls=summary.createDiv({cls:'marrow-dynamic-library-controls'});
+      const toggle=controls.createEl('button',{
+        text:this.showIndexDetails?'Hide index details':'Show index details',
+        cls:'marrow-dynamic-details-toggle',
+        attr:{'aria-pressed':String(this.showIndexDetails),
+          'aria-label':this.showIndexDetails?'Hide KU counts, round progress and scores':'Show KU counts, round progress and scores'}
+      });
+      toggle.addEventListener('click',()=>{
+        if(this.busy)return;
+        this.showIndexDetails=!this.showIndexDetails;
+        this.draw();
+      });
+      if(this.showIndexDetails)summary.createEl('p',{cls:'marrow-hint',
+        text:this.units.length+' verified Knowledge Units installed. New KUs are added through the versioned private knowledge pack.'});
       if(!this.units.length){summary.createEl('p',{text:'No knowledge units installed. Use Check knowledge units on GitHub. Your PYQ cards are unchanged.'});return;}
       const hierarchy=dynamicLibraryHierarchy(this.units,this.plugin.indexes||[],this.plugin.cards||[]);
-      summary.createEl('p',{cls:'marrow-hint',text:'Ordinary subjects: Subject → System → Index. Integrated systems are direct collections of linked KUs, with no subject subdivision.'});
+      if(this.showIndexDetails)summary.createEl('p',{cls:'marrow-hint',
+        text:'Ordinary subjects: Subject → System → Index. Integrated systems are direct collections of linked KUs, with no subject subdivision.'});
       const drawStats=(target,units)=>{
         const sampled=units.map(u=>this.stats.get(u.id)).filter(Boolean);
         const latest={correct:0,partial:0,wrong:0};
@@ -2279,8 +2293,9 @@ class MarrowDynamicRecallView extends ItemView {
       const drawEntry=(target,entry)=>{
         const line=target.createDiv({cls:'marrow-dynamic-index'});
         line.createEl('h3',{cls:'marrow-dynamic-index-title',
-          text:entry.id+' — '+entry.title+' ('+entry.units.length+' KUs)'});
-        drawStats(line,entry.units);
+          text:entry.id+' — '+entry.title+
+            (this.showIndexDetails?' ('+entry.units.length+' KUs)':'')});
+        if(this.showIndexDetails)drawStats(line,entry.units);
         const actions=line.createDiv({cls:'marrow-toolbar marrow-dynamic-index-actions'});
         const review=actions.createEl('button',{text:'Review '+entry.id,cls:'mod-cta'});
         review.addEventListener('click',()=>{
@@ -2293,8 +2308,9 @@ class MarrowDynamicRecallView extends ItemView {
       };
       const drawCollection=(target,collection)=>{
         const tile=target.createDiv({cls:'marrow-dynamic-integrated-tile'});
-        tile.createEl('h3',{text:collection.title+' · '+collection.units.length+' linked KUs'});
-        drawStats(tile,collection.units);
+        tile.createEl('h3',{text:collection.title+
+          (this.showIndexDetails?' · '+collection.units.length+' linked KUs':'')});
+        if(this.showIndexDetails)drawStats(tile,collection.units);
         const actions=tile.createDiv({cls:'marrow-toolbar'});
         const review=actions.createEl('button',{text:'Review '+collection.title,cls:'mod-cta'});
         review.addEventListener('click',()=>{this.selectedIndex=collection.id;this.screen='collection';this.draw();});
@@ -2305,8 +2321,9 @@ class MarrowDynamicRecallView extends ItemView {
       const drawNode=(target,node)=>{
         const wrapper=target.createEl('details',{cls:'marrow-dynamic-section'});
         wrapper.open=this.expandedGroups.has(node.key);
-        wrapper.createEl('summary',{text:node.label+' · '+node.count+
-          (node.count===1?' collection/index':' collections/indexes')});
+        wrapper.createEl('summary',{text:node.label+
+          (this.showIndexDetails?' · '+node.count+
+            (node.count===1?' collection/index':' collections/indexes'):'')});
         wrapper.addEventListener('toggle',()=>{
           if(wrapper.open)this.expandedGroups.add(node.key);
           else this.expandedGroups.delete(node.key);
@@ -2318,7 +2335,8 @@ class MarrowDynamicRecallView extends ItemView {
       };
       const tree=summary.createDiv({cls:'marrow-dynamic-hierarchy'});
       for(const node of hierarchy)drawNode(tree,node);
-      summary.createEl('p',{cls:'marrow-hint',text:'Review completes every KU in a round before repeating any. Tap Browse for fast, tap-to-reveal prompts without AI calls. Integrated Pulmonology is one linked collection.'});
+      if(this.showIndexDetails)summary.createEl('p',{cls:'marrow-hint',
+        text:'Review completes every KU in a round before repeating any. Tap Browse for fast, tap-to-reveal prompts without AI calls. Integrated Pulmonology is one linked collection.'});
       return;
     }
     if(this.screen==='index'){
