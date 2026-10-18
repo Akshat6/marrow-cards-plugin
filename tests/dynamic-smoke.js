@@ -18,7 +18,7 @@ class ItemView{
   constructor(leaf){this.app=leaf.app;this.contentEl=new Element();}
 }
 let requests=[];
-let responseStyle='partial';
+let responseMode='valid';
 const mockObsidian={
  Plugin:class{},ItemView,
  PluginSettingTab:class{},
@@ -32,9 +32,13 @@ const mockObsidian={
    const body=JSON.parse(r.body);
    assert.equal(body.model,'openai/gpt-oss-20b');
    const isGrade=body.messages[0].content.includes('Grade an MBBS');
+   if(isGrade && responseMode==='rate-limit')return {status:429,json:{error:{message:'Rate limit reached'}}};
+   const grade={score:responseMode==='invalid' ? 11 : 5,
+     correct:'T8',missing:'Central tendon',incorrect:'',
+     feedback:'Correct level; missing the location.'};
    return {status:200,json:{
      choices:[{message:{content:JSON.stringify(isGrade
-       ? {grade:responseStyle,feedback:'T8 present; missing an essential part.',missing:'Central tendon'}
+       ? grade
        : {questions:[{kuId:'KU-TEST-001',question:'At which vertebral level and in what part does a test vessel pass?'}]})}}],
      usage:{total_tokens:174}
    }};
@@ -42,7 +46,9 @@ const mockObsidian={
  base64ToArrayBuffer:noop,normalizePath:x=>x
 };
 const m={exports:{}};
-vm.runInNewContext(source+'\nmodule.exports.dynamicUnderTest={validateDynamicUnits,generateDynamicQuestions,gradeDynamicAnswer,dynamicReviewSummary,dynamicUsageToday,MarrowDynamicRecallView,DYNAMIC_ROOT,DYNAMIC_GROQ_KEY};',{
+vm.runInNewContext(source+'\nmodule.exports.dynamicUnderTest={validateDynamicUnits,generateDynamicQuestions,gradeDynamicAnswer,
+ validatedDynamicGrade,dynamicReviewSummary,dynamicPriority,dynamicUsageToday,
+ MarrowDynamicRecallView,DYNAMIC_ROOT,DYNAMIC_GROQ_KEY};',{
  module:m,exports:m.exports,
  require(name){if(name==='obsidian')return mockObsidian;throw Error('Unexpected dependency '+name);},
  console,TextDecoder,Date,Promise,JSON,setTimeout,clearTimeout
@@ -78,24 +84,69 @@ async function run(){
  assert.equal(requests.length,1,'One API generation call');
  v.typed='T8';
  await v.submit();
+ assert.equal(v.result.score,5);
  assert.equal(v.result.grade,'partial');
+ assert.equal(v.result.correct,'T8');
+ assert.equal(v.result.missing,'Central tendon');
+ assert.equal(v.result.incorrect,'');
+ assert.equal(v.contentEl.children.some(x=>x.tag==='div'),true);
  assert.equal(requests.length,2,'One API grading call');
  const events=await plugin.app.vault.read(vault.getFiles().find(x=>x.path.includes('/attempts/')));
  const recorded=events.trim().split('\n').map(JSON.parse);
  assert.equal(recorded.length,1);
  assert.equal(recorded[0].kuId,'KU-TEST-001');
- await v.override('correct');
+ assert.equal(recorded[0].score,5);
+ assert.equal(recorded[0].grade,'partial');
+ await v.override(9);
+ assert.equal(v.result.score,9);
  assert.equal(v.result.grade,'correct');
+ assert.equal(v.result.overridden,true);
  const summary=U.dynamicReviewSummary((await plugin.app.vault.read(vault.getFiles().find(x=>x.path.includes('/attempts/')))).trim().split('\n').map(JSON.parse));
  assert.equal(summary.totals.get('KU-TEST-001').correct,1);
  assert.equal(summary.totals.get('KU-TEST-001').partial,0);
+ assert.equal(summary.totals.get('KU-TEST-001').lastScore,9);
+ assert.equal(summary.totals.get('KU-TEST-001').scoreSum,9);
+ assert.equal(summary.totals.get('KU-TEST-001').scored,1);
+ const legacy=U.dynamicReviewSummary([{type:'graded',attemptId:'old-one',kuId:'KU-OLD',
+   grade:'partial',at:'2026-10-17T10:00:00Z'}]);
+ assert.equal(legacy.totals.get('KU-OLD').partial,1);
+ assert.equal(legacy.totals.get('KU-OLD').lastScore,null);
+ assert.equal(legacy.totals.get('KU-OLD').scored,0);
+ const now=new Date().toISOString();
+ const exampleStats=new Map([
+   ['KU-LOW',{last:now,lastGrade:'wrong',lastScore:2,correct:0}],
+   ['KU-HIGH',{last:now,lastGrade:'correct',lastScore:10,correct:1}]]);
+ assert(U.dynamicPriority({id:'KU-LOW'},exampleStats) <
+   U.dynamicPriority({id:'KU-HIGH'},exampleStats),'Lower score must be due sooner');
+ for(const badScore of [-1,11,5.5,'5',null]){
+   assert.throws(()=>U.validatedDynamicGrade({score:badScore,
+     correct:'T8',missing:'',incorrect:'',feedback:'Test'}),/Invalid AI 0/);
+ }
  const usage=await U.dynamicUsageToday(plugin);
  assert.equal(usage.requests,2);
  assert.equal(usage.grades,1);
  assert.equal(usage.tokens,348);
+ // A malformed model reply or provider rate limit must preserve typed text and history.
+ v.result=null;
+ v.typed='T8';
+ responseMode='invalid';
+ await v.submit();
+ assert.equal(v.result,null);
+ assert.equal(v.typed,'T8');
+ assert.match(v.error,/Invalid AI 0/);
+ responseMode='rate-limit';
+ await v.submit();
+ assert.equal(v.result,null);
+ assert.equal(v.typed,'T8');
+ assert.match(v.error,/Rate limit reached/);
+ const afterErrors=(await plugin.app.vault.read(vault.getFiles().find(x=>x.path.includes('/attempts/')))).trim().split('\n').map(JSON.parse);
+ assert.equal(afterErrors.length,2,'Failed grading must not append graded attempts');
+ const exhausted=await U.dynamicUsageToday(plugin);
+ assert.equal(exhausted.requests,4,'Failed requests count toward local daily caps');
+ assert.equal(exhausted.grades,3);
  assert(![...files.keys()].some(p=>p.startsWith('MarrowCards/reviews/') || p.startsWith('MarrowCards/notes/') || p.startsWith('MarrowCards/packs/')));
  assert(source.includes("id: 'open-marrow-cards', name: 'Open PYQ Review'"));
  assert(source.includes("id: 'open-marrow-dynamic-recall', name: 'Open Dynamic Recall'"));
- console.log('Dynamic smoke passed: validated KU feed, distinct commands, batch generation, typed grading, override, quota metering, isolated local logs.');
+ console.log('Dynamic smoke passed: validated KU feed, 0-10 scores, evidence, numeric overrides, legacy histories, score priority, malformed/429 errors, quota metering and isolated local logs.');
 }
 run().catch(e=>{console.error(e);process.exitCode=1;});
