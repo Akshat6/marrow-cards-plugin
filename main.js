@@ -37,6 +37,7 @@ function noteImagePlacement(value) {
 
 
 const TOKEN_KEY = 'marrow-cards-github-token';
+const DYNAMIC_PROGRESS_GITHUB_TOKEN = 'marrow-dynamic-progress-github-write-token';
 const REPO = 'Akshat6/marrow-cards-data';
 const ALLOWED_IMAGE = /\.(png|jpe?g|webp|gif)$/i;
 
@@ -1887,6 +1888,93 @@ async function readDynamicEvents(plugin, folder) {
   }
   return rows;
 }
+// Only compact, device-owned numeric outcomes leave Obsidian. Never send
+// questions, student responses, answer keys, source excerpts or AI feedback.
+// Every device writes a distinct file so phone/tablet uploads cannot clobber
+// each other's progress. Aggregate devices in future analysis by KU ID.
+function dynamicProgressSnapshot(units, allEvents, deviceId) {
+  if(!safeId(deviceId))throw new Error('Invalid device ID for progress upload.');
+  const approved=new Map(units.filter(u=>safeId(u.id)&&safeId(u.indexId)).map(u=>[u.id,u]));
+  const mine=(allEvents||[]).filter(e=>e&&e.deviceId===deviceId);
+  const summary=dynamicReviewSummary(mine);
+  const records=[];
+  for(const [id,entry] of summary.totals){
+    const unit=approved.get(id);
+    if(!unit)continue;
+    records.push({kuId:id,indexId:unit.indexId,attempts:entry.attempts,
+      lastScore:validDynamicScore(entry.lastScore)?entry.lastScore:null,
+      lastGrade:['correct','partial','wrong'].includes(entry.lastGrade)?entry.lastGrade:null,
+      lastAt:String(entry.last||'').replace(/[^0-9TZ:.+\-]/g,'').slice(0,40),
+      scoreSum:entry.scoreSum,scored:entry.scored});
+  }
+  records.sort((a,b)=>a.kuId.localeCompare(b.kuId));
+  return {schemaVersion:1,kind:'marrow-dynamic-progress-summary',
+    deviceId,kuCount:records.length,attemptCount:records.reduce((n,x)=>n+x.attempts,0),
+    units:records};
+}
+// ASCII-only JSON payloads (IDs, scores, dates) avoid Node Buffer/browser btoa
+// differences on Android Obsidian. Do not use on arbitrary Unicode note text.
+function dynamicBase64Ascii(value) {
+  const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out='';
+  for(let i=0;i<value.length;i+=3){
+    const a=value.charCodeAt(i),hasB=i+1<value.length,hasC=i+2<value.length;
+    const b=hasB?value.charCodeAt(i+1):0,c=hasC?value.charCodeAt(i+2):0;
+    if(a>127||b>127||c>127)throw new Error('Non-ASCII private progress payload rejected.');
+    out+=chars[a>>2]+chars[((a&3)<<4)|(b>>4)]+
+      (hasB?chars[((b&15)<<2)|(c>>6)]:'=')+
+      (hasC?chars[c&63]:'=');
+  }
+  return out;
+}
+function dynamicWriteToken(plugin){
+  const t=plugin.app.secretStorage?.getSecret?.(DYNAMIC_PROGRESS_GITHUB_TOKEN)||'';
+  return /^github_pat_[A-Za-z0-9_]{15,}$/.test(t)?t:'';
+}
+async function uploadDynamicProgress(plugin) {
+  const token=dynamicWriteToken(plugin);
+  if(!token)return {status:'not-configured'};
+  const deviceId=plugin.settings.deviceId;
+  if(!safeId(deviceId))throw new Error('Invalid local device ID');
+  const file=plugin.app.vault.getAbstractFileByPath(DYNAMIC_UNITS_FILE);
+  if(!file)return {status:'no-units'};
+  const feed=validateDynamicUnits(JSON.parse(await plugin.app.vault.read(file)));
+  const events=await readDynamicEvents(plugin,DYNAMIC_ATTEMPTS);
+  const payload=dynamicProgressSnapshot(feed.units,events,deviceId);
+  // Do not upload an empty profile. Original local log is preserved.
+  if(!payload.attemptCount)return {status:'no-attempts'};
+  const content=JSON.stringify(payload,null,2)+'\n';
+  const destination='progress/by-device/'+deviceId+'.json';
+  const url='https://api.github.com/repos/'+REPO+'/contents/'+destination;
+  const headers={Authorization:'Bearer '+token,Accept:'application/vnd.github+json',
+    'X-GitHub-Api-Version':'2022-11-28'};
+  for(let attempt=0;attempt<3;attempt++){
+    const prior=await requestUrl({url,method:'GET',throw:false,headers});
+    if(prior.status!==200&&prior.status!==404)
+      throw new Error('Private progress lookup failed (HTTP '+prior.status+'). Check fine-grained token repository access.');
+    let sha;
+    if(prior.status===200){
+      const remote=prior.json||{};
+      if(!/^[a-f0-9]{40}$/.test(String(remote.sha||'')))
+        throw new Error('Private progress file has no usable GitHub SHA; refusing overwrite.');
+      sha=remote.sha;
+      if(remote.encoding==='base64'&&typeof remote.content==='string'){
+        const old=new TextDecoder().decode(base64ToArrayBuffer(remote.content.replace(/\s/g,'')));
+        if(old===content)return {status:'unchanged',path:destination,attemptCount:payload.attemptCount};
+      }
+    }
+    const data={message:'progress: update compact Dynamic Recall summary for device '+deviceId,
+      content:dynamicBase64Ascii(content),branch:'main',...(sha?{sha}:{})};
+    const upload=await requestUrl({url,method:'PUT',throw:false,headers:{
+      ...headers,'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(upload.status===200||upload.status===201)
+      return {status:'uploaded',path:destination,attemptCount:payload.attemptCount};
+    if([409,422].includes(upload.status))continue; // optimistic concurrency retry
+    throw new Error('Private progress upload failed (HTTP '+upload.status+').');
+  }
+  throw new Error('Private progress changed during upload; retry on next sync.');
+}
+
 async function dynamicUsageToday(plugin) {
   const day = new Date().toISOString().slice(0,10);
   const rows = (await readDynamicEvents(plugin,DYNAMIC_USAGE)).filter(x=>String(x.at || '').slice(0,10)===day);
