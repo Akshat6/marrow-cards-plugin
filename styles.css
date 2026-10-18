@@ -585,3 +585,106 @@
   color: var(--text-normal);
 }
 .marrow-dynamic-feedback .marrow-toolbar button { min-height: 44px; }
+
+/* v0.3.1 Dynamic Recall: isolated mobile keyboard layout and indexed hierarchy. */
+.marrow-cards.marrow-dynamic {
+  overflow: hidden;
+  min-height: 0;
+}
+.marrow-dynamic .marrow-dynamic-header {
+  flex-shrink: 0;
+}
+.marrow-dynamic .marrow-dynamic-question {
+  box-sizing: border-box;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 44%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+.marrow-dynamic .marrow-dynamic-question h3 {
+  margin: 4px 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.marrow-dynamic .marrow-dynamic-study-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 0 14px;
+}
+.marrow-dynamic .marrow-dynamic-hierarchy {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 14px 0;
+}
+.marrow-dynamic .marrow-dynamic-section {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  min-width: 0;
+  overflow: visible;
+}
+.marrow-dynamic .marrow-dynamic-section > summary {
+  cursor: pointer;
+  list-style-position: inside;
+  overflow-wrap: anywhere;
+  padding: 13px 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  touch-action: manipulation;
+}
+.marrow-dynamic .marrow-dynamic-section > summary::marker {
+  color: var(--text-muted);
+}
+.marrow-dynamic .marrow-dynamic-section-body {
+  padding: 2px 9px 10px;
+}
+.marrow-dynamic .marrow-dynamic-section .marrow-dynamic-section {
+  background: var(--background-primary);
+  margin: 7px 0;
+}
+.marrow-dynamic .marrow-dynamic-index {
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 8px;
+}
+.marrow-dynamic .marrow-dynamic-index button {
+  min-height: 46px;
+}
+.marrow-dynamic .marrow-dynamic-start-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 10px 2px;
+  background: var(--background-primary);
+  border-top: 1px solid var(--background-modifier-border);
+}
+@media (max-width: 600px) {
+  .marrow-dynamic.marrow-dynamic-study.is-answer-focused .marrow-dynamic-header {
+    display: none;
+  }
+  .marrow-dynamic.marrow-dynamic-study .marrow-dynamic-question {
+    max-height: 38%;
+  }
+  .marrow-dynamic.marrow-dynamic-study.is-answer-focused .marrow-dynamic-question {
+    max-height: 43%;
+    padding: 5px 0 8px;
+  }
+  .marrow-dynamic.marrow-dynamic-study.is-answer-focused .marrow-dynamic-question h3 {
+    font-size: 1em;
+    line-height: 1.28;
+  }
+  .marrow-dynamic.marrow-dynamic-study.is-answer-focused .marrow-dynamic-answer {
+    min-height: 86px;
+    height: 115px;
+    max-height: 32vh;
+  }
+  .marrow-dynamic .marrow-dynamic-start-actions button {
+    flex: 1 1 calc(50% - 6px);
+  }
+}
