@@ -160,7 +160,7 @@ assert.equal(analysis.headings[0].heading,'Ribs','Weakest note heading first');
 const report=dynamicRevisionReport('Osteology of Thorax','ANAT-R3-067',analysis);
 assert(report.includes('PDF p.1 / Ribs'));
 assert(report.includes('Verified specific qualifier'));
-assert(report.includes('KU-TEST-ANAT-R3-067-1'));
+assert(report.includes('K-TEST-ANAT-R3-067-1'));
 assert(!report.includes('SECRET VERIFIED FACT'),'Report never exports canonical note answers');
 assert(report.includes('Consistently strong — can defer for now'));
 assert(!report.includes('gsk_'),'No provider token in analysis exports');
