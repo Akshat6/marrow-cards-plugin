@@ -106,6 +106,11 @@ async function run(){
   const v=new U.MarrowDynamicRecallView({app:plugin.app},plugin);
   await v.syncUnits();
   assert.equal(v.units.length,31);
+  const snapshotPath='MarrowCards/dynamic-recall/analysis/synthetic-device/INDEX-SYN-1.md';
+  assert(files.has(snapshotPath),'Automatically creates a local per-device index report on KU load');
+  assert(files.get(snapshotPath).includes('Not yet scored: 31'));
+  const initialRequestCount=requests.length;
+  assert.equal(initialRequestCount,0,'Analysis must not call Groq');
   await v.start(25);
   assert.equal(v.queue.length,25);
   const firstRunIds=v.queue.map(x=>x.id);
@@ -128,11 +133,17 @@ async function run(){
       assert.equal(byKu(kuId).attempts,1);
       assert.equal(byKu(kuId).lastScore,7);
       assert.equal(byKu(kuId).scoreSum,7);
+      assert(files.get(snapshotPath).includes('Latest 7/10'),
+        'Manual override must automatically refresh the saved revision report');
     }
     await v.next();
   }
   assert.equal(v.screen,'finished');
   assert.equal(attempts().filter(x=>x.type==='graded').length,25);
+  assert(files.get(snapshotPath).includes('Scored coverage: 25/31'),
+    'After each graded attempt the report should reflect current coverage');
+  assert(!files.get(snapshotPath).includes('alpha beta'),
+    'Derived reports should not duplicate canonical answers or typed responses');
   assert.deepEqual(generationBatchSizes,[10,10,5]);
   assert.equal(requests.length,28,'25 graded answers + 3 batched generation requests');
 
@@ -142,6 +153,8 @@ async function run(){
   await v2.refresh();
   assert.equal(v2.stats.size,25);
   assert.equal(v2.recent.size,25);
+  assert(files.get(snapshotPath).includes('Scored coverage: 25/31'),
+    'Read-only app restart preserves the latest analysis report');
   for(const id of firstRunIds)assert.equal(v2.recent.get(id).length,1);
   const round1=U.dynamicRoundPlan(v2.units,v2.stats);
   assert.equal(round1.round,1);
