@@ -238,6 +238,9 @@ class MarrowCardsPlugin extends Plugin {
     this.noteWriteQueue = Promise.resolve();
     this.syncing = false;
     this.dynamicWriteQueue = Promise.resolve();
+    this.progressSyncPromise = null;
+    this.progressSyncTimer = null;
+    this.progressSyncStatus = 'Not configured';
 
     // Register the plugin with Obsidian before touching the vault.
     this.registerView(VIEW_TYPE, (leaf) => new MarrowCardsView(leaf, this));
@@ -251,10 +254,13 @@ class MarrowCardsPlugin extends Plugin {
     this.initPromise = this.initializeRuntime();
     this.registerInterval(window.setInterval(() => {
       if (this.settings.autoSync && this.app.secretStorage?.getSecret?.(TOKEN_KEY)) void this.syncPacks(true);
+      // Retry any offline progress upload while Obsidian remains open.
+      this.scheduleDynamicProgressSync(true);
     }, 30 * 60 * 1000));
     this.app.workspace.onLayoutReady(() => {
       void this.initPromise.then(() => {
         if (this.settings.autoSync && this.app.secretStorage?.getSecret?.(TOKEN_KEY)) void this.syncPacks(true);
+        this.scheduleDynamicProgressSync(true);
       });
     });
   }
@@ -274,7 +280,50 @@ class MarrowCardsPlugin extends Plugin {
     }
   }
 
-  onunload() { this.app.workspace.detachLeavesOfType(VIEW_TYPE); this.app.workspace.detachLeavesOfType(DYNAMIC_VIEW_TYPE); }
+  onunload() {
+    if(this.progressSyncTimer!==null)window.clearTimeout(this.progressSyncTimer);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(DYNAMIC_VIEW_TYPE);
+  }
+  scheduleDynamicProgressSync(immediate=false){
+    if(!dynamicWriteToken(this)||this.settings.progressSyncEnabled===false)return;
+    if(this.progressSyncTimer!==null)window.clearTimeout(this.progressSyncTimer);
+    this.progressSyncTimer=window.setTimeout(()=>{
+      this.progressSyncTimer=null;
+      void this.syncDynamicProgress(true);
+    },immediate?0:45*1000);
+  }
+  async syncDynamicProgress(silent=true){
+    if(!dynamicWriteToken(this)){
+      this.progressSyncStatus='Not configured (add private GitHub write token)';
+      if(!silent)new Notice(this.progressSyncStatus);
+      return {status:'not-configured'};
+    }
+    if(this.settings.progressSyncEnabled===false){
+      this.progressSyncStatus='Paused in settings';
+      return {status:'paused'};
+    }
+    if(this.progressSyncPromise)return this.progressSyncPromise;
+    this.progressSyncPromise=(async()=>{
+      try{
+        if(this.initPromise)await this.initPromise;
+        const result=await uploadDynamicProgress(this);
+        this.progressSyncStatus=result.status==='uploaded'?'Synced to private GitHub':
+          result.status==='unchanged'?'Private GitHub already up to date':
+          result.status==='no-attempts'?'No graded attempts to upload yet':
+          result.status==='no-units'?'Download Knowledge Units first':result.status;
+        if(!silent)new Notice('Dynamic Recall progress: '+this.progressSyncStatus);
+        return result;
+      }catch(error){
+        this.progressSyncStatus='Pending retry: '+String(error?.message||error).slice(0,180);
+        if(!silent)new Notice('Private progress sync failed: '+String(error?.message||error).slice(0,140));
+        console.warn('[Dynamic Recall] Private progress sync unsuccessful (retry on next session):',
+          String(error?.message||error));
+        return {status:'failed'};
+      }finally{this.progressSyncPromise=null;}
+    })();
+    return this.progressSyncPromise;
+  }
   async activateDynamicView() {
     let leaf = this.app.workspace.getLeavesOfType(DYNAMIC_VIEW_TYPE)[0];
     if (!leaf) leaf = this.app.workspace.getLeaf('tab');
@@ -1716,6 +1765,52 @@ class MarrowSettingsTab extends PluginSettingTab {
         this.display();
       }));
 
+    containerEl.createEl('h3',{text:'Dynamic Recall — automatic private GitHub progress sync'});
+    containerEl.createEl('p',{text:'Only compact KU IDs, index IDs, numeric scores and attempt counts are uploaded to '+REPO+'/progress/by-device/. No typed answers, questions, note excerpts, API keys, or raw logs are uploaded. Never writes to the public plugin repository. Requires a separate fine-grained token with Contents read/write permission for ONLY the private data repo. This token can modify content in that repository: keep it private and revoke it if a device is lost.'});
+    let pendingProgressToken='';
+    new Setting(containerEl).setName('Private GitHub progress write token (this device only)')
+      .setDesc('Fine-grained token scoped to Akshat6/marrow-cards-data, Contents: Read and write. Different from the existing read-only PYQ token. Stored only in SecretStorage; never paste it in chat.')
+      .addText((input)=>{input.inputEl.type='password';
+        input.setPlaceholder('github_pat_...');
+        input.onChange(v=>{pendingProgressToken=v.trim();});})
+      .addButton(button=>button.setButtonText('Save progress token').onClick(async()=>{
+        if(!/^github_pat_[A-Za-z0-9_]{15,}$/.test(pendingProgressToken)){
+          new Notice('Use a fine-grained GitHub token starting github_pat_, scoped to the private data repository with Contents read/write.');
+          return;
+        }
+        if(!this.app.secretStorage?.setSecret){new Notice('SecretStorage unavailable on this device.');return;}
+        this.app.secretStorage.setSecret(DYNAMIC_PROGRESS_GITHUB_TOKEN,pendingProgressToken);
+        pendingProgressToken='';
+        this.plugin.settings.progressSyncEnabled=true;
+        await this.plugin.saveData(this.plugin.settings);
+        new Notice('Private progress token saved locally. Sync will start automatically.');
+        this.plugin.scheduleDynamicProgressSync(true);
+        this.display();
+      }));
+    new Setting(containerEl).setName('Automatic private progress uploads')
+      .setDesc('Sync after study activity, when a session completes, on startup and periodically while Obsidian is open. Offline uploads are retried later.')
+      .addToggle(t=>t.setValue(this.plugin.settings.progressSyncEnabled!==false).onChange(async value=>{
+        this.plugin.settings.progressSyncEnabled=value;
+        await this.plugin.saveData(this.plugin.settings);
+        if(value)this.plugin.scheduleDynamicProgressSync(true);
+      }));
+    new Setting(containerEl).setName('Private progress upload status')
+      .setDesc(this.plugin.progressSyncStatus||'No upload attempted on this device.')
+      .addButton(button=>button.setButtonText('Sync now').onClick(async()=>{
+        await this.plugin.syncDynamicProgress(false);
+        this.display();
+      }));
+    new Setting(containerEl).setName('Clear private progress write token')
+      .setDesc('Stops this device uploading; does not delete GitHub snapshots or any Obsidian study history.')
+      .addButton(button=>button.setButtonText('Clear progress token').onClick(()=>{
+        this.app.secretStorage?.setSecret?.(DYNAMIC_PROGRESS_GITHUB_TOKEN,'');
+        this.plugin.progressSyncStatus='Not configured';
+        if(this.plugin.progressSyncTimer!==null)window.clearTimeout(this.plugin.progressSyncTimer);
+        this.plugin.progressSyncTimer=null;
+        new Notice('Progress upload token cleared on this device.');
+        this.display();
+      }));
+
     containerEl.createEl('h3', { text: 'Dynamic Recall — Groq free API (experimental)' });
     containerEl.createEl('p', { text: 'Separate from PYQ Review. A Groq key is stored only in local Obsidian SecretStorage. Never put your key in GitHub or a Syncthing vault file. Free-tier availability and limits depend on your Groq account; this plugin never enables billing.' });
     let pendingGroqKey = '';
@@ -2343,6 +2438,7 @@ class MarrowDynamicRecallView extends ItemView {
       this.stats=history.totals;
       this.attemptHistory=history.attempts;
       await this.refreshAnalysisReports();
+      this.plugin.scheduleDynamicProgressSync?.();
       const today=new Date().toISOString().slice(0,10);
       this.completedToday=history.attempts.filter(x=>String(x.at||'').slice(0,10)===today).length;
       this.usage=await dynamicUsageToday(this.plugin);
@@ -2421,6 +2517,7 @@ class MarrowDynamicRecallView extends ItemView {
       const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
       this.stats=history.totals;this.attemptHistory=history.attempts;
       await this.refreshAnalysisReports();
+      this.plugin.scheduleDynamicProgressSync?.();
       this.completedToday++;
       this.usage=await dynamicUsageToday(this.plugin);
     }catch(e){this.error=e.message;new Notice('Dynamic Recall grading failed: '+e.message);}
@@ -2437,12 +2534,13 @@ class MarrowDynamicRecallView extends ItemView {
       const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
       this.stats=history.totals;this.attemptHistory=history.attempts;
       await this.refreshAnalysisReports();
+      this.plugin.scheduleDynamicProgressSync?.();
     }catch(e){this.error=e.message;}finally{this.busy=false;this.draw();}
   }
   async next(){
     if(this.busy||!this.result)return;
     this.index++;this.typed='';this.result=null;this.error='';
-    if(this.index>=this.queue.length){this.screen='finished';this.draw();return;}
+    if(this.index>=this.queue.length){this.screen='finished';this.plugin.scheduleDynamicProgressSync?.(true);this.draw();return;}
     if(!this.questions.has(this.queue[this.index].id))await this.ensureBatch();else this.draw();
   }
   drawUsagePanel(container){
