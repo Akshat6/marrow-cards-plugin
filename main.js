@@ -1875,7 +1875,7 @@ async function callDynamicGroq(plugin, messages, kind) {
     url:DYNAMIC_GROQ_ENDPOINT,method:'POST',throw:false,
     headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
     body:JSON.stringify({model:DYNAMIC_MODEL,messages,temperature:0.15,
-      max_completion_tokens:1100,response_format:{type:'json_object'}})
+      max_completion_tokens:2200,reasoning_effort:'low',response_format:{type:'json_object'}})
   });
   if (response.status !== 200) {
     const body = response.json || {};
@@ -1918,7 +1918,7 @@ class MarrowDynamicRecallView extends ItemView {
   constructor(leaf,plugin){
     super(leaf);this.plugin=plugin;this.units=[];this.selectedIndex='';this.screen='library';
     this.queue=[];this.index=0;this.questions=new Map();this.recent=new Map();
-    this.stats=new Map();this.typed='';this.result=null;this.busy=false;this.error='';
+    this.stats=new Map();this.usage={requests:0,grades:0,tokens:0};this.typed='';this.result=null;this.busy=false;this.error='';
   }
   getViewType(){return DYNAMIC_VIEW_TYPE;}
   getDisplayText(){return 'Dynamic Recall';}
@@ -1929,6 +1929,7 @@ class MarrowDynamicRecallView extends ItemView {
       this.units=file?validateDynamicUnits(JSON.parse(await this.app.vault.read(file))).units:[];
       const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
       this.stats=history.totals;
+      this.usage=await dynamicUsageToday(this.plugin);
       this.recent=new Map();
       for(const e of history.attempts){const a=this.recent.get(e.kuId)||[];a.push(e.question);this.recent.set(e.kuId,a.slice(-3));}
       if(!this.units.some(u=>u.indexId===this.selectedIndex))this.selectedIndex=this.units.length?this.units[0].indexId:'';
@@ -1941,6 +1942,13 @@ class MarrowDynamicRecallView extends ItemView {
     try{
       if(this.plugin.initPromise)await this.plugin.initPromise;
       const remote=validateDynamicUnits(JSON.parse(await this.plugin.fetchGithub('dynamic-recall/knowledge-units.json')));
+      const oldFile=this.app.vault.getAbstractFileByPath(DYNAMIC_UNITS_FILE);
+      if(oldFile){
+        const prior=validateDynamicUnits(JSON.parse(await this.app.vault.read(oldFile)));
+        if(compareVersions(prior.version,remote.version)>0)throw new Error('Remote KU pack version is older; refusing downgrade.');
+        const nextIds=new Set(remote.units.map(u=>u.id));
+        if(prior.units.some(u=>!nextIds.has(u.id)))throw new Error('Remote KU pack omits previously installed IDs; update refused to preserve history.');
+      }
       await this.plugin.ensureFolder(DYNAMIC_ROOT);
       await this.plugin.writeJson(DYNAMIC_UNITS_FILE,remote);
       this.screen='library';this.queue=[];await this.refresh();
@@ -1979,6 +1987,7 @@ class MarrowDynamicRecallView extends ItemView {
         missing:evaluation.missing,model:DYNAMIC_MODEL
       });
       this.result={...evaluation,attemptId};this.stats=(dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS))).totals;
+      this.usage=await dynamicUsageToday(this.plugin);
     }catch(e){this.error=e.message;new Notice('Dynamic Recall grading failed: '+e.message);}
     finally{this.busy=false;this.draw();}
   }
@@ -2012,6 +2021,7 @@ class MarrowDynamicRecallView extends ItemView {
       const summary=el.createDiv({cls:'marrow-dynamic-body'});
       const ids=[...new Set(this.units.map(u=>u.indexId))];
       summary.createEl('p',{text:this.units.length+' verified Knowledge Units installed. New KUs are added through the versioned private knowledge pack; no fixed 157-unit limit.'});
+      summary.createEl('p',{cls:'marrow-hint',text:'Today (UTC): '+this.usage.grades+' / '+DYNAMIC_DAY_GRADE_CAP+' grading calls · '+this.usage.requests+' / '+DYNAMIC_DAY_CALL_CAP+' total AI requests · '+this.usage.tokens+' measured response tokens.'});
       if(!ids.length){summary.createEl('p',{text:'No knowledge units installed. Use Check knowledge units on GitHub. Your PYQ cards are unchanged.'});return;}
       for(const id of ids){
         const one=this.units.filter(u=>u.indexId===id);
