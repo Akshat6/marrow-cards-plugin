@@ -152,3 +152,8 @@ Open GitHub repo Akshat6/marrow-cards-plugin, branch feature/dynamic-recall-groq
 
 - User requested less clutter from the KU counts, round/progress text, scores and attempt statistics on the library screen. The top button toggles visibility globally across normal indexes and Integrated Pulmonology; hidden is default, and Review/Browse remain visible. No data or session logic changes.
 - This new stats toggle is separate from the existing collapsible daily token/API budget. Round details inside Review still explain the current session's eligible KUs; neither history nor review scheduling is changed.
+
+## v0.3.7 — user-confirmed index tile simplification
+
+- Display just verified index title in each Dynamic Recall library tile, no visible index code/ID. Reuse the PYQ Review tile and compact side-by-side Review/Browse buttons (same size/style, with hidden accessible descriptive labels). Integrated Pulmonology matches the compact buttons.
+- Optional expanded stats continue to show round, coverage, scoring and attempts; underlying stable IDs remain in the KU feed and attempt history. No other features or scheduling changes.
