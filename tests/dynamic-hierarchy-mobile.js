@@ -128,6 +128,36 @@ function walk(el,fn,out=[]){if(fn(el))out.push(el);for(const x of el.children)wa
 const plugin={indexes:catalog,cards,settings:{deviceId:'synthetic-device'}};
 const view=new MarrowDynamicRecallView({app:{}},plugin);
 view.units=units;view.selectedIndex='ANAT-R3-067';view.screen='library';view.draw();
+// Index metrics must be hidden by default without hiding Review/Browse actions.
+assert.equal(view.showIndexDetails,false);
+const firstToggle=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Show index details');
+assert.equal(firstToggle.length,1,'One visible top-of-list toggle');
+assert.equal(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-round')).length,0,
+  'Do not clutter the default index list with round statistics');
+assert.equal(walk(view.contentEl,e=>e.text.includes('Average score')).length,0,
+  'All score summaries are hidden by default');
+assert.equal(walk(view.contentEl,e=>e.text.includes('linked KUs')).length,0,
+  'The Integrated title is also compact by default');
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review ANAT-R3-067').length,1);
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse ANAT-R3-067').length,1);
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse Pulmonology').length,1);
+view.expandedGroups.add('/Anatomy');
+firstToggle[0].events.click();
+assert.equal(view.showIndexDetails,true);
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text==='Hide index details').length,1);
+assert(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-round')).length>=5,
+  'All original and Integrated index round progress must reappear');
+assert(walk(view.contentEl,e=>e.text.includes('Average score')).length>=5,
+  'Coverage, score and attempt summaries should reappear');
+assert(walk(view.contentEl,e=>e.text.includes('linked KUs')).length>=1);
+assert(view.expandedGroups.has('/Anatomy'),'Opening group survives toggling');
+const hide=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Hide index details');
+hide[0].events.click();
+assert.equal(view.showIndexDetails,false);
+assert.equal(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-round')).length,0);
+assert.equal(walk(view.contentEl,e=>e.text.includes('Average score')).length,0);
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse Pulmonology').length,1,
+  'Integrated Browse remains accessible after toggling');
 const summaries=walk(view.contentEl,e=>e.tag==='summary').map(e=>e.text);
 assert(summaries.some(x=>x.startsWith('Anatomy')));
 assert(summaries.some(x=>x.startsWith('Integrated')));
@@ -201,4 +231,4 @@ editors[0].events.focus();
 assert(view.contentEl.classes.has('is-answer-focused'));
 editors[0].events.blur();
 assert(!view.contentEl.classes.has('is-answer-focused'));
-console.log('Dynamic hierarchy/mobile regression passed: index and integrated read-only Browse/Review, source KU identity, collapsed top-right usage, 25-percent safety reserve, approved links, phone focus controls.');
+console.log('Dynamic hierarchy/mobile regression passed: index details hidden by default and toggled globally, unaffected Review/Browse, source KU identity, collapsed usage, 10-percent forecast reserve, phone focus controls.');

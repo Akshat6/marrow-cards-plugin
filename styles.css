@@ -817,3 +817,25 @@
   margin: 9px 0;
   line-height: 1.45;
 }
+
+/* v0.3.6: top-of-library details toggle; no change to legacy PYQ or AI usage. */
+.marrow-dynamic .marrow-dynamic-library-controls {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin: 0 0 10px;
+}
+.marrow-dynamic .marrow-dynamic-details-toggle {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-weight: 600;
+  touch-action: manipulation;
+}
+.marrow-dynamic .marrow-dynamic-details-toggle:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
