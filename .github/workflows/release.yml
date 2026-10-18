@@ -1,4 +1,4 @@
-name: Publish BRAT pilot release
+name: Publish Marrow Cards release
 on:
   push:
     branches: [main]
@@ -7,6 +7,9 @@ on:
       - manifest.json
       - styles.css
       - tests/smoke.js
+      - tests/dynamic-smoke.js
+      - tests/dynamic-integration.js
+      - tests/live-groq-eval.js
       - .github/workflows/release.yml
   workflow_dispatch:
 permissions:
@@ -21,6 +24,12 @@ jobs:
           set -euo pipefail
           node --check main.js
           node tests/smoke.js
+          node --check tests/dynamic-smoke.js
+          node --check tests/dynamic-integration.js
+          node --check tests/live-groq-eval.js
+          node tests/dynamic-smoke.js
+          node tests/dynamic-integration.js
+          node tests/live-groq-eval.js --dry-run
           node -e "const m=require('./manifest.json');if(m.id!=='marrow-cards'||!m.version.match(/^[0-9]+[.][0-9]+[.][0-9]+$/))process.exit(1)"
           test -s styles.css
       - name: Create release if this version is new
@@ -34,5 +43,5 @@ jobs:
             exit 0
           fi
           gh release create "$VERSION" main.js manifest.json styles.css \
-            --title "$VERSION" --target "$GITHUB_SHA" --prerelease \
-            --notes "Marrow Cards technical pilot. Test dummy cards on Android before adding real PYQs."
+            --title "$VERSION" --target "$GITHUB_SHA" \
+            --notes "Marrow Cards v0.3.0: existing PYQ Review and separate single-index Groq Dynamic Recall (0–10 scoring, persistent history and manual overrides). Preserve vault backups before updating; v0.2.10 remains available as a frozen-version rollback. Device-specific validation is not yet complete."
