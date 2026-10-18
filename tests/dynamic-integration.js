@@ -22,7 +22,7 @@ const requests=[];
 const generationBatchSizes=[];
 let modelMode='normal';
 let generationSerial=0;
-const makeJson=(content)=>({status:200,json:{
+const makeJson=(content)=>({status:200,headers:{'x-ratelimit-remaining-requests':'123'},json:{
   choices:[{message:{content:JSON.stringify(content)}}],usage:{total_tokens:42}}});
 const fakeObsidian={
  Plugin:class{},ItemView,PluginSettingTab:class{},Setting:class{},
@@ -163,6 +163,12 @@ async function run(){
   }
   assert.equal(byKu('KU-TEST-026').attempts,1);
   assert.equal(requests.length,63);
+  const measured=await U.dynamicUsageToday(plugin);
+  assert.equal(measured.gradeResponses,56);
+  assert.equal(measured.generatedKUs,56);
+  assert.equal(measured.providerRemainingRequests,123);
+  assert.equal(measured.gradeTokens,56*42);
+  assert.equal(measured.generateTokens,7*42);
 
   // A mocked 429 is not a successful grade; original typed answer is preserved.
   const v3=new U.MarrowDynamicRecallView({app:plugin.app},plugin);
