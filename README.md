@@ -1,5 +1,8 @@
 # Marrow Cards — Obsidian plugin for indexed MBBS review
 
+**Dynamic Recall Phase 1 (Groq, development only):** See [docs/dynamic-recall-phase1.md](docs/dynamic-recall-phase1.md) for architecture, current branch, private growing KU feed, zero-disruption requirements, testing status, and cross-chat handoff. This feature is NOT part of the current stable v0.2.10 release. Do not merge or publish without passing legacy and dynamic regression tests plus phone/tablet validation.
+
+
 An offline-first Obsidian flashcard reviewer for **user-approved** MBBS PYQs and personal facts. The public repository contains the **plugin code and instructions**. Approved cards and original images live in the separate, **private** `Akshat6/marrow-cards-data` repository. Android phone/tablet review logs are maintained per device and can sync through Syncthing.
 
 ## New ChatGPT conversation? Start here
