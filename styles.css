@@ -542,3 +542,28 @@
 .marrow-cards .marrow-selection-actions .marrow-clear-selection:disabled {
   opacity: 0.55;
 }
+
+
+/* Dynamic Recall: additive, separate namespace. Legacy review CSS is unchanged. */
+.marrow-dynamic { height:100%; display:flex; flex-direction:column; overflow:auto; padding:12px; box-sizing:border-box; }
+.marrow-dynamic-header { flex:0 0 auto; padding:0 0 12px; }
+.marrow-dynamic-header h2 { margin:8px 0; }
+.marrow-dynamic-header p { color:var(--text-muted); margin:4px 0 10px; }
+.marrow-dynamic-body { flex:1 1 auto; min-height:0; overflow:auto; padding:8px 0 38px; }
+.marrow-dynamic-index { margin:5px 0; }
+.marrow-dynamic-index button { width:100%; white-space:normal; text-align:left; height:auto; padding:12px; }
+.marrow-dynamic-answer { display:block; width:100%; min-height:120px; box-sizing:border-box; padding:12px;
+  margin:12px 0; resize:vertical; font:inherit; background:var(--background-primary);
+  color:var(--text-normal); border:1px solid var(--background-modifier-border); border-radius:8px; }
+.marrow-dynamic-feedback { margin:12px 0; padding:14px; border:1px solid var(--background-modifier-border);
+  border-radius:8px; background:var(--background-secondary); overflow-wrap:anywhere; white-space:pre-wrap; }
+.marrow-dynamic-feedback h3 { margin-top:0; }
+.marrow-dynamic-error { padding:12px; color:var(--text-error); background:var(--background-secondary);
+  border-left:3px solid var(--text-error); overflow-wrap:anywhere; }
+.marrow-dynamic .marrow-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.marrow-dynamic .marrow-toolbar button { min-height:36px; }
+.marrow-dynamic .marrow-dynamic-body > button { min-height:42px; margin-top:9px; width:100%; }
+@media (max-width:480px) {
+  .marrow-dynamic { padding:8px; }
+  .marrow-dynamic .marrow-toolbar button { flex:1 1 auto; white-space:normal; }
+}
