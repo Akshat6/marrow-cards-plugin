@@ -1,0 +1,3 @@
+Authorized opt-in Groq Phase 1 quality audit
+Date: 2026-10-18
+Scope: public synthetic medicine facts only, at most 16 calls. No private KU feed or plugin release.
