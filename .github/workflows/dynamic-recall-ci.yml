@@ -14,11 +14,13 @@ jobs:
         with:
           node-version: '22'
       - name: Static JavaScript syntax
-        run: node --check main.js && node --check tests/smoke.js && node --check tests/dynamic-smoke.js
+        run: node --check main.js && node --check tests/smoke.js && node --check tests/dynamic-smoke.js && node --check tests/dynamic-integration.js
       - name: Legacy PYQ reviewer regression tests
         run: node tests/smoke.js
       - name: Isolated Dynamic Recall regression tests
         run: node tests/dynamic-smoke.js
+      - name: Repeat-session Dynamic Recall integration (synthetic Groq)
+        run: node tests/dynamic-integration.js
       - name: Ensure installed plugin manifest is unchanged during development
         run: |
           node -e "const m=require('./manifest.json'); if(m.version !== '0.2.10') process.exit(1)"
