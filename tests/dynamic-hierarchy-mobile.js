@@ -4,7 +4,7 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const source=fs.readFileSync('main.js','utf8'),css=fs.readFileSync('styles.css','utf8');
 new vm.Script(source);
 class Element{
- constructor(tag='div',props={}){this.tag=tag;this.text=props.text||'';this.children=[];this.classes=new Set(String(props.cls||'').split(/\s+/).filter(Boolean));this.events={};this.value='';this.disabled=false;this.open=false;}
+ constructor(tag='div',props={}){this.tag=tag;this.text=props.text||'';this.children=[];this.classes=new Set(String(props.cls||'').split(/\s+/).filter(Boolean));this.events={};this.attr=props.attr||{};this.value='';this.disabled=false;this.open=false;}
  createEl(tag,props={}){const e=new Element(tag,props);this.children.push(e);return e;}
  createDiv(props={}){return this.createEl('div',props);}
  empty(){this.children=[];this.classes.clear();}
@@ -138,9 +138,19 @@ assert.equal(walk(view.contentEl,e=>e.text.includes('Average score')).length,0,
   'All score summaries are hidden by default');
 assert.equal(walk(view.contentEl,e=>e.text.includes('linked KUs')).length,0,
   'The Integrated title is also compact by default');
-assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review ANAT-R3-067').length,1);
-assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse ANAT-R3-067').length,1);
-assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse Pulmonology').length,1);
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='Review Anatomy 067').length,1);
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='Browse Anatomy 067').length,1);
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='Browse Pulmonology').length,1);
+assert.equal(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-index-title')&&e.text==='Anatomy 067').length,1,
+  'Index title must contain its human-readable name ONLY, not its internal ID or KU count');
+assert.equal(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-index-title')&&e.text.includes('ANAT-R3')).length,0);
+const sampleTile=walk(view.contentEl,e=>e.classes.has('marrow-dynamic-index')&&e.classes.has('marrow-index-tile'))[0];
+assert(sampleTile,'Dynamic index must use existing PYQ index-tile structure');
+const sampleActions=sampleTile.children.filter(e=>e.tag==='button');
+assert.deepEqual(sampleActions.map(e=>e.text),['Review','Browse']);
+assert(sampleActions.every(e=>e.classes.has('marrow-start-single')),
+  'Review and Browse must share the existing PYQ compact button class');
+assert(sampleActions[1].classes.has('marrow-start-browse'));
 view.expandedGroups.add('/Anatomy');
 firstToggle[0].events.click();
 assert.equal(view.showIndexDetails,true);
@@ -149,6 +159,8 @@ assert(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-round')).length>=5,
   'All original and Integrated index round progress must reappear');
 assert(walk(view.contentEl,e=>e.text.includes('Average score')).length>=5,
   'Coverage, score and attempt summaries should reappear');
+assert.equal(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-index-title')&&e.text==='Anatomy 067').length,1,
+  'Turning on details must not add internal IDs to the index title');
 assert(walk(view.contentEl,e=>e.text.includes('linked KUs')).length>=1);
 assert(view.expandedGroups.has('/Anatomy'),'Opening group survives toggling');
 const hide=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Hide index details');
@@ -156,15 +168,15 @@ hide[0].events.click();
 assert.equal(view.showIndexDetails,false);
 assert.equal(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-round')).length,0);
 assert.equal(walk(view.contentEl,e=>e.text.includes('Average score')).length,0);
-assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse Pulmonology').length,1,
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='Browse Pulmonology').length,1,
   'Integrated Browse remains accessible after toggling');
 const summaries=walk(view.contentEl,e=>e.tag==='summary').map(e=>e.text);
 assert(summaries.some(x=>x.startsWith('Anatomy')));
 assert(summaries.some(x=>x.startsWith('Integrated')));
 assert.equal(summaries.filter(x=>x.startsWith('Pulmonology')).length,1,
   'The single Pulmonology accordion is the normal Medicine system; Integrated Pulmonology is a direct tile');
-const reviews=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review Pulmonology');
-const browses=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse Pulmonology');
+const reviews=walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='Review Pulmonology');
+const browses=walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='Browse Pulmonology');
 assert.equal(reviews.length,1);assert.equal(browses.length,1);
 const usageDetails=walk(view.contentEl,e=>e.tag==='details'&&e.classes.has('marrow-dynamic-usage'));
 assert.equal(usageDetails.length,1,'The home must have exactly one compact AI usage disclosure');
@@ -193,8 +205,8 @@ assert.equal(view.screen,'collection');
 const startButtons=walk(view.contentEl,e=>e.tag==='button'&&e.text.startsWith('Study '));
 assert.equal(startButtons.length,4,'Direct Integrated Review presents four session sizes');
 view.screen='library';view.draw();
-const indexReview=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review ANAT-R3-067');
-const indexBrowse=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse ANAT-R3-067');
+const indexReview=walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='Review Anatomy 067');
+const indexBrowse=walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='Browse Anatomy 067');
 assert.equal(indexReview.length,1);
 assert.equal(indexBrowse.length,1,'Every normal index must provide a direct quick Browse action');
 const savedStats=view.stats.size;
@@ -231,4 +243,4 @@ editors[0].events.focus();
 assert(view.contentEl.classes.has('is-answer-focused'));
 editors[0].events.blur();
 assert(!view.contentEl.classes.has('is-answer-focused'));
-console.log('Dynamic hierarchy/mobile regression passed: index details hidden by default and toggled globally, unaffected Review/Browse, source KU identity, collapsed usage, 10-percent forecast reserve, phone focus controls.');
+console.log('Dynamic hierarchy/mobile regression passed: name-only PYQ-sized Review/Browse actions, stats toggle, original KU IDs and history, usage forecast and phone focus controls.');

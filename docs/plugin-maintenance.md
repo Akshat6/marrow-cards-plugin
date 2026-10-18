@@ -117,3 +117,9 @@ A new chat is **not** guaranteed to load repo files or this context automaticall
 - The state survives `draw()` while the current view is open, without modifying Obsidian settings or any saved grade/KU/attempt files. Starting a fresh view defaults to uncluttered navigation.
 - Do not conflate this toggle with the independent Groq daily-usage disclosure. The detailed round progress inside the Review selector remains available because it helps explain how many KUs are eligible in the next session.
 - Regressions should check both toggle states, integrated and ordinary index metadata, preserved accordion state, and no effects on grades, browsing, Groq calls or legacy PYQ.
+
+## v0.3.7 — match existing PYQ index presentation
+
+- User requested the Dynamic Recall list display **index title only**, not `indexId — title (KUs)` or long "Review ANAT-R3-..." button labels. Use `entry.title` as the visible label, preserve `entry.id` as the internal key for sessions and history.
+- Match the **existing PYQ Review** `marrow-index-tile` layout, `marrow-start-single` and `marrow-start-browse` button classes: compact Review/Browse labels, side-by-side where space allows, min-height 40px, suitable wrapping. Integrated Pulmonology receives the same short Review/Browse actions.
+- Index details remain optionally visible via the existing top-level toggle, without mutating scores, progress or verified KU feed. Keep aria-labels naming the associated index for accessibility. Do not change the PYQ reviewer itself.

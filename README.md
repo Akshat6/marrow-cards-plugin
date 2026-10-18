@@ -241,3 +241,7 @@ The Daily AI Usage panel now displays a **10% conservative safety buffer** on it
 ## v0.3.6 — clean index list with optional details
 
 On the **Dynamic Recall index library**, the new top **Show index details / Hide index details** button controls the verbose KU count, round/coverage progress, numeric score averages, correct/partial/wrong counts and total attempts for **all ordinary indexes and Integrated Pulmonology** at once. Details default **hidden** to leave a compact Subject → System → Index list with direct **Review** and **Browse** actions. The switch stays selected while this Dynamic Recall view is open and redrawn; reopening a fresh view starts compact again. Review-session round progress and the separate collapsible Groq daily-usage panel stay available independently. The toggle is view-only: it never removes or changes a KU, grade, attempt or approved PYQ.
+
+## v0.3.7 — Dynamic Recall index cards match PYQ reviewer
+
+Dynamic Recall source indexes now display **only the human-readable index title**, without internal identifiers or KU counts in the heading. Their two short, side-by-side **Review** and **Browse** buttons reuse the original PYQ Review button classes and approximately 40px touch height, instead of the oversized label-filled buttons. Integrated Pulmonology uses the same compact two-action styling. The **Show index details** toggle still independently reveals progress and attempts when desired. Internal index IDs remain untouched for selection, scoring and synchronization; buttons retain accessible descriptions via ARIA labels.
