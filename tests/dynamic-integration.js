@@ -66,7 +66,7 @@ const fakeObsidian={
  normalizePath:x=>x,base64ToArrayBuffer:()=>{}
 };
 const m={exports:{}};
-vm.runInNewContext(source+'\nmodule.exports.dynamicTest={MarrowDynamicRecallView,dynamicReviewSummary,dynamicUsageToday,gradeDynamicAnswer,generateDynamicQuestions};',{
+vm.runInNewContext(source+'\nmodule.exports.dynamicTest={MarrowDynamicRecallView,dynamicReviewSummary,dynamicRoundPlan,dynamicUsageToday,gradeDynamicAnswer,generateDynamicQuestions};',{
  module:m,exports:m.exports,require(name){
    if(name==='obsidian')return fakeObsidian;
    throw Error('Unexpected dependency '+name);
@@ -136,40 +136,74 @@ async function run(){
   assert.deepEqual(generationBatchSizes,[10,10,5]);
   assert.equal(requests.length,28,'25 graded answers + 3 batched generation requests');
 
-  // Reopen: previous attempt history and recent question wording must be recovered.
+  // Reopen midway through Round 1: never re-test scored KUs before finishing
+  // every previously unseen KU, even if first-round scores were very low.
   const v2=new U.MarrowDynamicRecallView({app:plugin.app},plugin);
   await v2.refresh();
   assert.equal(v2.stats.size,25);
   assert.equal(v2.recent.size,25);
   for(const id of firstRunIds)assert.equal(v2.recent.get(id).length,1);
+  const round1=U.dynamicRoundPlan(v2.units,v2.stats);
+  assert.equal(round1.round,1);
+  assert.equal(round1.completed,25);
+  assert.equal(round1.remaining,6);
   await v2.start(31);
-  assert.equal(v2.queue.length,31);
-  assert.equal(v2.queue[0].id,'KU-TEST-026','Previously unseen KU should be prioritized');
-  for(let i=0;i<31;i++){
+  assert.equal(v2.queue.length,6,'Large sessions stop at the current-round boundary');
+  assert(v2.queue.every(x=>!firstRunIds.includes(x.id)),
+    'No low-scored KU should repeat before initial coverage');
+  for(let i=0;i<6;i++){
     const id=v2.queue[v2.index].id;
     v2.typed='alpha beta';
     await v2.submit();
     assert.equal(v2.result.score,10);
+    assert.equal(byKu(id).attempts,1);
     await v2.next();
   }
   assert.equal(v2.screen,'finished');
-  assert.deepEqual(generationBatchSizes,[10,10,5,10,10,10,1]);
-  assert.equal(attempts().filter(x=>x.type==='graded').length,56);
+  assert.equal(attempts().filter(x=>x.type==='graded').length,31);
+  const round2=U.dynamicRoundPlan(v2.units,v2.stats);
+  assert.equal(round2.round,2);
+  assert.equal(round2.completed,0);
+  assert.equal(round2.remaining,31);
+  // Round 2 starts a NEW session. Lower first-round scores get earlier priority.
+  const vRound2=new U.MarrowDynamicRecallView({app:plugin.app},plugin);
+  await vRound2.refresh();
+  await vRound2.start(31);
+  assert.equal(vRound2.queue.length,31);
+  assert.equal(vRound2.stats.get(vRound2.queue[0].id).lastScore,0,
+    'Once all KUs are covered, weak prior attempts are selected first');
+  for(let i=0;i<31;i++){
+    const id=vRound2.queue[vRound2.index].id;
+    vRound2.typed='alpha beta';
+    await vRound2.submit();
+    assert.equal(vRound2.result.score,10);
+    assert.equal(byKu(id).attempts,2);
+    await vRound2.next();
+  }
+  assert.equal(vRound2.screen,'finished');
+  assert.deepEqual(generationBatchSizes,[10,10,5,6,10,10,10,1]);
+  assert.equal(attempts().filter(x=>x.type==='graded').length,62);
   for(const id of firstRunIds){
     const t=byKu(id);
     assert.equal(t.attempts,2,'Repeated KU retains BOTH historical attempts');
     assert.equal(t.lastScore,10,'Latest score reflects improved answer');
     assert(t.scoreSum>=10,'Earlier score still contributes to cumulative total');
   }
-  assert.equal(byKu('KU-TEST-026').attempts,1);
-  assert.equal(requests.length,63);
+  assert.equal(byKu('KU-TEST-026').attempts,2);
+  assert.equal(requests.length,70,'62 graded answers + 8 batched generation calls');
   const measured=await U.dynamicUsageToday(plugin);
-  assert.equal(measured.gradeResponses,56);
-  assert.equal(measured.generatedKUs,56);
+  assert.equal(measured.gradeResponses,62);
+  assert.equal(measured.generatedKUs,62);
   assert.equal(measured.providerRemainingRequests,123);
-  assert.equal(measured.gradeTokens,56*42);
-  assert.equal(measured.generateTokens,7*42);
-
+  assert.equal(measured.gradeTokens,62*42);
+  assert.equal(measured.generateTokens,8*42);
+  // A new version of the private feed adds a KU: it starts at Round 1 while
+  // existing history remains intact and the new KU catches up.
+  const future={...units[0],id:'KU-TEST-032'};
+  const appended=U.dynamicRoundPlan([...vRound2.units,future],vRound2.stats);
+  assert.equal(appended.round,1);
+  assert.equal(appended.remaining,1);
+  assert.equal(appended.eligible[0].id,'KU-TEST-032');
   // A mocked 429 is not a successful grade; original typed answer is preserved.
   const v3=new U.MarrowDynamicRecallView({app:plugin.app},plugin);
   await v3.refresh();
@@ -185,14 +219,14 @@ async function run(){
   modelMode='normal';
   await v3.submit();
   assert.equal(v3.result.score,5);
-  assert.equal(attempts().filter(x=>x.type==='graded').length,57);
+  assert.equal(attempts().filter(x=>x.type==='graded').length,63);
 
   // Device-local hard grading and total-request caps must prevent network calls.
   const usagePath=[...files.keys()].find(p=>p.includes('/usage/'));
   assert(usagePath);
   const now=new Date().toISOString();
   let today=await U.dynamicUsageToday(plugin);
-  assert.equal(today.grades,58,'The failed grade also consumes one request');
+  assert.equal(today.grades,64,'The failed grade also consumes one request');
   const extraGrades=75-today.grades;
   files.set(usagePath,files.get(usagePath)+
     Array.from({length:extraGrades},()=>JSON.stringify({at:now,type:'request',kind:'grade'})).join('\n')+'\n');
@@ -220,6 +254,6 @@ async function run(){
   assert.equal(source.includes("id: 'open-marrow-cards', name: 'Open PYQ Review'"),true);
   assert.equal(source.includes("id: 'open-marrow-dynamic-recall', name: 'Open Dynamic Recall'"),true);
   for(const [path,data] of files)assert(!data.includes('gsk_test'),'Secret persisted in '+path);
-  console.log('Dynamic integration passed: 31 synthetic KUs, 10/10/5 then 10/10/10/1 batches, 57 graded attempts, 2 repeat sessions, numeric overrides, history, 429 recovery, per-day grade and request caps, and PYQ isolation.');
+  console.log('Dynamic integration passed: 31 KUs, Round 1 coverage 25+6 before Round 2 of 31, low-score priority inside Round 2, 63 graded attempts, existing history, quota caps, 429 recovery, and PYQ isolation.');
 }
 run().catch(e=>{console.error(e);process.exitCode=1;});

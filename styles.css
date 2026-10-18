@@ -805,3 +805,15 @@
   }
   .marrow-dynamic .marrow-dynamic-usage > summary { font-size: .78em; }
 }
+
+/* v0.3.5: emphasize coverage-first KU rounds in Dynamic Recall only. */
+.marrow-dynamic .marrow-dynamic-round {
+  font-weight: 650;
+  color: var(--text-normal);
+  background: var(--background-secondary);
+  border-left: 3px solid var(--interactive-accent);
+  border-radius: 5px;
+  padding: 8px 10px;
+  margin: 9px 0;
+  line-height: 1.45;
+}
