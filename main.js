@@ -2074,7 +2074,10 @@ function dynamicUsageForecast(usage, completedToday=0) {
       (usage.tokens+n*averagePerAnswer)>200000)break;
     estimate=n;
   }
-  return {remainingGrades,remainingRequests,averagePerAnswer,estimate,
+  // A quarter of the estimated capacity is reserved as a safety buffer.
+  // Example: if the rough capacity is 20, display only 15.
+  const safeEstimate=Math.floor(estimate*0.75);
+  return {remainingGrades,remainingRequests,averagePerAnswer,estimate,safeEstimate,
     completedToday,hasSample:gradeResponses>=2&&generatedKUs>0,
     nominalFreeTokenHeadroom:Math.max(0,200000-usage.tokens)};
 }
@@ -2084,6 +2087,7 @@ class MarrowDynamicRecallView extends ItemView {
     this.queue=[];this.index=0;this.questions=new Map();this.recent=new Map();
     this.stats=new Map();this.usage={requests:0,grades:0,tokens:0};this.typed='';this.result=null;this.busy=false;this.error='';
     this.expandedGroups=new Set();this.completedToday=0;this.browseUnits=[];
+    this.usageExpanded=false;
   }
   getViewType(){return DYNAMIC_VIEW_TYPE;}
   getDisplayText(){return 'Dynamic Recall';}
@@ -2182,34 +2186,45 @@ class MarrowDynamicRecallView extends ItemView {
   drawUsagePanel(container){
     const u=this.usage;
     const plan=dynamicUsageForecast(u,this.completedToday);
-    const panel=container.createDiv({cls:'marrow-dynamic-usage'});
-    panel.createEl('h3',{text:'Today’s AI usage (UTC)'});
-    panel.createEl('p',{text:'Questions completed: '+plan.completedToday+
+    const panel=container.createEl('details',{cls:'marrow-dynamic-usage'});
+    panel.open=this.usageExpanded;
+    const label=plan.hasSample?
+      '≈ '+plan.safeEstimate+' more questions today (estimate)':
+      'AI usage · estimate pending';
+    panel.createEl('summary',{text:label,
+      attr:{'aria-label':'Expand daily AI usage and question estimate'}});
+    panel.addEventListener('toggle',()=>{this.usageExpanded=panel.open;});
+    const details=panel.createDiv({cls:'marrow-dynamic-usage-body'});
+    details.createEl('h3',{text:'Today’s AI usage (UTC)'});
+    details.createEl('p',{text:'Questions completed: '+plan.completedToday+
       ' · Grading calls: '+u.grades+'/'+DYNAMIC_DAY_GRADE_CAP+
       ' ('+plan.remainingGrades+' local calls left)'});
-    panel.createEl('p',{text:'All AI requests: '+u.requests+'/'+DYNAMIC_DAY_CALL_CAP+
+    details.createEl('p',{text:'All AI requests: '+u.requests+'/'+DYNAMIC_DAY_CALL_CAP+
       ' ('+plan.remainingRequests+' local requests left)'});
-    panel.createEl('p',{text:'Measured tokens today: '+Math.round(u.tokens).toLocaleString()+
+    details.createEl('p',{text:'Measured tokens today: '+Math.round(u.tokens).toLocaleString()+
       ' · Reference free-plan budget: 200,000/day.'});
-    panel.createEl('p',{text:'Illustrative reference token headroom: ~'+
+    details.createEl('p',{text:'Illustrative reference token headroom: ~'+
       plan.nominalFreeTokenHeadroom.toLocaleString()+
       ' tokens (NOT the account’s confirmed remaining allowance).'});
     if(Number.isInteger(u.providerRemainingRequests))
-      panel.createEl('p',{text:'Latest Groq response: '+u.providerRemainingRequests+
+      details.createEl('p',{text:'Latest Groq response: '+u.providerRemainingRequests+
         ' provider requests remaining today, shared across the account at the response time.'});
-    else panel.createEl('p',{cls:'marrow-hint',text:'Groq account-wide remaining requests: unavailable until reported by the API.'});
+    else details.createEl('p',{cls:'marrow-hint',text:'Groq account-wide remaining requests: unavailable until reported by the API.'});
     if(plan.hasSample){
-      panel.createEl('p',{text:'Estimated usage per more question: ~'+
+      details.createEl('p',{text:'Estimated usage per more question: ~'+
         Math.ceil(plan.averagePerAnswer)+' tokens (including a share of batched generation).'});
-      panel.createEl('p',{text:'Roughly '+plan.estimate+' more questions within local safety caps and the indicative token budget.'});
-    }else panel.createEl('p',{text:'Complete a few graded questions to estimate tokens per question and remaining capacity.'});
-    panel.createEl('p',{cls:'marrow-hint',text:'Not a guaranteed Groq quota: usage from other devices, projects, failed requests and minute/day limits can reduce availability. Groq’s token response header is per minute, not per day. No paid fallback.'});
+      details.createEl('p',{text:'Rough capacity: '+plan.estimate+
+        ' questions; displayed conservative estimate: '+plan.safeEstimate+
+        ' (25% reserve, rounded down).'});
+    }else details.createEl('p',{text:'Complete a few graded questions to estimate tokens per question and remaining capacity.'});
+    details.createEl('p',{cls:'marrow-hint',text:'This is not a guaranteed Groq quota: other devices, projects, failed requests and minute/day limits may reduce availability. Groq’s token response header is per minute, not per day. No paid fallback.'});
   }
   draw(){
     const el=this.contentEl;el.empty();el.addClass('marrow-cards');el.addClass('marrow-dynamic');
     if(this.screen==='study')el.addClass('marrow-dynamic-study');
     const h=el.createDiv({cls:'marrow-dynamic-header'});
     h.createEl('h2',{text:'Dynamic Recall'});
+    this.drawUsagePanel(h);
     h.createEl('p',{text:'Separate from approved PYQ Review · 0–10 AI recall scoring · Groq free-tier only · 75 grading calls/day per local quota'});
     const nav=h.createDiv({cls:'marrow-toolbar'});
     const back=nav.createEl('button',{text:'← Select index'});
@@ -2221,20 +2236,9 @@ class MarrowDynamicRecallView extends ItemView {
     if(this.screen==='library'){
       const summary=el.createDiv({cls:'marrow-dynamic-body'});
       summary.createEl('p',{text:this.units.length+' verified Knowledge Units installed. New KUs are added through the versioned private knowledge pack.'});
-      this.drawUsagePanel(summary);
       if(!this.units.length){summary.createEl('p',{text:'No knowledge units installed. Use Check knowledge units on GitHub. Your PYQ cards are unchanged.'});return;}
       const hierarchy=dynamicLibraryHierarchy(this.units,this.plugin.indexes||[],this.plugin.cards||[]);
       summary.createEl('p',{cls:'marrow-hint',text:'Ordinary subjects: Subject → System → Index. Integrated systems are direct collections of linked KUs, with no subject subdivision.'});
-      const picks=[],studyButtons=[];
-      const setSelection=id=>{
-        this.selectedIndex=id;
-        const n=dynamicSelectedUnits(this.units,id,this.plugin.indexes||[],this.plugin.cards||[]).length;
-        for(const entry of picks)entry.button.setText((entry.id===id?'● ':'○ ')+entry.text);
-        for(const entry of studyButtons){
-          entry.button.setText('Study '+Math.min(entry.count,n)+' units');
-          entry.button.disabled=this.busy||!n;
-        }
-      };
       const drawStats=(target,units)=>{
         const sampled=units.map(u=>this.stats.get(u.id)).filter(Boolean);
         const latest={correct:0,partial:0,wrong:0};
@@ -2251,12 +2255,18 @@ class MarrowDynamicRecallView extends ItemView {
       };
       const drawEntry=(target,entry)=>{
         const line=target.createDiv({cls:'marrow-dynamic-index'});
-        const label=entry.id+' — '+entry.title+' ('+entry.units.length+' KUs)';
-        const pick=line.createEl('button',{text:(this.selectedIndex===entry.id?'● ':'○ ')+label});
-        picks.push({id:entry.id,text:label,button:pick});
-        pick.disabled=this.busy;
-        pick.addEventListener('click',()=>setSelection(entry.id));
+        line.createEl('h3',{cls:'marrow-dynamic-index-title',
+          text:entry.id+' — '+entry.title+' ('+entry.units.length+' KUs)'});
         drawStats(line,entry.units);
+        const actions=line.createDiv({cls:'marrow-toolbar marrow-dynamic-index-actions'});
+        const review=actions.createEl('button',{text:'Review '+entry.id,cls:'mod-cta'});
+        review.addEventListener('click',()=>{
+          this.selectedIndex=entry.id;this.screen='index';this.draw();
+        });
+        const browse=actions.createEl('button',{text:'Browse '+entry.id});
+        browse.addEventListener('click',()=>{
+          this.selectedIndex=entry.id;this.browseUnits=entry.units;this.screen='browse';this.draw();
+        });
       };
       const drawCollection=(target,collection)=>{
         const tile=target.createDiv({cls:'marrow-dynamic-integrated-tile'});
@@ -2285,15 +2295,25 @@ class MarrowDynamicRecallView extends ItemView {
       };
       const tree=summary.createDiv({cls:'marrow-dynamic-hierarchy'});
       for(const node of hierarchy)drawNode(tree,node);
-      const row=summary.createDiv({cls:'marrow-toolbar marrow-dynamic-start-actions'});
+      summary.createEl('p',{cls:'marrow-hint',text:'Tap Review on any index to choose a written-recall session. Tap Browse for fast, tap-to-reveal KU prompts without AI calls. Integrated Pulmonology is one combined collection.'});
+      return;
+    }
+    if(this.screen==='index'){
+      const target=el.createDiv({cls:'marrow-dynamic-body'});
+      const entry=dynamicSelectedUnits(this.units,this.selectedIndex);
+      const title=entry[0]?.indexTitle||this.selectedIndex;
+      target.createEl('h3',{text:title+' — Review'});
+      target.createEl('p',{text:entry.length+' verified KUs in '+this.selectedIndex+'.'});
+      const row=target.createDiv({cls:'marrow-toolbar marrow-dynamic-start-actions'});
       for(const count of [10,25,50,75]){
-        const n=dynamicSelectedUnits(this.units,this.selectedIndex,this.plugin.indexes||[],this.plugin.cards||[]).length;
-        const button=row.createEl('button',{text:'Study '+Math.min(count,n)+' units'});
-        button.disabled=this.busy||!n;
+        const button=row.createEl('button',{text:'Study '+Math.min(count,entry.length)+' units'});
+        button.disabled=this.busy||!entry.length;
         button.addEventListener('click',()=>void this.start(count));
-        studyButtons.push({button,count});
       }
-      summary.createEl('p',{cls:'marrow-hint',text:'For ordinary subjects choose one index. Integrated Review uses its linked KU collection without duplicating medical facts or recorded attempts; generated questions are still batched in groups of up to 10.'});
+      const browse=target.createEl('button',{text:'Browse '+this.selectedIndex});
+      browse.addEventListener('click',()=>{
+        this.browseUnits=entry;this.screen='browse';this.draw();
+      });
       return;
     }
     if(this.screen==='collection'){
@@ -2303,7 +2323,6 @@ class MarrowDynamicRecallView extends ItemView {
       if(!collection){target.createEl('p',{text:'Integrated collection unavailable. Refresh Knowledge Units.'});return;}
       target.createEl('h3',{text:collection.title+' — Review'});
       target.createEl('p',{text:collection.units.length+' linked knowledge units in one integrated collection. No subject or index selection required.'});
-      this.drawUsagePanel(target);
       const row=target.createDiv({cls:'marrow-toolbar marrow-dynamic-start-actions'});
       for(const count of [10,25,50,75]){
         const b=row.createEl('button',{text:'Study '+Math.min(count,collection.units.length)+' units'});
@@ -2315,16 +2334,18 @@ class MarrowDynamicRecallView extends ItemView {
     }
     if(this.screen==='browse'){
       const target=el.createDiv({cls:'marrow-dynamic-body'});
-      target.createEl('h3',{text:'Browse integrated knowledge units (read-only)'});
       const collection=dynamicIntegratedCollections(this.units,this.plugin.indexes||[],this.plugin.cards||[])
         .find(x=>x.id===this.selectedIndex);
-      const units=collection?.units||this.browseUnits;
-      target.createEl('p',{cls:'marrow-hint',text:units.length+' linked verified KUs · No AI requests, grading or history changes.'});
-      const review=target.createEl('button',{text:'Review '+(collection?.title||'collection')});
-      review.addEventListener('click',()=>{this.screen='collection';this.draw();});
+      const units=collection?.units||dynamicSelectedUnits(this.units,this.selectedIndex);
+      const label=collection?.title||(units[0]?.indexTitle||this.selectedIndex);
+      target.createEl('h3',{text:'Quick Browse — '+label});
+      target.createEl('p',{cls:'marrow-hint',text:units.length+
+        ' KU-based recall prompts. Tap a prompt to reveal its verified answer. These are source-grounded quick prompts, not AI-generated question wordings; browsing consumes no AI requests or grades.'});
+      const review=target.createEl('button',{text:collection?'Review '+collection.title:'Review '+this.selectedIndex});
+      review.addEventListener('click',()=>{this.screen=collection?'collection':'index';this.draw();});
       for(const unit of units){
         const card=target.createEl('details',{cls:'marrow-dynamic-browse-unit'});
-        card.createEl('summary',{text:(unit.promptTarget||unit.indexTitle||unit.id)});
+        card.createEl('summary',{text:unit.promptTarget||unit.indexTitle||unit.id});
         card.createEl('p',{text:'Verified answer: '+unit.answer});
         if(unit.sourceExcerpt)card.createEl('p',{cls:'marrow-hint',text:'Source: '+unit.sourceExcerpt});
       }
