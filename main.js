@@ -2346,7 +2346,9 @@ class MarrowDynamicRecallView extends ItemView {
       await appendDynamicJsonl(this.plugin,DYNAMIC_ATTEMPTS,{type:'override',
         attemptId:this.result.attemptId,score,grade});
       this.result.score=score;this.result.grade=grade;this.result.overridden=true;
-      this.stats=(dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS))).totals;
+      const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
+      this.stats=history.totals;this.attemptHistory=history.attempts;
+      await this.refreshAnalysisReports();
     }catch(e){this.error=e.message;}finally{this.busy=false;this.draw();}
   }
   async next(){
