@@ -1934,7 +1934,7 @@ async function callDynamicGroq(plugin, messages, kind, unitCount=1) {
   const headers=response.headers||{};
   const remainingRaw=Object.entries(headers).find(([key])=>
     String(key).toLowerCase()==='x-ratelimit-remaining-requests');
-  const providerRemainingRequests=remainingRaw&&/^\\d+$/.test(String(remainingRaw[1]))
+  const providerRemainingRequests=remainingRaw&&/^\d+$/.test(String(remainingRaw[1]))
     ? Number(remainingRaw[1]):null;
   await appendDynamicJsonl(plugin,DYNAMIC_USAGE,{type:'response',kind,unitCount,
     tokens:result.usage && result.usage.total_tokens || 0,
