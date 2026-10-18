@@ -98,6 +98,8 @@ const browses=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse Pulmonol
 assert.equal(reviews.length,1);assert.equal(browses.length,1);
 assert(walk(view.contentEl,e=>e.text==='Today’s AI usage (UTC)').length>0,
   'Daily usage panel must be visible on the Dynamic Recall home screen');
+assert(walk(view.contentEl,e=>e.text.includes('Illustrative reference token headroom:')).length>0,
+  'Daily token reference headroom must be displayed and never called a verified Groq quota');
 browses[0].events.click();
 assert.equal(view.screen,'browse');
 assert.equal(view.selectedIndex,'INT-PULM');

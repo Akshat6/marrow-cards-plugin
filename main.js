@@ -2189,8 +2189,11 @@ class MarrowDynamicRecallView extends ItemView {
       ' ('+plan.remainingGrades+' local calls left)'});
     panel.createEl('p',{text:'All AI requests: '+u.requests+'/'+DYNAMIC_DAY_CALL_CAP+
       ' ('+plan.remainingRequests+' local requests left)'});
-    panel.createEl('p',{text:'Measured tokens: '+Math.round(u.tokens).toLocaleString()+
-      ' · Reference free-plan daily budget: 200,000 tokens (NOT a measured balance).'});
+    panel.createEl('p',{text:'Measured tokens today: '+Math.round(u.tokens).toLocaleString()+
+      ' · Reference free-plan budget: 200,000/day.'});
+    panel.createEl('p',{text:'Illustrative reference token headroom: ~'+
+      plan.nominalFreeTokenHeadroom.toLocaleString()+
+      ' tokens (NOT the account’s confirmed remaining allowance).'});
     if(Number.isInteger(u.providerRemainingRequests))
       panel.createEl('p',{text:'Latest Groq response: '+u.providerRemainingRequests+
         ' provider requests remaining today, shared across the account at the response time.'});
