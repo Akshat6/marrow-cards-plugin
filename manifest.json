@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: PYQ Review and Dynamic Recall with integrated Pulmonology review and daily usage estimates.",
+  "description": "Marrow Cards: PYQ Review and Dynamic Recall, with index quick Browse and conservative daily AI estimates.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }

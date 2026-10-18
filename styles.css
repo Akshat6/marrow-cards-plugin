@@ -734,3 +734,74 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* v0.3.4: compact, collapsible AI estimate; no oversized usage block by default. */
+.marrow-dynamic .marrow-dynamic-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 8px;
+}
+.marrow-dynamic .marrow-dynamic-header > p,
+.marrow-dynamic .marrow-dynamic-header > .marrow-toolbar {
+  grid-column: 1 / -1;
+}
+.marrow-dynamic .marrow-dynamic-header > h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.marrow-dynamic .marrow-dynamic-header .marrow-dynamic-usage {
+  align-self: start;
+  justify-self: end;
+  min-width: 0;
+  max-width: 100%;
+  margin: 2px 0;
+  padding: 0;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+}
+.marrow-dynamic .marrow-dynamic-usage > summary {
+  cursor: pointer;
+  font-size: var(--font-ui-small);
+  font-weight: 650;
+  padding: 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--text-accent);
+  touch-action: manipulation;
+}
+.marrow-dynamic .marrow-dynamic-header .marrow-dynamic-usage[open] {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-self: stretch;
+}
+.marrow-dynamic .marrow-dynamic-header .marrow-dynamic-usage-body {
+  padding: 0 12px 12px;
+  font-size: var(--font-ui-small);
+}
+.marrow-dynamic .marrow-dynamic-index-title {
+  font-size: 1.02em;
+  line-height: 1.4;
+  margin: 8px 0 4px;
+  overflow-wrap: anywhere;
+}
+.marrow-dynamic .marrow-dynamic-index-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.marrow-dynamic .marrow-dynamic-index .marrow-dynamic-index-actions button {
+  flex: 1 1 130px;
+  width: auto;
+  min-height: 46px;
+  text-align: center;
+  padding: 8px 10px;
+}
+@media (max-width: 480px) {
+  .marrow-dynamic .marrow-dynamic-header {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 52%);
+  }
+  .marrow-dynamic .marrow-dynamic-usage > summary { font-size: .78em; }
+}

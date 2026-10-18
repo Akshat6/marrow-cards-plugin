@@ -80,9 +80,16 @@ assert.equal(est.remainingGrades,65);
 assert.equal(est.remainingRequests,114);
 assert.equal(est.averagePerAnswer,622);
 assert.equal(est.estimate,65,'Keep estimated questions inside local 75 grade/125 request caps');
+assert.equal(est.safeEstimate,48,'Leave a 25 percent safety margin, rounded down');
 const constrained=dynamicUsageForecast({requests:11,grades:10,tokens:6220,
   gradeResponses:10,gradeTokens:5000,generateTokens:1220,generatedKUs:10,providerRemainingRequests:3},10);
 assert.equal(constrained.estimate,2,'Account header RPD remaining must constrain local estimate');
+assert.equal(constrained.safeEstimate,1,'Safety margin applies after account constraint');
+const example20=dynamicUsageForecast({requests:103,grades:55,tokens:12000,
+  gradeResponses:55,gradeTokens:11000,generateTokens:1000,generatedKUs:55,
+  providerRemainingRequests:null},55);
+assert.equal(example20.estimate,20);
+assert.equal(example20.safeEstimate,15,'20 estimated questions must display as 15');
 assert.equal(dynamicUsageForecast({requests:0,grades:0,tokens:0,providerRemainingRequests:null},0).hasSample,false);
 function walk(el,fn,out=[]){if(fn(el))out.push(el);for(const x of el.children)walk(x,fn,out);return out;}
 const plugin={indexes:catalog,cards,settings:{deviceId:'synthetic-device'}};
@@ -96,8 +103,19 @@ assert.equal(summaries.filter(x=>x.startsWith('Pulmonology')).length,1,
 const reviews=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review Pulmonology');
 const browses=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse Pulmonology');
 assert.equal(reviews.length,1);assert.equal(browses.length,1);
+const usageDetails=walk(view.contentEl,e=>e.tag==='details'&&e.classes.has('marrow-dynamic-usage'));
+assert.equal(usageDetails.length,1,'The home must have exactly one compact AI usage disclosure');
+assert.equal(usageDetails[0].open,false,'Large usage details must be collapsed by default');
 assert(walk(view.contentEl,e=>e.text==='Today’s AI usage (UTC)').length>0,
-  'Daily usage panel must be visible on the Dynamic Recall home screen');
+  'Daily usage details must remain available on demand');
+assert(walk(usageDetails[0],e=>e.tag==='summary'&&e.text.includes('estimate pending')).length===1,
+  'No token estimate until valid daily grading sample');
+usageDetails[0].open=true;usageDetails[0].events.toggle();
+assert.equal(view.usageExpanded,true);
+view.draw();
+assert.equal(walk(view.contentEl,e=>e.tag==='details'&&e.classes.has('marrow-dynamic-usage'))[0].open,true,
+  'Disclosure preference must survive harmless view refreshes');
+view.usageExpanded=false;view.draw();
 assert(walk(view.contentEl,e=>e.text.includes('Illustrative reference token headroom:')).length>0,
   'Daily token reference headroom must be displayed and never called a verified Groq quota');
 browses[0].events.click();
@@ -111,6 +129,26 @@ reviewFromBrowse[0].events.click();
 assert.equal(view.screen,'collection');
 const startButtons=walk(view.contentEl,e=>e.tag==='button'&&e.text.startsWith('Study '));
 assert.equal(startButtons.length,4,'Direct Integrated Review presents four session sizes');
+view.screen='library';view.draw();
+const indexReview=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review ANAT-R3-067');
+const indexBrowse=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse ANAT-R3-067');
+assert.equal(indexReview.length,1);
+assert.equal(indexBrowse.length,1,'Every normal index must provide a direct quick Browse action');
+const savedStats=view.stats.size;
+indexBrowse[0].events.click();
+assert.equal(view.screen,'browse');
+assert.equal(view.selectedIndex,'ANAT-R3-067');
+const quickCards=walk(view.contentEl,e=>e.tag==='details'&&e.classes.has('marrow-dynamic-browse-unit'));
+assert.equal(quickCards.length,2,'Index browse must include only this original index KUs');
+assert.equal(quickCards[0].open,false,'Answers should be hidden until tapped');
+assert(quickCards.every(x=>walk(x,e=>e.tag==='summary'&&e.text==='Recall two facts').length===1),
+  'Browse front is a verified KU recall target, not an invented AI question');
+assert.equal(view.stats.size,savedStats,'Browse must leave recall scores and attempts unchanged');
+const indexReviewFromBrowse=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review ANAT-R3-067');
+assert.equal(indexReviewFromBrowse.length,1);
+indexReviewFromBrowse[0].events.click();
+assert.equal(view.screen,'index','Return to original index Review chooser');
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.text.startsWith('Study ')).length,4);
 view.screen='library';view.draw();
 assert(css.includes('.marrow-dynamic.marrow-dynamic-study.is-answer-focused .marrow-dynamic-header'));
 assert(css.includes('.marrow-dynamic .marrow-dynamic-question'));
@@ -130,4 +168,4 @@ editors[0].events.focus();
 assert(view.contentEl.classes.has('is-answer-focused'));
 editors[0].events.blur();
 assert(!view.contentEl.classes.has('is-answer-focused'));
-console.log('Dynamic hierarchy/mobile regression passed: one Integrated Pulmonology Review/Browse collection, source-index KU identity, approved Medicine/Pediatrics links, usage forecast and limits, no auto-tag inference, phone focus controls.');
+console.log('Dynamic hierarchy/mobile regression passed: index and integrated read-only Browse/Review, source KU identity, collapsed top-right usage, 25-percent safety reserve, approved links, phone focus controls.');
