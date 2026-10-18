@@ -51,3 +51,11 @@
 “Read `https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md` and its linked flashcard workflow. Then prepare cards for **[subject / index ID / index name]** from my live index mapping and available PDFs. Show me the exact cards for approval; do not publish until I approve.”
 
 A new generic ChatGPT chat is **not guaranteed to load GitHub files automatically**. It needs this entry-point link or equivalent instruction. Once read, this file and the linked workflow replace dependence on any prior conversation.
+
+## New-chat Dynamic Recall ingestion and score-analysis workflow (v0.3.8)
+
+For **new Marrow notes/PDFs → connected Google Sheet → source-verified private KUs → Obsidian**, read [docs/dynamic-recall-new-index-handoff.md](docs/dynamic-recall-new-index-handoff.md) first. It specifies the actual workbook, live SOP/QA tabs, current private feed, approval/source checks, and what must be logged. Older PYQ/approved-card workflows remain separate. No raw note facts or user attempt logs are allowed in the public plugin repo.
+
+For questions about **weak/strong portions in an index**, the plugin produces **local derived Markdown reports** from actual scores at `MarrowCards/dynamic-recall/analysis/<device-id>/<index-id>.md`. The user must attach the report in a new chat (plus the original note source if a full audit is wanted); GitHub alone does not expose private device-local scores. Reports are not proof of clinical mastery and do not replace source verification.
+
+**New chat prompt:** "Read `https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md` and the linked Dynamic Recall new-index handoff. Open the live workbook SOP and my source PDFs, reconcile and verify the index/KUs before storing or publishing anything. Use attached local analysis report if I ask which areas to revise."
