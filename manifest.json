@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: existing PYQ Review plus single-index Groq Dynamic Recall with 0–10 AI scoring.",
+  "description": "Marrow Cards: PYQ Review and Dynamic Recall with phone keyboard fix and subject/integrated index navigation.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
