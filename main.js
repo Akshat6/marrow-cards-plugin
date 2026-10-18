@@ -2242,6 +2242,7 @@ class MarrowDynamicRecallView extends ItemView {
     this.stats=new Map();this.usage={requests:0,grades:0,tokens:0};this.typed='';this.result=null;this.busy=false;this.error='';
     this.expandedGroups=new Set();this.completedToday=0;this.browseUnits=[];
     this.usageExpanded=false;this.showIndexDetails=false;
+    this.attemptHistory=[];this.analysisReturn='index';this.analysisWriteError='';
   }
   getViewType(){return DYNAMIC_VIEW_TYPE;}
   getDisplayText(){return 'Dynamic Recall';}
@@ -2252,6 +2253,8 @@ class MarrowDynamicRecallView extends ItemView {
       this.units=file?validateDynamicUnits(JSON.parse(await this.app.vault.read(file))).units:[];
       const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
       this.stats=history.totals;
+      this.attemptHistory=history.attempts;
+      await this.refreshAnalysisReports();
       const today=new Date().toISOString().slice(0,10);
       this.completedToday=history.attempts.filter(x=>String(x.at||'').slice(0,10)===today).length;
       this.usage=await dynamicUsageToday(this.plugin);
@@ -2262,6 +2265,16 @@ class MarrowDynamicRecallView extends ItemView {
       this.error='';
     }catch(e){this.error=e.message;this.units=[];}
     this.draw();
+  }
+  async refreshAnalysisReports(){
+    try{
+      this.analysisWriteError='';
+      await saveDynamicAnalysisReports(this.plugin,this.units,this.attemptHistory,
+        this.plugin.indexes||[],this.plugin.cards||[]);
+    }catch(error){
+      this.analysisWriteError=String(error&&error.message||error);
+      console.warn('[Dynamic Recall] Local analysis snapshot unavailable:',error);
+    }
   }
   async syncUnits(){
     if(this.busy)return;this.busy=true;this.draw();
@@ -2316,7 +2329,10 @@ class MarrowDynamicRecallView extends ItemView {
         correct:evaluation.correct,missing:evaluation.missing,incorrect:evaluation.incorrect,
         feedback:evaluation.feedback,model:DYNAMIC_MODEL
       });
-      this.result={...evaluation,attemptId};this.stats=(dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS))).totals;
+      this.result={...evaluation,attemptId};
+      const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
+      this.stats=history.totals;this.attemptHistory=history.attempts;
+      await this.refreshAnalysisReports();
       this.completedToday++;
       this.usage=await dynamicUsageToday(this.plugin);
     }catch(e){this.error=e.message;new Notice('Dynamic Recall grading failed: '+e.message);}
@@ -2501,6 +2517,10 @@ class MarrowDynamicRecallView extends ItemView {
       browse.addEventListener('click',()=>{
         this.browseUnits=entry;this.screen='browse';this.draw();
       });
+      const analysis=target.createEl('button',{text:'Revision analysis'});
+      analysis.addEventListener('click',()=>{
+        this.analysisReturn='index';this.screen='analysis';this.draw();
+      });
       return;
     }
     if(this.screen==='collection'){
@@ -2521,6 +2541,66 @@ class MarrowDynamicRecallView extends ItemView {
       }
       const browse=target.createEl('button',{text:'Browse '+collection.title});
       browse.addEventListener('click',()=>{this.browseUnits=collection.units;this.screen='browse';this.draw();});
+      const analysis=target.createEl('button',{text:'Revision analysis'});
+      analysis.addEventListener('click',()=>{
+        this.analysisReturn='collection';this.screen='analysis';this.draw();
+      });
+      return;
+    }
+    if(this.screen==='analysis'){
+      const target=el.createDiv({cls:'marrow-dynamic-body marrow-dynamic-analysis'});
+      const collection=dynamicIntegratedCollections(this.units,this.plugin.indexes||[],this.plugin.cards||[])
+        .find(x=>x.id===this.selectedIndex);
+      const units=collection?.units||dynamicSelectedUnits(this.units,this.selectedIndex);
+      const title=collection?.title||units[0]?.indexTitle||this.selectedIndex;
+      const report=dynamicRevisionAnalysis(units,this.attemptHistory);
+      target.createEl('h3',{text:'Revision analysis — '+title});
+      target.createEl('p',{cls:'marrow-hint',text:'Computed locally from your original KU scores, corrected overrides, note headings and source locators. No Groq call. Based on verified Marrow-derived KUs, not unseen portions of the original PDF.'});
+      target.createEl('p',{cls:'marrow-dynamic-round',text:
+        report.assessed+'/'+report.total+' scored · '+report.groups.weak.length+
+        ' urgent · '+report.groups.revise.length+' revise next · '+
+        report.groups.strong.length+' consistently strong'});
+      const top=report.headings.filter(x=>x.weak||x.revise);
+      if(top.length){
+        target.createEl('h4',{text:'Weakest note headings'});
+        for(const h of top.slice(0,12))target.createEl('p',{cls:'marrow-hint',text:
+          h.heading+' · '+h.weak+' urgent · '+h.revise+' revisit'});
+      }
+      const kinds=[
+        ['weak','Revise first'],['revise','Revise next'],
+        ['monitor','Monitor / confirm'],
+        ['strong','Strong — can defer for now'],
+        ['unseen','Not assessed yet']
+      ];
+      for(const [key,label] of kinds){
+        const items=report.groups[key];
+        const section=target.createEl('details',{cls:'marrow-dynamic-analysis-group'});
+        section.open=key==='weak';
+        section.createEl('summary',{text:label+' · '+items.length});
+        const content=section.createDiv();
+        if(!items.length)content.createEl('p',{cls:'marrow-hint',text:'None currently.'});
+        for(const item of items){
+          const card=content.createDiv({cls:'marrow-dynamic-analysis-item'});
+          card.createEl('strong',{text:item.heading+' — '+item.target});
+          card.createEl('p',{cls:'marrow-hint',text:
+            (item.lastScore===null?(item.attempts?'Prior category: '+item.lastGrade:'Not scored'):
+              'Latest '+item.lastScore+'/10')+
+            ' · '+item.attempts+' attempts'+
+            (item.sourceLocator?' · '+item.sourceLocator:'')});
+          if((key==='weak'||key==='revise')&&item.latestMissing)
+            card.createEl('p',{cls:'marrow-hint',text:'AI-marked missing: '+item.latestMissing});
+          if((key==='weak'||key==='revise')&&item.latestIncorrect)
+            card.createEl('p',{cls:'marrow-hint',text:'AI-marked incorrect: '+item.latestIncorrect});
+        }
+      }
+      target.createEl('p',{cls:'marrow-hint',text:'Strong means two most recent numerical grades ≥8/10; it is not a permanent exemption from spaced revision. AI feedback can be imperfect; check the verified source.'});
+      const path=DYNAMIC_ANALYSIS+'/'+this.plugin.settings.deviceId+'/'+this.selectedIndex+'.md';
+      target.createEl('p',{cls:'marrow-hint',text:this.analysisWriteError?
+        'Local report saving failed: '+this.analysisWriteError:
+        'Automatically updated Markdown report in your vault: '+path+
+        '. To discuss scores in a new chat, attach that report; ChatGPT cannot automatically read your device vault.'});
+      const back=target.createEl('button',{text:'← Back to Review'});
+      back.addEventListener('click',()=>{this.screen=this.analysisReturn;this.draw();});
       return;
     }
     if(this.screen==='browse'){
