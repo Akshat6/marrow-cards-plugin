@@ -37,6 +37,7 @@ function noteImagePlacement(value) {
 
 
 const TOKEN_KEY = 'marrow-cards-github-token';
+const DYNAMIC_PROGRESS_GITHUB_TOKEN = 'marrow-dynamic-progress-github-write-token';
 const REPO = 'Akshat6/marrow-cards-data';
 const ALLOWED_IMAGE = /\.(png|jpe?g|webp|gif)$/i;
 
@@ -237,6 +238,9 @@ class MarrowCardsPlugin extends Plugin {
     this.noteWriteQueue = Promise.resolve();
     this.syncing = false;
     this.dynamicWriteQueue = Promise.resolve();
+    this.progressSyncPromise = null;
+    this.progressSyncTimer = null;
+    this.progressSyncStatus = 'Not configured';
 
     // Register the plugin with Obsidian before touching the vault.
     this.registerView(VIEW_TYPE, (leaf) => new MarrowCardsView(leaf, this));
@@ -250,10 +254,13 @@ class MarrowCardsPlugin extends Plugin {
     this.initPromise = this.initializeRuntime();
     this.registerInterval(window.setInterval(() => {
       if (this.settings.autoSync && this.app.secretStorage?.getSecret?.(TOKEN_KEY)) void this.syncPacks(true);
+      // Retry any offline progress upload while Obsidian remains open.
+      this.scheduleDynamicProgressSync(true);
     }, 30 * 60 * 1000));
     this.app.workspace.onLayoutReady(() => {
       void this.initPromise.then(() => {
         if (this.settings.autoSync && this.app.secretStorage?.getSecret?.(TOKEN_KEY)) void this.syncPacks(true);
+        this.scheduleDynamicProgressSync(true);
       });
     });
   }
@@ -273,7 +280,50 @@ class MarrowCardsPlugin extends Plugin {
     }
   }
 
-  onunload() { this.app.workspace.detachLeavesOfType(VIEW_TYPE); this.app.workspace.detachLeavesOfType(DYNAMIC_VIEW_TYPE); }
+  onunload() {
+    if(this.progressSyncTimer!==null)window.clearTimeout(this.progressSyncTimer);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(DYNAMIC_VIEW_TYPE);
+  }
+  scheduleDynamicProgressSync(immediate=false){
+    if(!dynamicWriteToken(this)||this.settings.progressSyncEnabled===false)return;
+    if(this.progressSyncTimer!==null)window.clearTimeout(this.progressSyncTimer);
+    this.progressSyncTimer=window.setTimeout(()=>{
+      this.progressSyncTimer=null;
+      void this.syncDynamicProgress(true);
+    },immediate?0:45*1000);
+  }
+  async syncDynamicProgress(silent=true){
+    if(!dynamicWriteToken(this)){
+      this.progressSyncStatus='Not configured (add private GitHub write token)';
+      if(!silent)new Notice(this.progressSyncStatus);
+      return {status:'not-configured'};
+    }
+    if(this.settings.progressSyncEnabled===false){
+      this.progressSyncStatus='Paused in settings';
+      return {status:'paused'};
+    }
+    if(this.progressSyncPromise)return this.progressSyncPromise;
+    this.progressSyncPromise=(async()=>{
+      try{
+        if(this.initPromise)await this.initPromise;
+        const result=await uploadDynamicProgress(this);
+        this.progressSyncStatus=result.status==='uploaded'?'Synced to private GitHub':
+          result.status==='unchanged'?'Private GitHub already up to date':
+          result.status==='no-attempts'?'No graded attempts to upload yet':
+          result.status==='no-units'?'Download Knowledge Units first':result.status;
+        if(!silent)new Notice('Dynamic Recall progress: '+this.progressSyncStatus);
+        return result;
+      }catch(error){
+        this.progressSyncStatus='Pending retry: '+String(error?.message||error).slice(0,180);
+        if(!silent)new Notice('Private progress sync failed: '+String(error?.message||error).slice(0,140));
+        console.warn('[Dynamic Recall] Private progress sync unsuccessful (retry on next session):',
+          String(error?.message||error));
+        return {status:'failed'};
+      }finally{this.progressSyncPromise=null;}
+    })();
+    return this.progressSyncPromise;
+  }
   async activateDynamicView() {
     let leaf = this.app.workspace.getLeavesOfType(DYNAMIC_VIEW_TYPE)[0];
     if (!leaf) leaf = this.app.workspace.getLeaf('tab');
@@ -1715,6 +1765,52 @@ class MarrowSettingsTab extends PluginSettingTab {
         this.display();
       }));
 
+    containerEl.createEl('h3',{text:'Dynamic Recall — automatic private GitHub progress sync'});
+    containerEl.createEl('p',{text:'Only compact KU IDs, index IDs, numeric scores and attempt counts are uploaded to '+REPO+'/progress/by-device/. No typed answers, questions, note excerpts, API keys, or raw logs are uploaded. Never writes to the public plugin repository. Requires a separate fine-grained token with Contents read/write permission for ONLY the private data repo. This token can modify content in that repository: keep it private and revoke it if a device is lost.'});
+    let pendingProgressToken='';
+    new Setting(containerEl).setName('Private GitHub progress write token (this device only)')
+      .setDesc('Fine-grained token scoped to Akshat6/marrow-cards-data, Contents: Read and write. Different from the existing read-only PYQ token. Stored only in SecretStorage; never paste it in chat.')
+      .addText((input)=>{input.inputEl.type='password';
+        input.setPlaceholder('github_pat_...');
+        input.onChange(v=>{pendingProgressToken=v.trim();});})
+      .addButton(button=>button.setButtonText('Save progress token').onClick(async()=>{
+        if(!/^github_pat_[A-Za-z0-9_]{15,}$/.test(pendingProgressToken)){
+          new Notice('Use a fine-grained GitHub token starting github_pat_, scoped to the private data repository with Contents read/write.');
+          return;
+        }
+        if(!this.app.secretStorage?.setSecret){new Notice('SecretStorage unavailable on this device.');return;}
+        this.app.secretStorage.setSecret(DYNAMIC_PROGRESS_GITHUB_TOKEN,pendingProgressToken);
+        pendingProgressToken='';
+        this.plugin.settings.progressSyncEnabled=true;
+        await this.plugin.saveData(this.plugin.settings);
+        new Notice('Private progress token saved locally. Sync will start automatically.');
+        this.plugin.scheduleDynamicProgressSync(true);
+        this.display();
+      }));
+    new Setting(containerEl).setName('Automatic private progress uploads')
+      .setDesc('Sync after study activity, when a session completes, on startup and periodically while Obsidian is open. Offline uploads are retried later.')
+      .addToggle(t=>t.setValue(this.plugin.settings.progressSyncEnabled!==false).onChange(async value=>{
+        this.plugin.settings.progressSyncEnabled=value;
+        await this.plugin.saveData(this.plugin.settings);
+        if(value)this.plugin.scheduleDynamicProgressSync(true);
+      }));
+    new Setting(containerEl).setName('Private progress upload status')
+      .setDesc(this.plugin.progressSyncStatus||'No upload attempted on this device.')
+      .addButton(button=>button.setButtonText('Sync now').onClick(async()=>{
+        await this.plugin.syncDynamicProgress(false);
+        this.display();
+      }));
+    new Setting(containerEl).setName('Clear private progress write token')
+      .setDesc('Stops this device uploading; does not delete GitHub snapshots or any Obsidian study history.')
+      .addButton(button=>button.setButtonText('Clear progress token').onClick(()=>{
+        this.app.secretStorage?.setSecret?.(DYNAMIC_PROGRESS_GITHUB_TOKEN,'');
+        this.plugin.progressSyncStatus='Not configured';
+        if(this.plugin.progressSyncTimer!==null)window.clearTimeout(this.plugin.progressSyncTimer);
+        this.plugin.progressSyncTimer=null;
+        new Notice('Progress upload token cleared on this device.');
+        this.display();
+      }));
+
     containerEl.createEl('h3', { text: 'Dynamic Recall — Groq free API (experimental)' });
     containerEl.createEl('p', { text: 'Separate from PYQ Review. A Groq key is stored only in local Obsidian SecretStorage. Never put your key in GitHub or a Syncthing vault file. Free-tier availability and limits depend on your Groq account; this plugin never enables billing.' });
     let pendingGroqKey = '';
@@ -1887,6 +1983,93 @@ async function readDynamicEvents(plugin, folder) {
   }
   return rows;
 }
+// Only compact, device-owned numeric outcomes leave Obsidian. Never send
+// questions, student responses, answer keys, source excerpts or AI feedback.
+// Every device writes a distinct file so phone/tablet uploads cannot clobber
+// each other's progress. Aggregate devices in future analysis by KU ID.
+function dynamicProgressSnapshot(units, allEvents, deviceId) {
+  if(!safeId(deviceId))throw new Error('Invalid device ID for progress upload.');
+  const approved=new Map(units.filter(u=>safeId(u.id)&&safeId(u.indexId)).map(u=>[u.id,u]));
+  const mine=(allEvents||[]).filter(e=>e&&e.deviceId===deviceId);
+  const summary=dynamicReviewSummary(mine);
+  const records=[];
+  for(const [id,entry] of summary.totals){
+    const unit=approved.get(id);
+    if(!unit)continue;
+    records.push({kuId:id,indexId:unit.indexId,attempts:entry.attempts,
+      lastScore:validDynamicScore(entry.lastScore)?entry.lastScore:null,
+      lastGrade:['correct','partial','wrong'].includes(entry.lastGrade)?entry.lastGrade:null,
+      lastAt:String(entry.last||'').replace(/[^0-9TZ:.+\-]/g,'').slice(0,40),
+      scoreSum:entry.scoreSum,scored:entry.scored});
+  }
+  records.sort((a,b)=>a.kuId.localeCompare(b.kuId));
+  return {schemaVersion:1,kind:'marrow-dynamic-progress-summary',
+    deviceId,kuCount:records.length,attemptCount:records.reduce((n,x)=>n+x.attempts,0),
+    units:records};
+}
+// ASCII-only JSON payloads (IDs, scores, dates) avoid Node Buffer/browser btoa
+// differences on Android Obsidian. Do not use on arbitrary Unicode note text.
+function dynamicBase64Ascii(value) {
+  const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out='';
+  for(let i=0;i<value.length;i+=3){
+    const a=value.charCodeAt(i),hasB=i+1<value.length,hasC=i+2<value.length;
+    const b=hasB?value.charCodeAt(i+1):0,c=hasC?value.charCodeAt(i+2):0;
+    if(a>127||b>127||c>127)throw new Error('Non-ASCII private progress payload rejected.');
+    out+=chars[a>>2]+chars[((a&3)<<4)|(b>>4)]+
+      (hasB?chars[((b&15)<<2)|(c>>6)]:'=')+
+      (hasC?chars[c&63]:'=');
+  }
+  return out;
+}
+function dynamicWriteToken(plugin){
+  const t=plugin.app.secretStorage?.getSecret?.(DYNAMIC_PROGRESS_GITHUB_TOKEN)||'';
+  return /^github_pat_[A-Za-z0-9_]{15,}$/.test(t)?t:'';
+}
+async function uploadDynamicProgress(plugin) {
+  const token=dynamicWriteToken(plugin);
+  if(!token)return {status:'not-configured'};
+  const deviceId=plugin.settings.deviceId;
+  if(!safeId(deviceId))throw new Error('Invalid local device ID');
+  const file=plugin.app.vault.getAbstractFileByPath(DYNAMIC_UNITS_FILE);
+  if(!file)return {status:'no-units'};
+  const feed=validateDynamicUnits(JSON.parse(await plugin.app.vault.read(file)));
+  const events=await readDynamicEvents(plugin,DYNAMIC_ATTEMPTS);
+  const payload=dynamicProgressSnapshot(feed.units,events,deviceId);
+  // Do not upload an empty profile. Original local log is preserved.
+  if(!payload.attemptCount)return {status:'no-attempts'};
+  const content=JSON.stringify(payload,null,2)+'\n';
+  const destination='progress/by-device/'+deviceId+'.json';
+  const url='https://api.github.com/repos/'+REPO+'/contents/'+destination;
+  const headers={Authorization:'Bearer '+token,Accept:'application/vnd.github+json',
+    'X-GitHub-Api-Version':'2022-11-28'};
+  for(let attempt=0;attempt<3;attempt++){
+    const prior=await requestUrl({url,method:'GET',throw:false,headers});
+    if(prior.status!==200&&prior.status!==404)
+      throw new Error('Private progress lookup failed (HTTP '+prior.status+'). Check fine-grained token repository access.');
+    let sha;
+    if(prior.status===200){
+      const remote=prior.json||{};
+      if(!/^[a-f0-9]{40}$/.test(String(remote.sha||'')))
+        throw new Error('Private progress file has no usable GitHub SHA; refusing overwrite.');
+      sha=remote.sha;
+      if(remote.encoding==='base64'&&typeof remote.content==='string'){
+        const old=new TextDecoder().decode(base64ToArrayBuffer(remote.content.replace(/\s/g,'')));
+        if(old===content)return {status:'unchanged',path:destination,attemptCount:payload.attemptCount};
+      }
+    }
+    const data={message:'progress: update compact Dynamic Recall summary for device '+deviceId,
+      content:dynamicBase64Ascii(content),branch:'main',...(sha?{sha}:{})};
+    const upload=await requestUrl({url,method:'PUT',throw:false,headers:{
+      ...headers,'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(upload.status===200||upload.status===201)
+      return {status:'uploaded',path:destination,attemptCount:payload.attemptCount};
+    if([409,422].includes(upload.status))continue; // optimistic concurrency retry
+    throw new Error('Private progress upload failed (HTTP '+upload.status+').');
+  }
+  throw new Error('Private progress changed during upload; retry on next sync.');
+}
+
 async function dynamicUsageToday(plugin) {
   const day = new Date().toISOString().slice(0,10);
   const rows = (await readDynamicEvents(plugin,DYNAMIC_USAGE)).filter(x=>String(x.at || '').slice(0,10)===day);
@@ -2255,6 +2438,7 @@ class MarrowDynamicRecallView extends ItemView {
       this.stats=history.totals;
       this.attemptHistory=history.attempts;
       await this.refreshAnalysisReports();
+      this.plugin.scheduleDynamicProgressSync?.();
       const today=new Date().toISOString().slice(0,10);
       this.completedToday=history.attempts.filter(x=>String(x.at||'').slice(0,10)===today).length;
       this.usage=await dynamicUsageToday(this.plugin);
@@ -2333,6 +2517,7 @@ class MarrowDynamicRecallView extends ItemView {
       const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
       this.stats=history.totals;this.attemptHistory=history.attempts;
       await this.refreshAnalysisReports();
+      this.plugin.scheduleDynamicProgressSync?.();
       this.completedToday++;
       this.usage=await dynamicUsageToday(this.plugin);
     }catch(e){this.error=e.message;new Notice('Dynamic Recall grading failed: '+e.message);}
@@ -2349,12 +2534,13 @@ class MarrowDynamicRecallView extends ItemView {
       const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
       this.stats=history.totals;this.attemptHistory=history.attempts;
       await this.refreshAnalysisReports();
+      this.plugin.scheduleDynamicProgressSync?.();
     }catch(e){this.error=e.message;}finally{this.busy=false;this.draw();}
   }
   async next(){
     if(this.busy||!this.result)return;
     this.index++;this.typed='';this.result=null;this.error='';
-    if(this.index>=this.queue.length){this.screen='finished';this.draw();return;}
+    if(this.index>=this.queue.length){this.screen='finished';this.plugin.scheduleDynamicProgressSync?.(true);this.draw();return;}
     if(!this.questions.has(this.queue[this.index].id))await this.ensureBatch();else this.draw();
   }
   drawUsagePanel(container){
