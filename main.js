@@ -285,6 +285,63 @@ class MarrowCardsPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(DYNAMIC_VIEW_TYPE);
   }
+  // Repair a device ID cloned when an entire .obsidian folder was synced.
+  // No historical events, prior folders, KUs or scores are re-keyed or deleted.
+  async rotateDeviceIdForThisInstall(){
+    if(this.initPromise)await this.initPromise;
+    if(this.progressSyncPromise)throw new Error('Progress upload in progress. Retry when sync finishes.');
+    if(this.app.workspace.getLeavesOfType(DYNAMIC_VIEW_TYPE).some(l=>l.view?.busy))
+      throw new Error('Finish the active Dynamic Recall question before changing device identity.');
+    // Cancel any pre-existing timer for the cloned identity before rotating.
+    if(this.progressSyncTimer!==null){
+      window.clearTimeout(this.progressSyncTimer);
+      this.progressSyncTimer=null;
+    }
+    // Flush queued writes while their old device ID is still authoritative.
+    await this.dynamicWriteQueue;
+    await this.writeQueue;
+    const oldId=this.settings.deviceId;
+    if(!safeId(oldId))throw new Error('Existing device ID is invalid; manual audit required.');
+    const used=new Set([oldId]);
+    for(const f of this.app.vault.getFiles()){
+      for(const dir of [REVIEWS,DYNAMIC_ATTEMPTS,DYNAMIC_USAGE,DYNAMIC_ANALYSIS]){
+        if(f.path.startsWith(dir+'/')){
+          const part=f.path.slice(dir.length+1).split('/')[0];
+          if(safeId(part))used.add(part);
+        }
+      }
+    }
+    let nextId='';
+    for(let n=0;n<20;n++){
+      const candidate=uniqueId().replace(/[^A-Za-z0-9_-]/g,'').slice(0,100);
+      if(safeId(candidate)&&!used.has(candidate)){nextId=candidate;break;}
+    }
+    if(!nextId)throw new Error('Could not generate an unused device ID.');
+    // Persist before switching runtime identity. Saving failure preserves
+    // the original ID; no local attempt events have been changed.
+    const updated={...this.settings,deviceId:nextId};
+    await this.saveData(updated);
+    this.settings=updated;
+    await this.ensureDirectories();
+    try{
+      await this.ensureFolder(DYNAMIC_ROOT);
+      await this.ensureFolder(DYNAMIC_ROOT+'/identity-changes');
+      await this.writeJson(DYNAMIC_ROOT+'/identity-changes/'+nextId+'.json',{
+        schemaVersion:1,kind:'marrow-device-identity-repair',
+        reason:'Manual repair of cloned Obsidian plugin device ID',
+        oldDeviceId:oldId,newDeviceId:nextId,at:new Date().toISOString(),
+        preservedHistory:true
+      });
+    }catch(error){
+      console.warn('[Marrow Cards] Could not save identity-change audit file:',error);
+    }
+    this.progressSyncStatus='New device ID saved; private sync not yet confirmed';
+    // Create a distinct 0-attempt private snapshot immediately. All pre-repair
+    // score history stays under the original ID, NOT copied as new attempts.
+    if(dynamicWriteToken(this)&&this.settings.progressSyncEnabled!==false)
+      await this.syncDynamicProgress(false,true);
+    return {oldDeviceId:oldId,newDeviceId:nextId};
+  }
   scheduleDynamicProgressSync(immediate=false){
     if(!dynamicWriteToken(this)||this.settings.progressSyncEnabled===false)return;
     if(this.progressSyncTimer!==null)window.clearTimeout(this.progressSyncTimer);
@@ -293,7 +350,7 @@ class MarrowCardsPlugin extends Plugin {
       void this.syncDynamicProgress(true);
     },immediate?0:45*1000);
   }
-  async syncDynamicProgress(silent=true){
+  async syncDynamicProgress(silent=true,allowEmpty=false){
     if(!dynamicWriteToken(this)){
       this.progressSyncStatus='Not configured (add private GitHub write token)';
       if(!silent)new Notice(this.progressSyncStatus);
@@ -307,7 +364,7 @@ class MarrowCardsPlugin extends Plugin {
     this.progressSyncPromise=(async()=>{
       try{
         if(this.initPromise)await this.initPromise;
-        const result=await uploadDynamicProgress(this);
+        const result=await uploadDynamicProgress(this,allowEmpty);
         this.progressSyncStatus=result.status==='uploaded'?'Synced to private GitHub':
           result.status==='unchanged'?'Private GitHub already up to date':
           result.status==='no-attempts'?'No graded attempts to upload yet':
@@ -1747,6 +1804,28 @@ class MarrowSettingsTab extends PluginSettingTab {
     containerEl.createEl('h2', { text: 'Marrow Cards settings' });
     containerEl.createEl('p', { text: 'Cards and review history are saved under MarrowCards/ in this vault. Keep your .obsidian folder device-local for a unique device ID on each phone or tablet.' });
     new Setting(containerEl).setName('Current device ID').setDesc(this.plugin.settings.deviceId);
+    // Two-step action deliberately prevents changing the phone's ID by mistake.
+    let confirmRepair=false;
+    new Setting(containerEl).setName('Repair cloned device ID (tablet only)')
+      .setDesc('Use ONLY on the tablet if phone and tablet have identical device IDs from an old .obsidian Syncthing copy. Keep the phone ID unchanged. Creates a new ID for future attempts without changing old history. Finish any active question first. Keep .obsidian excluded from Syncthing.')
+      .addButton(button=>button.setButtonText('Prepare tablet ID repair').onClick(async()=>{
+        if(!confirmRepair){
+          confirmRepair=true;button.setButtonText('Confirm: this is the tablet');
+          new Notice('Only confirm on the tablet. Old study history will stay unchanged.');
+          return;
+        }
+        button.setDisabled(true);
+        try{
+          const result=await this.plugin.rotateDeviceIdForThisInstall();
+          new Notice('New tablet device ID saved. Existing review history preserved; future uploads use the new ID.');
+          this.display();
+        }catch(error){
+          new Notice('Device ID repair failed: '+String(error?.message||error));
+          button.setDisabled(false);
+          confirmRepair=false;
+          button.setButtonText('Prepare tablet ID repair');
+        }
+      }));
     new Setting(containerEl).setName('Data source').setDesc('Private GitHub repository: ' + REPO + '. Token is only needed on the device that downloads packs.');
     new Setting(containerEl).setName('Automatic pack checks').setDesc('Check on startup and every 30 minutes while Obsidian is open, if a token is set.')
       .addToggle((toggle) => toggle.setValue(this.plugin.settings.autoSync).onChange(async (value) => {
@@ -2026,7 +2105,7 @@ function dynamicWriteToken(plugin){
   const t=plugin.app.secretStorage?.getSecret?.(DYNAMIC_PROGRESS_GITHUB_TOKEN)||'';
   return /^github_pat_[A-Za-z0-9_]{15,}$/.test(t)?t:'';
 }
-async function uploadDynamicProgress(plugin) {
+async function uploadDynamicProgress(plugin,allowEmpty=false) {
   const token=dynamicWriteToken(plugin);
   if(!token)return {status:'not-configured'};
   const deviceId=plugin.settings.deviceId;
@@ -2037,7 +2116,9 @@ async function uploadDynamicProgress(plugin) {
   const events=await readDynamicEvents(plugin,DYNAMIC_ATTEMPTS);
   const payload=dynamicProgressSnapshot(feed.units,events,deviceId);
   // Do not upload an empty profile. Original local log is preserved.
-  if(!payload.attemptCount)return {status:'no-attempts'};
+  // For a newly repaired device identity, register an EMPTY, separate snapshot
+  // immediately. Older attempts retain their original (possibly shared) ID.
+  if(!payload.attemptCount&&!allowEmpty)return {status:'no-attempts'};
   const content=JSON.stringify(payload,null,2)+'\n';
   const destination='progress/by-device/'+deviceId+'.json';
   const url='https://api.github.com/repos/'+REPO+'/contents/'+destination;
