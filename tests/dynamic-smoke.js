@@ -46,9 +46,7 @@ const mockObsidian={
  base64ToArrayBuffer:noop,normalizePath:x=>x
 };
 const m={exports:{}};
-vm.runInNewContext(source+'\nmodule.exports.dynamicUnderTest={validateDynamicUnits,generateDynamicQuestions,gradeDynamicAnswer,
- validatedDynamicGrade,dynamicReviewSummary,dynamicPriority,dynamicUsageToday,
- MarrowDynamicRecallView,DYNAMIC_ROOT,DYNAMIC_GROQ_KEY};',{
+vm.runInNewContext(source+'\nmodule.exports.dynamicUnderTest={validateDynamicUnits,generateDynamicQuestions,gradeDynamicAnswer,validatedDynamicGrade,dynamicReviewSummary,dynamicPriority,dynamicUsageToday,MarrowDynamicRecallView,DYNAMIC_ROOT,DYNAMIC_GROQ_KEY};',{
  module:m,exports:m.exports,
  require(name){if(name==='obsidian')return mockObsidian;throw Error('Unexpected dependency '+name);},
  console,TextDecoder,Date,Promise,JSON,setTimeout,clearTimeout
