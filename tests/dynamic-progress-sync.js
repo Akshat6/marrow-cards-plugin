@@ -44,10 +44,10 @@ const requestUrl=async ({url,method,headers,body})=>{
 const obsidian={Plugin:class{},ItemView:class{},PluginSettingTab:class{},Setting:class{},
  Notice:class{},requestUrl,normalizePath:x=>x,base64ToArrayBuffer:t=>Buffer.from(t,'base64')};
 const m={exports:{}};
-vm.runInNewContext(source+'\nmodule.exports.syncChecks={dynamicProgressSnapshot,dynamicBase64Ascii,uploadDynamicProgress};',
+vm.runInNewContext(source+'\nmodule.exports.syncChecks={dynamicProgressSnapshot,dynamicBase64Ascii,uploadDynamicProgress,MarrowCardsPlugin};',
  {module:m,exports:m.exports,require:n=>{if(n==='obsidian')return obsidian;throw Error('Unexpected import');},
   console,TextDecoder,Date,JSON,Promise,Math,setTimeout,clearTimeout});
-const {dynamicProgressSnapshot,dynamicBase64Ascii,uploadDynamicProgress}=m.exports.syncChecks;
+const {dynamicProgressSnapshot,dynamicBase64Ascii,uploadDynamicProgress,MarrowCardsPlugin}=m.exports.syncChecks;
 const units=[{id:'KU-TEST-001',indexId:'INDEX-001',answer:'CANONICAL-SOURCE-ANSWER',
  promptTarget:'Very private source question',verification:'Verified'},
  {id:'KU-TEST-002',indexId:'INDEX-001',answer:'Another answer',
@@ -111,9 +111,54 @@ function updateLogs(){
  offline=false;
  x=await uploadDynamicProgress(tablet);
  assert.equal(x.status,'unchanged','Later retry should not corrupt the existing remote snapshot');
+ // A repaired tablet gets its own registration even before new attempts.
+ const standalone={app:{vault,secretStorage},settings:{deviceId:'new-tablet'}};
+ x=await uploadDynamicProgress(standalone,true);
+ assert.equal(x.status,'uploaded');
+ assert.equal(outbound.at(-1).path,'progress/by-device/new-tablet.json');
+ assert.equal(outbound.at(-1).payload.attemptCount,0,
+   'Do not re-attribute existing old-device attempts as tablet attempts');
+ assert.equal(outbound.at(-1).payload.kuCount,0);
+ x=await uploadDynamicProgress(standalone,true);
+ assert.equal(x.status,'unchanged','Repeated empty registration causes no extra commit');
+ // Rotate the ID on the simulated tablet only. Old shared files and phone ID
+ // are left untouched, but future snapshots will use the distinct new ID.
+ const beforeLogs=new Map(files);
+ let writtenSettings=null,identityAudit=null,uploadFlags=[],ensured=false;
+ const tabletInstall=new MarrowCardsPlugin();
+ tabletInstall.settings={deviceId:'phone',progressSyncEnabled:true,autoSync:true};
+ tabletInstall.app={vault,secretStorage,
+   workspace:{getLeavesOfType:()=>[]}};
+ tabletInstall.dynamicWriteQueue=Promise.resolve();
+ tabletInstall.writeQueue=Promise.resolve();
+ tabletInstall.progressSyncPromise=null;
+ tabletInstall.progressSyncTimer=null;
+ tabletInstall.initPromise=Promise.resolve();
+ tabletInstall.saveData=async next=>{writtenSettings={...next};};
+ tabletInstall.ensureDirectories=async()=>{ensured=true;};
+ tabletInstall.ensureFolder=async()=>{};
+ tabletInstall.writeJson=async(path,obj)=>{identityAudit={path,obj};};
+ tabletInstall.syncDynamicProgress=async(...args)=>{uploadFlags.push(args);return {status:'uploaded'};};
+ const change=await tabletInstall.rotateDeviceIdForThisInstall();
+ assert.equal(change.oldDeviceId,'phone');
+ assert(change.newDeviceId&&change.newDeviceId!==change.oldDeviceId);
+ assert.equal(writtenSettings.deviceId,change.newDeviceId);
+ assert.equal(tabletInstall.settings.deviceId,change.newDeviceId);
+ assert(ensured);
+ assert.deepEqual(uploadFlags,[[false,true]],'Register new identity, even before any new scores');
+ assert(identityAudit.path.includes(change.newDeviceId));
+ assert.equal(identityAudit.obj.oldDeviceId,'phone');
+ assert.equal(identityAudit.obj.preservedHistory,true);
+ for(const [path,content] of beforeLogs)
+   assert.equal(files.get(path),content,'Historical logs and KUs remain byte-identical');
+ assert.equal(phone.settings.deviceId,'phone','The original phone identity stays unchanged');
+ // Guard against a pending upload while changing the ID.
+ tabletInstall.progressSyncPromise=Promise.resolve();
+ await assert.rejects(tabletInstall.rotateDeviceIdForThisInstall(),/upload in progress/);
+ assert.equal(tabletInstall.settings.deviceId,change.newDeviceId);
  const missing={app:{vault,secretStorage:{getSecret:()=>''}},settings:{deviceId:'phone'}};
  x=await uploadDynamicProgress(missing);
  assert.equal(x.status,'not-configured');
- assert.equal(outbound.length,3);
- console.log('Private sync passed: device isolation, no answers or secrets, numeric manual overrides, SHA updates, unchanged skip, 409 retry, offline failure and missing-token safety.');
+ assert.equal(outbound.length,4);
+ console.log('Private sync passed: device isolation, no answers or secrets, numeric manual overrides, SHA updates, unchanged skip, 409 retry, offline failure and missing-token safety and cloned device ID repair.');
 })().catch(e=>{console.error(e);process.exitCode=1});
