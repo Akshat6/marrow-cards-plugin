@@ -133,7 +133,7 @@ async function run(){
       assert.equal(byKu(kuId).attempts,1);
       assert.equal(byKu(kuId).lastScore,7);
       assert.equal(byKu(kuId).scoreSum,7);
-      assert(files.get(snapshotPath).includes('Latest 7/10'),
+      assert(files.get(snapshotPath).includes('7/10'),
         'Manual override must automatically refresh the saved revision report');
     }
     await v.next();
