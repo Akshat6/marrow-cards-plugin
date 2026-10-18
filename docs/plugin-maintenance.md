@@ -93,3 +93,11 @@ A new chat is **not** guaranteed to load repo files or this context automaticall
 - Do not change stable KU IDs, local attempt history, 0–10 scoring, legacy PYQ review data, private PYQ packs, or the v1.0.1 integrated-tagged private feed. Android display still requires user verification.
 
 **v0.3.3 display clarification:** render the sample-based nominal daily reference-token headroom explicitly, clearly marked as NOT the confirmed provider balance. Retain separate measured local tokens, response-header request/day remainder (when available), and question forecast. All original KUs, PYQ reviews and scoring history are unchanged.
+
+## v0.3.4 — direct index Browse / compact conservative forecast
+
+- Implement original-index **Review** and **Browse** as first-class buttons. Index Review remains a single-index session chooser (10/25/50/75 capped by KUs); Integrated Review remains its explicitly linked topic pool. Both open the same typed AI grader.
+- Index Browse and Integrated Browse are strictly read-only, using verified private KU `promptTarget` as a quick recall front and `answer` as an initially hidden reveal. They do **not** call Groq, generate/copy new questions, append attempts, change scoring history or use offline question caching. The original Groq-generated typed questions remain in Review mode only.
+- The daily usage detail becomes a native `<details>` disclosure in the Dynamic Recall header, **collapsed by default**. The one-line corner estimate is displayed only after sufficient observed successful generation/grading samples; otherwise show `AI usage · estimate pending`. Preserve expanded state across redraws.
+- Display `safeEstimate=Math.floor(rawEstimate*0.75)` in both summary and expanded detail, explicitly labelled an estimate. Example: 20 raw → 15 shown, holding 25% back. This buffer does not turn an unverified Groq account quota into a guarantee; actual usage on other devices, per-minute/free-tier restrictions and provider limits still apply. Maintain existing hard local caps of 75 grading and 125 total Groq requests/day.
+- Preserve stable KU IDs, integrated links, 0–10 grading, old PYQ behavior and all stored attempt/usage histories. Do not implement multi-index selection or automatic question cache.
