@@ -207,3 +207,11 @@ Use **Open Dynamic Recall** as a separate Obsidian command. In **Marrow Cards se
 Results are append-only under `MarrowCards/dynamic-recall/attempts/<device-id>/YYYY-MM.jsonl`; old PYQ reviews remain under `MarrowCards/reviews/`. Each device must be upgraded separately through BRAT. The server receives the selected KU's answer/excerpt and your typed response; the model can make medical grading mistakes. There is **no paid fallback** and daily safety caps of 75 grading calls/125 total requests per device, not a guarantee of free provider quota. **Only single-index Dynamic Recall** is available in v0.3.0; multi-index, offline question cache, automated Sheets ingestion and local AI remain postponed.
 
 The existing verified public testing report is [here](https://github.com/Akshat6/marrow-cards-plugin/actions/runs/39113855817). See [rollback instructions](docs/rollback-v0.3.0.md) and [technical handoff](docs/dynamic-recall-phase1.md). Before updating on your phone or tablet, copy the entire Obsidian vault and check Syncthing has settled.
+
+## v0.3.1 — Dynamic Recall phone layout and index hierarchy
+
+The Dynamic Recall screen now uses **MBBS → Subject → System → Index** sections instead of a flat list. **Integrated → Pulmonology → Anatomy** presents the four reviewed Anatomy Thorax indexes (ANAT-R3-067–070), each pointing to its original stable KUs and score history rather than duplicating attempts. Later Medicine/Pediatrics indexes join when their verified KU metadata or explicitly approved card links associate them with `INT-PULM`; no automatic medical-topic inference. Selecting a tile still studies **one index only**.
+
+On small phones, the active question occupies its own non-scrolling panel and the large header is hidden while the answer textarea has focus. This aims to prevent Android's keyboard scroll from pushing the question off-screen. The question remains accessible even for long stems. The separate answer area scrolls beneath it. Tablet presentation and the old PYQ reviewer styles remain independent. No existing scores, notes, or cards are edited.
+
+**After updating through BRAT to 0.3.1**, reopen Dynamic Recall and tap **Check knowledge units on GitHub** to retrieve private KU feed v1.0.1 with explicit reviewed Integrated Pulmonology membership. Device-only keyboard behavior remains to be checked on your S23 FE.
