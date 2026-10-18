@@ -2291,17 +2291,20 @@ class MarrowDynamicRecallView extends ItemView {
           ' · Total graded attempts '+attempts});
       };
       const drawEntry=(target,entry)=>{
-        const line=target.createDiv({cls:'marrow-dynamic-index'});
-        line.createEl('h3',{cls:'marrow-dynamic-index-title',
-          text:entry.id+' — '+entry.title+
-            (this.showIndexDetails?' ('+entry.units.length+' KUs)':'')});
+        // Mirror the existing PYQ index tile: name only, then two compact
+        // side-by-side Review / Browse buttons. IDs remain internal.
+        const line=target.createDiv({cls:'marrow-dynamic-index marrow-index-tile'});
+        line.createEl('div',{cls:'marrow-index-name marrow-dynamic-index-title',
+          text:entry.title});
         if(this.showIndexDetails)drawStats(line,entry.units);
-        const actions=line.createDiv({cls:'marrow-toolbar marrow-dynamic-index-actions'});
-        const review=actions.createEl('button',{text:'Review '+entry.id,cls:'mod-cta'});
+        const review=line.createEl('button',{text:'Review',cls:'marrow-start-single',
+          attr:{'aria-label':'Review '+entry.title}});
         review.addEventListener('click',()=>{
           this.selectedIndex=entry.id;this.screen='index';this.draw();
         });
-        const browse=actions.createEl('button',{text:'Browse '+entry.id});
+        const browse=line.createEl('button',{text:'Browse',
+          cls:'marrow-start-single marrow-start-browse',
+          attr:{'aria-label':'Browse '+entry.title}});
         browse.addEventListener('click',()=>{
           this.selectedIndex=entry.id;this.browseUnits=entry.units;this.screen='browse';this.draw();
         });
@@ -2311,10 +2314,13 @@ class MarrowDynamicRecallView extends ItemView {
         tile.createEl('h3',{text:collection.title+
           (this.showIndexDetails?' · '+collection.units.length+' linked KUs':'')});
         if(this.showIndexDetails)drawStats(tile,collection.units);
-        const actions=tile.createDiv({cls:'marrow-toolbar'});
-        const review=actions.createEl('button',{text:'Review '+collection.title,cls:'mod-cta'});
+        const actions=tile.createDiv({cls:'marrow-toolbar marrow-dynamic-integrated-actions'});
+        const review=actions.createEl('button',{text:'Review',cls:'marrow-start-single',
+          attr:{'aria-label':'Review '+collection.title}});
         review.addEventListener('click',()=>{this.selectedIndex=collection.id;this.screen='collection';this.draw();});
-        const browse=actions.createEl('button',{text:'Browse '+collection.title});
+        const browse=actions.createEl('button',{text:'Browse',
+          cls:'marrow-start-single marrow-start-browse',
+          attr:{'aria-label':'Browse '+collection.title}});
         browse.addEventListener('click',()=>{this.selectedIndex=collection.id;
           this.browseUnits=collection.units;this.screen='browse';this.draw();});
       };
