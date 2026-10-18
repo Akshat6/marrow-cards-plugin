@@ -1714,6 +1714,31 @@ class MarrowSettingsTab extends PluginSettingTab {
         new Notice('Read-only GitHub token saved on this device.');
         this.display();
       }));
+
+    containerEl.createEl('h3', { text: 'Dynamic Recall — Groq free API (experimental)' });
+    containerEl.createEl('p', { text: 'Separate from PYQ Review. A Groq key is stored only in local Obsidian SecretStorage. Never put your key in GitHub or a Syncthing vault file. Free-tier availability and limits depend on your Groq account; this plugin never enables billing.' });
+    new Setting(containerEl).setName('Groq API key (this device only)')
+      .setDesc('Create a free GroqCloud API key, paste it here, and save locally. Leave blank if you are not ready to connect.')
+      .addText((input) => { input.inputEl.type = 'password'; input.setPlaceholder('gsk_...'); let key = '';
+        input.onChange((v) => { key = v.trim(); input.inputEl.dataset.pendingGroqKey = key; }); })
+      .addButton((button) => button.setButtonText('Save Groq key').onClick(() => {
+        const el = containerEl.querySelector('input[data-pending-groq-key]');
+        const key = el && el.dataset.pendingGroqKey;
+        if (!key || !key.startsWith('gsk_')) { new Notice('Enter a valid Groq API key first.'); return; }
+        if (!this.app.secretStorage || !this.app.secretStorage.setSecret) { new Notice('Obsidian SecretStorage is unavailable on this device.'); return; }
+        this.app.secretStorage.setSecret(DYNAMIC_GROQ_KEY, key);
+        new Notice('Groq key saved locally. It is not synced.');
+        this.display();
+      }));
+    new Setting(containerEl).setName('Clear Groq key')
+      .setDesc('Revokes this device’s stored key locally. Your dynamic attempt history remains untouched.')
+      .addButton((button) => button.setButtonText('Clear local key').onClick(() => {
+        if (this.app.secretStorage && this.app.secretStorage.setSecret) this.app.secretStorage.setSecret(DYNAMIC_GROQ_KEY, '');
+        new Notice('Groq key cleared from local Obsidian SecretStorage.');
+      }));
+    new Setting(containerEl).setName('Dynamic Recall safety budget')
+      .setDesc('Hard local cap: 75 AI grading requests and 125 total Groq requests per UTC day, including failed attempts. These are conservative device-side limits, NOT guaranteed Groq account quotas. Each device logs usage under MarrowCards/dynamic-recall/usage.');
+
     new Setting(containerEl).setName('Delete stored token').setDesc('Clears the local token; it does not delete cards or statistics.')
       .addButton((button) => button.setButtonText('Clear').onClick(() => { this.app.secretStorage.setSecret(TOKEN_KEY, ''); new Notice('Token cleared.'); }));
     new Setting(containerEl).setName('Download approved packs').setDesc('Checks private GitHub manifest.json and downloads new/updated card packs and images.')
