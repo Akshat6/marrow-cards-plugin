@@ -103,3 +103,13 @@ Open GitHub repo Akshat6/marrow-cards-plugin, branch feature/dynamic-recall-groq
 - Overrides now select **0 through 10** and append a correction event to the existing attempt ID. The original AI grade is not deleted. The index view shows average numeric score alongside its original coverage/attempt totals.
 - Older categorical logs remain readable and still influence priorities; **no artificial scores are backfilled** into old attempts. PYQ history, cards, media, notes, `main`, and the static data manifest stay unchanged.
 - Follow-up gate: inspect the newest GitHub CI run and then validate the real Groq model and Samsung phone/tablet behaviour before any merge, BRAT release, or version bump.
+
+## 2026-10-18 real Groq scoring audit — completed, controlled public cases
+
+- User configured a dedicated GitHub Actions environment `groq-live-test` and its `GROQ_TEST_API_KEY` secret; no value was shared with ChatGPT or committed. User explicitly authorized triggering this one-off run.
+- The live workflow was triggered on dev commit `3dd255e57fac7cd305c3061be94b8497c83a01d5`: https://github.com/Akshat6/marrow-cards-plugin/actions/runs/39113855817. **Completed successfully**. The job ran the actual plugin question-generation and grading functions via Groq model `openai/gpt-oss-20b`.
+- **14 actual Groq requests**, including **one batched generation of 3 questions** and **13 grading responses**. **All 13 tests passed** independently predefined ranges and required missing/incorrect feedback-field presence. Provider-reported total **7,602 tokens**.
+- Observed 0–10 scoring: exact answers 10; partial answers 5, 5, 7; incorrect answers 0; medically equivalent answers 10; contradictory T8 + T10 answer 5; identical repeated answer 10 and 10 (zero variance in this one pair). These are observed scores, not guarantees for other content.
+- Source data for test runner are independent common public anatomy/physiology facts ONLY. Private knowledge units, user notes, PYQ packs, proprietary PDFs, user review history and device sync data were never loaded by this test. The audit artifact contains sanitized IDs, numeric scores, pass/fail and token totals; no test key.
+- **Still pending:** larger clinically reviewed sample of actual (privately held) verified KUs, long-run repeated scoring consistency, provider 50–75 grades/day rate/token limits, free-plan billing/rate-limit validation, Android phone and tablet Obsidian experience, Syncthing and offline/restart device testing. Never treat this green test as permission to merge/release.
+- Dedicated key can be revoked by user after no further live testing is desired; the original device-local Obsidian Groq key is separate.
