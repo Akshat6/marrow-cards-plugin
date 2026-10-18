@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: PYQ Review and Dynamic Recall with local weakness analysis and source-linked revision reports.",
+  "description": "Marrow Cards: PYQ Review and Dynamic Recall with private GitHub progress sync and local study analysis.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }
