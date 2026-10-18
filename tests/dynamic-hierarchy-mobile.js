@@ -16,11 +16,11 @@ class Element{
 class ItemView{constructor(leaf){this.app=leaf.app;this.contentEl=new Element();}}
 const fake={Plugin:class{},ItemView,PluginSettingTab:class{},Setting:class{},Notice:class{},normalizePath:x=>x,base64ToArrayBuffer(){}};
 const m={exports:{}};
-vm.runInNewContext(source+'\nmodule.exports.check={validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,MarrowDynamicRecallView};',{
+vm.runInNewContext(source+'\nmodule.exports.check={validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,dynamicRoundPlan,MarrowDynamicRecallView};',{
  module:m,exports:m.exports,require:n=>{if(n==='obsidian')return fake;throw Error(n);},
  console,TextDecoder,Promise,Date,JSON,setTimeout,clearTimeout
 });
-const {validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,MarrowDynamicRecallView}=m.exports.check;
+const {validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,dynamicRoundPlan,MarrowDynamicRecallView}=m.exports.check;
 function unit(indexId,subject,system,title,n=1,links=[]){
  return {id:'K-TEST-'+indexId+'-'+n,indexId,subject,system,indexTitle:title,
    answer:'synthetic alpha beta',promptTarget:'Recall two facts',verification:'Verified',
@@ -68,6 +68,39 @@ assert.equal(dynamicSelectedUnits(units,'INT-PULM',catalog,cards).length,7);
 assert.equal(dynamicSelectedUnits(units,'ANAT-R3-067',catalog,cards).length,2);
 assert.equal(dynamicSelectedUnits(units,'INT-PULM',catalog,cards).find(x=>x.id===anatomy[0].id),anatomy[0],
   'Both index and integrated pool reference the exact same KU object');
+// Each round consists of one graded attempt per stable KU ID, across sessions.
+const indexUnits=Array.from({length:31},(_,i)=>unit('ANAT-R3-067','Anatomy','Thorax','Osteology of Thorax',i+10));
+const tenGraded=new Map(indexUnits.slice(0,10).map((u,i)=>[u.id,{
+  attempts:1,lastScore:i===0?0:10,lastGrade:i===0?'wrong':'correct',
+  last:new Date().toISOString(),correct:i===0?0:1
+}]));
+const first=dynamicRoundPlan(indexUnits,tenGraded);
+assert.equal(first.round,1);
+assert.equal(first.completed,10);
+assert.equal(first.total,31);
+assert.equal(first.remaining,21);
+assert.equal(first.eligible.length,21);
+assert(first.eligible.every(u=>!tenGraded.has(u.id)),'Low score 0/10 must NOT repeat in Round 1');
+const allOnce=new Map(indexUnits.map((u,i)=>[u.id,{
+  attempts:1,lastScore:i===0?0:10,lastGrade:i===0?'wrong':'correct',
+  last:new Date().toISOString(),correct:i===0?0:1
+}]));
+const second=dynamicRoundPlan(indexUnits,allOnce);
+assert.equal(second.round,2);
+assert.equal(second.remaining,31);
+assert.equal(second.completed,0);
+assert.equal(second.eligible[0].id,indexUnits[0].id,'Round 2 should first revisit a very low score');
+allOnce.get(indexUnits[0].id).attempts=2;
+const midSecond=dynamicRoundPlan(indexUnits,allOnce);
+assert.equal(midSecond.round,2);
+assert.equal(midSecond.completed,1);
+assert(!midSecond.eligible.some(u=>u.id===indexUnits[0].id),
+  'No third attempt until every KU receives its second');
+const oldOverrideHistory=new Map(indexUnits.slice(0,2).map(u=>[u.id,{
+  attempts:1,lastScore:null,lastGrade:'partial',last:new Date().toISOString(),correct:0
+}]));
+assert.equal(dynamicRoundPlan(indexUnits,oldOverrideHistory).remaining,29,
+  'Old 3-category records count toward coverage without inventing numeric scores');
 const unknown=unit('MED-NEW-99','Medicine','Pulmonology','New Unit',1);
 assert.equal(dynamicIntegratedCollections([unknown],catalog,[]).length,0,
   'Unapproved Medicine units are not auto-tagged Integrated Pulmonology');
@@ -80,7 +113,7 @@ assert.equal(est.remainingGrades,65);
 assert.equal(est.remainingRequests,114);
 assert.equal(est.averagePerAnswer,622);
 assert.equal(est.estimate,65,'Keep estimated questions inside local 75 grade/125 request caps');
-assert.equal(est.safeEstimate,48,'Leave a 25 percent safety margin, rounded down');
+assert.equal(est.safeEstimate,58,'Leave a 10 percent safety margin, rounded down');
 const constrained=dynamicUsageForecast({requests:11,grades:10,tokens:6220,
   gradeResponses:10,gradeTokens:5000,generateTokens:1220,generatedKUs:10,providerRemainingRequests:3},10);
 assert.equal(constrained.estimate,2,'Account header RPD remaining must constrain local estimate');
@@ -89,7 +122,7 @@ const example20=dynamicUsageForecast({requests:103,grades:55,tokens:12000,
   gradeResponses:55,gradeTokens:11000,generateTokens:1000,generatedKUs:55,
   providerRemainingRequests:null},55);
 assert.equal(example20.estimate,20);
-assert.equal(example20.safeEstimate,15,'20 estimated questions must display as 15');
+assert.equal(example20.safeEstimate,18,'20 estimated questions must display as 18');
 assert.equal(dynamicUsageForecast({requests:0,grades:0,tokens:0,providerRemainingRequests:null},0).hasSample,false);
 function walk(el,fn,out=[]){if(fn(el))out.push(el);for(const x of el.children)walk(x,fn,out);return out;}
 const plugin={indexes:catalog,cards,settings:{deviceId:'synthetic-device'}};
