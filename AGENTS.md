@@ -1,5 +1,8 @@
 # Marrow Cards — instructions for a new ChatGPT session
 
+**Dynamic Recall Phase 1 (Groq, development only):** See [docs/dynamic-recall-phase1.md](docs/dynamic-recall-phase1.md) for architecture, current branch, private growing KU feed, zero-disruption requirements, testing status, and cross-chat handoff. This feature is NOT part of the current stable v0.2.10 release. Do not merge or publish without passing legacy and dynamic regression tests plus phone/tablet validation.
+
+
 **Start here in every new ChatGPT conversation about Marrow Cards — whether the user wants new approved flashcards OR a plugin/interface bug fix or upgrade.** This file is the GitHub entry point, not a card database.
 
 ## First choose the task-specific instructions
