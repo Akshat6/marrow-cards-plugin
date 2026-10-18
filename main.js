@@ -2074,12 +2074,29 @@ function dynamicUsageForecast(usage, completedToday=0) {
       (usage.tokens+n*averagePerAnswer)>200000)break;
     estimate=n;
   }
-  // A quarter of the estimated capacity is reserved as a safety buffer.
-  // Example: if the rough capacity is 20, display only 15.
-  const safeEstimate=Math.floor(estimate*0.75);
+  // Reserve 10% of the rough capacity. Example: 20 -> 18.
+  // This is still an estimate, NOT a promise of provider allowance.
+  const safeEstimate=Math.floor(estimate*0.90);
   return {remainingGrades,remainingRequests,averagePerAnswer,estimate,safeEstimate,
     completedToday,hasSample:gradeResponses>=2&&generatedKUs>0,
     nominalFreeTokenHeadroom:Math.max(0,200000-usage.tokens)};
+}
+// Coverage-led rounds: each verified KU must have at least N graded attempts
+// before any KU enters attempt N+1. No repeat KUs inside one session.
+// Existing append-only attempt/override history is the only source of counts;
+// overrides change score, never add another review. New KU IDs begin at zero.
+// Weak/due priorities are applied ONLY among KUs in the current round.
+function dynamicRoundPlan(units, stats) {
+  if(!units.length)return {round:1,total:0,completed:0,remaining:0,eligible:[],minAttempts:0};
+  const attemptsFor=u=>{
+    const n=stats.get(u.id)?.attempts;
+    return Number.isInteger(n)&&n>=0?n:0;
+  };
+  const minAttempts=Math.min(...units.map(attemptsFor));
+  const eligible=units.filter(u=>attemptsFor(u)===minAttempts)
+    .slice().sort((a,b)=>dynamicPriority(a,stats)-dynamicPriority(b,stats)||a.id.localeCompare(b.id));
+  return {round:minAttempts+1,total:units.length,completed:units.length-eligible.length,
+    remaining:eligible.length,eligible,minAttempts};
 }
 class MarrowDynamicRecallView extends ItemView {
   constructor(leaf,plugin){
@@ -2130,10 +2147,12 @@ class MarrowDynamicRecallView extends ItemView {
   }
   async start(count){
     if(this.busy)return;
-    const pool=dynamicSelectedUnits(this.units,this.selectedIndex,this.plugin.indexes||[],this.plugin.cards||[])
-      .sort((a,b)=>dynamicPriority(a,this.stats)-dynamicPriority(b,this.stats));
-    if(!pool.length){this.error='No verified knowledge units for this index.';this.draw();return;}
-    this.queue=pool.slice(0,Math.min(count,pool.length));this.index=0;this.questions=new Map();
+    const pool=dynamicSelectedUnits(this.units,this.selectedIndex,this.plugin.indexes||[],this.plugin.cards||[]);
+    const round=dynamicRoundPlan(pool,this.stats);
+    if(!round.total){this.error='No verified knowledge units for this index.';this.draw();return;}
+    // Stop at a round boundary: requesting 25 with only 11 untested units
+    // makes an 11-KU session; Round 2 begins with the NEXT session.
+    this.queue=round.eligible.slice(0,Math.min(count,round.remaining));this.index=0;this.questions=new Map();
     this.typed='';this.result=null;this.screen='study';this.error='';
     await this.ensureBatch();
   }
@@ -2215,7 +2234,7 @@ class MarrowDynamicRecallView extends ItemView {
         Math.ceil(plan.averagePerAnswer)+' tokens (including a share of batched generation).'});
       details.createEl('p',{text:'Rough capacity: '+plan.estimate+
         ' questions; displayed conservative estimate: '+plan.safeEstimate+
-        ' (25% reserve, rounded down).'});
+        ' (10% reserve, rounded down).'});
     }else details.createEl('p',{text:'Complete a few graded questions to estimate tokens per question and remaining capacity.'});
     details.createEl('p',{cls:'marrow-hint',text:'This is not a guaranteed Groq quota: other devices, projects, failed requests and minute/day limits may reduce availability. Groq’s token response header is per minute, not per day. No paid fallback.'});
   }
@@ -2246,6 +2265,10 @@ class MarrowDynamicRecallView extends ItemView {
         const attempts=sampled.reduce((n,h)=>n+h.attempts,0);
         const scored=sampled.reduce((n,h)=>n+h.scored,0);
         const scoreSum=sampled.reduce((n,h)=>n+h.scoreSum,0);
+        const round=dynamicRoundPlan(units,this.stats);
+        target.createEl('p',{cls:'marrow-dynamic-round',text:
+          'Round '+round.round+' · '+round.completed+'/'+round.total+
+          ' scored in this round · '+round.remaining+' remaining'});
         target.createEl('p',{cls:'marrow-hint',text:
           'Covered '+sampled.length+'/'+units.length+' KUs · Average score '+
           (scored?(Math.round(10*scoreSum/scored)/10)+'/10':'—')+
@@ -2295,7 +2318,7 @@ class MarrowDynamicRecallView extends ItemView {
       };
       const tree=summary.createDiv({cls:'marrow-dynamic-hierarchy'});
       for(const node of hierarchy)drawNode(tree,node);
-      summary.createEl('p',{cls:'marrow-hint',text:'Tap Review on any index to choose a written-recall session. Tap Browse for fast, tap-to-reveal KU prompts without AI calls. Integrated Pulmonology is one combined collection.'});
+      summary.createEl('p',{cls:'marrow-hint',text:'Review completes every KU in a round before repeating any. Tap Browse for fast, tap-to-reveal prompts without AI calls. Integrated Pulmonology is one linked collection.'});
       return;
     }
     if(this.screen==='index'){
@@ -2303,11 +2326,14 @@ class MarrowDynamicRecallView extends ItemView {
       const entry=dynamicSelectedUnits(this.units,this.selectedIndex);
       const title=entry[0]?.indexTitle||this.selectedIndex;
       target.createEl('h3',{text:title+' — Review'});
-      target.createEl('p',{text:entry.length+' verified KUs in '+this.selectedIndex+'.'});
+      const round=dynamicRoundPlan(entry,this.stats);
+      target.createEl('p',{cls:'marrow-dynamic-round',text:'Round '+round.round+
+        ' · '+round.completed+'/'+round.total+' scored · '+round.remaining+' remaining'});
+      target.createEl('p',{cls:'marrow-hint',text:'Complete each KU once per round before repeating. Weak or due KUs get priority only after the other KUs have reached the same round. Sessions stop at the round boundary.'});
       const row=target.createDiv({cls:'marrow-toolbar marrow-dynamic-start-actions'});
       for(const count of [10,25,50,75]){
-        const button=row.createEl('button',{text:'Study '+Math.min(count,entry.length)+' units'});
-        button.disabled=this.busy||!entry.length;
+        const button=row.createEl('button',{text:'Study '+Math.min(count,round.remaining)+' units'});
+        button.disabled=this.busy||!round.remaining;
         button.addEventListener('click',()=>void this.start(count));
       }
       const browse=target.createEl('button',{text:'Browse '+this.selectedIndex});
@@ -2322,10 +2348,14 @@ class MarrowDynamicRecallView extends ItemView {
         .find(x=>x.id===this.selectedIndex);
       if(!collection){target.createEl('p',{text:'Integrated collection unavailable. Refresh Knowledge Units.'});return;}
       target.createEl('h3',{text:collection.title+' — Review'});
-      target.createEl('p',{text:collection.units.length+' linked knowledge units in one integrated collection. No subject or index selection required.'});
+      const round=dynamicRoundPlan(collection.units,this.stats);
+      target.createEl('p',{cls:'marrow-dynamic-round',text:'Round '+round.round+
+        ' · '+round.completed+'/'+round.total+' scored · '+round.remaining+' remaining'});
+      target.createEl('p',{cls:'marrow-hint',text:'The integrated collection also prioritizes full KU coverage each round. Same original KU attempts and scores are shared with source indexes.'});
       const row=target.createDiv({cls:'marrow-toolbar marrow-dynamic-start-actions'});
       for(const count of [10,25,50,75]){
-        const b=row.createEl('button',{text:'Study '+Math.min(count,collection.units.length)+' units'});
+        const b=row.createEl('button',{text:'Study '+Math.min(count,round.remaining)+' units'});
+        b.disabled=this.busy||!round.remaining;
         b.addEventListener('click',()=>void this.start(count));
       }
       const browse=target.createEl('button',{text:'Browse '+collection.title});
