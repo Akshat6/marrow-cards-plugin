@@ -23,7 +23,6 @@ jobs:
         run: node tests/dynamic-integration.js
       - name: Verify real-Groq test harness without a secret or API calls
         run: node tests/live-groq-eval.js --dry-run
-      - name: Ensure installed plugin manifest is unchanged during development
+      - name: Verify approved v0.3.0 release version and unchanged plugin ID
         run: |
-          node -e "const m=require('./manifest.json'); if(m.version !== '0.2.10') process.exit(1)"
-          git diff origin/main...HEAD -- manifest.json | grep -q . && exit 1 || true
+          node -e "const m=require('./manifest.json'); if(m.version !== '0.3.0'||m.id !== 'marrow-cards') process.exit(1)"
