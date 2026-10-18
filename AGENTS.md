@@ -63,3 +63,7 @@ For questions about **weak/strong portions in an index**, the plugin produces **
 ## Automatic private progress summary for future chats (v0.3.9)
 
 Marrow Cards now supports compact **private** per-device GitHub progress snapshots after local token setup. Read [the permanent KU handoff](docs/dynamic-recall-new-index-handoff.md). The public repository holds only code and instructions; the private `Akshat6/marrow-cards-data/progress/by-device/<device-id>.json` files contain numeric scores/attempt counts by stable KU ID. Future chats with GitHub access should read all private device snapshots and join to the verified private KU feed for study analysis. **Do not expect raw attempt logs or answers in GitHub**, do not claim the connected Google Sheet auto-syncs attempts, and don't assume Obsidian can sync while closed. Users must configure a fine-grained private-repo Contents read/write PAT on each device (different from the old read-only download token). Never disclose or commit tokens.
+
+## Cloned Device ID repair (v0.3.10)
+
+If `.obsidian` was synced from phone to tablet before exclusion, Marrow Cards may have **one shared Device ID**. The v0.3.10 settings offer **Repair cloned device ID (tablet only)**, a two-click repair after backups and confirming `.obsidian` is excluded. Only the tablet's future logs/snapshots use a new ID. All old score history and the original GitHub file remain untouched; old shared-ID attempts must not be reattributed or double-counted. See the [permanent Dynamic Recall handoff](docs/dynamic-recall-new-index-handoff.md).
