@@ -4,7 +4,7 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const source=fs.readFileSync('main.js','utf8'),css=fs.readFileSync('styles.css','utf8');
 new vm.Script(source);
 class Element{
- constructor(tag='div',props={}){this.tag=tag;this.text=props.text||'';this.children=[];this.classes=new Set();this.events={};this.value='';this.disabled=false;this.open=false;}
+ constructor(tag='div',props={}){this.tag=tag;this.text=props.text||'';this.children=[];this.classes=new Set(String(props.cls||'').split(/\s+/).filter(Boolean));this.events={};this.value='';this.disabled=false;this.open=false;}
  createEl(tag,props={}){const e=new Element(tag,props);this.children.push(e);return e;}
  createDiv(props={}){return this.createEl('div',props);}
  empty(){this.children=[];this.classes.clear();}
