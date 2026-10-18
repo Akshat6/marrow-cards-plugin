@@ -1,6 +1,6 @@
 # Marrow Cards — Obsidian plugin for indexed MBBS review
 
-**Dynamic Recall Phase 1 (Groq, development only):** See [docs/dynamic-recall-phase1.md](docs/dynamic-recall-phase1.md) for architecture, current branch, private growing KU feed, zero-disruption requirements, testing status, and cross-chat handoff. This feature is NOT part of the current stable v0.2.10 release. Do not merge or publish without passing legacy and dynamic regression tests plus phone/tablet validation.
+**Marrow Cards v0.3.0 release:** Existing PYQ Review stays available, with a new, separate **Dynamic Recall** mode for one index at a time. The 0–10 Groq grader, KU-linked history, manual score correction and batched generation have passed synthetic and a limited real Groq audit. **Android device tests remain pending.** Back up your vault and review [rollback instructions](docs/rollback-v0.3.0.md) before updating.
 
 
 An offline-first Obsidian flashcard reviewer for **user-approved** MBBS PYQs and personal facts. The public repository contains the **plugin code and instructions**. Approved cards and original images live in the separate, **private** `Akshat6/marrow-cards-data` repository. Android phone/tablet review logs are maintained per device and can sync through Syncthing.
@@ -199,3 +199,11 @@ Updating the private cards uses **Check GitHub → Refresh local**. This new int
 ### Check GitHub feedback (v0.2.9)
 
 Manual **Check GitHub** now immediately shows **Checking GitHub for card updates...**. If an earlier sync is still active, tapping again says **A GitHub card check is already in progress** instead of silently returning. After a successful check, it still reports the number of updated packs or that everything is already current; failures continue to display an error. Background automatic checks remain quiet unless they download new packs. This UI change does not edit card packs, source images, notes or per-device review logs.
+
+## Dynamic Recall in v0.3.0
+
+Use **Open Dynamic Recall** as a separate Obsidian command. In **Marrow Cards settings**, enter your own Groq API key using the device-local SecretStorage control. Tap **Check knowledge units on GitHub** to download the versioned verified KU pack from the private data repository. Choose one index, then **Study 10/25/50/75 units** (up to the units available). The AI generates questions in batches of up to 10 and grades each typed response individually on a **0–10** scale with corrected, missing and incorrect facts plus manual numeric override.
+
+Results are append-only under `MarrowCards/dynamic-recall/attempts/<device-id>/YYYY-MM.jsonl`; old PYQ reviews remain under `MarrowCards/reviews/`. Each device must be upgraded separately through BRAT. The server receives the selected KU's answer/excerpt and your typed response; the model can make medical grading mistakes. There is **no paid fallback** and daily safety caps of 75 grading calls/125 total requests per device, not a guarantee of free provider quota. **Only single-index Dynamic Recall** is available in v0.3.0; multi-index, offline question cache, automated Sheets ingestion and local AI remain postponed.
+
+The existing verified public testing report is [here](https://github.com/Akshat6/marrow-cards-plugin/actions/runs/39113855817). See [rollback instructions](docs/rollback-v0.3.0.md) and [technical handoff](docs/dynamic-recall-phase1.md). Before updating on your phone or tablet, copy the entire Obsidian vault and check Syncthing has settled.
