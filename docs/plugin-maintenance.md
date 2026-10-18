@@ -110,3 +110,10 @@ A new chat is **not** guaranteed to load repo files or this context automaticall
 - The UI shows per-index and Integrated collection progress (Round N · x/y scored · z remaining), and caps the 10/25/50/75 buttons to **remaining eligible KUs**, not entire pool size.
 - Usage prediction uses `Math.floor(rawEstimate*0.90)` instead of `*0.75`; 20 raw → 18 displayed. Neither formula guarantees live provider quota. Leave local 75-grade/125-request safety caps and no-paid-fallback behavior intact.
 - Regression checks must test multiple sessions (25+6 then 31 for a 31-KU pool), Round 2 low-score-first ordering, round-boundary stopping, older categorical histories, mid-round Obsidian reopen and new-KU catch-up. Keep legacy PYQ Review unmodified.
+
+## v0.3.6 — compact Dynamic Recall library details switch
+
+- `MarrowDynamicRecallView.showIndexDetails` defaults to false. The library draws one accessible **Show index details / Hide index details** button at the top of the index list. Off hides per-index and integrated KU counts, the per-index round/progress badges, score/attempt summaries and catalog heading counts. On restores all of them for a momentary progress check; all index/collection Review/Browse actions remain available in both states.
+- The state survives `draw()` while the current view is open, without modifying Obsidian settings or any saved grade/KU/attempt files. Starting a fresh view defaults to uncluttered navigation.
+- Do not conflate this toggle with the independent Groq daily-usage disclosure. The detailed round progress inside the Review selector remains available because it helps explain how many KUs are eligible in the next session.
+- Regressions should check both toggle states, integrated and ordinary index metadata, preserved accordion state, and no effects on grades, browsing, Groq calls or legacy PYQ.
