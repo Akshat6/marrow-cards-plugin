@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: PYQ Review and Dynamic Recall with safe cloned device ID repair and private progress sync.",
+  "description": "Marrow Cards: PYQ Review and Dynamic Recall with private progress sync and stable device identities.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }

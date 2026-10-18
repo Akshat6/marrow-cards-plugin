@@ -67,3 +67,7 @@ Marrow Cards now supports compact **private** per-device GitHub progress snapsho
 ## Cloned Device ID repair (v0.3.10)
 
 If `.obsidian` was synced from phone to tablet before exclusion, Marrow Cards may have **one shared Device ID**. The v0.3.10 settings offer **Repair cloned device ID (tablet only)**, a two-click repair after backups and confirming `.obsidian` is excluded. Only the tablet's future logs/snapshots use a new ID. All old score history and the original GitHub file remain untouched; old shared-ID attempts must not be reattributed or double-counted. See the [permanent Dynamic Recall handoff](docs/dynamic-recall-new-index-handoff.md).
+
+## v0.3.11 — identity repair button retired
+
+The temporary **Repair cloned device ID (tablet only)** setting described above was REMOVED in v0.3.11 after recovery. **Do not recommend looking for or using that button in current releases.** Current IDs are displayed read-only, normal startup validates or initializes missing IDs only, and no manual ID-rotation action exists. Existing local histories and private snapshots (including old shared-ID records) must be preserved as-is. Continue excluding `.obsidian` from Syncthing on each device.
