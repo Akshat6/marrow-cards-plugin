@@ -16,11 +16,11 @@ class Element{
 class ItemView{constructor(leaf){this.app=leaf.app;this.contentEl=new Element();}}
 const fake={Plugin:class{},ItemView,PluginSettingTab:class{},Setting:class{},Notice:class{},normalizePath:x=>x,base64ToArrayBuffer(){}};
 const m={exports:{}};
-vm.runInNewContext(source+'\nmodule.exports.check={validDynamicUnit,dynamicLibraryHierarchy,MarrowDynamicRecallView};',{
+vm.runInNewContext(source+'\nmodule.exports.check={validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,MarrowDynamicRecallView};',{
  module:m,exports:m.exports,require:n=>{if(n==='obsidian')return fake;throw Error(n);},
  console,TextDecoder,Promise,Date,JSON,setTimeout,clearTimeout
 });
-const {validDynamicUnit,dynamicLibraryHierarchy,MarrowDynamicRecallView}=m.exports.check;
+const {validDynamicUnit,dynamicLibraryHierarchy,dynamicIntegratedCollections,dynamicSelectedUnits,dynamicUsageForecast,MarrowDynamicRecallView}=m.exports.check;
 function unit(indexId,subject,system,title,n=1,links=[]){
  return {id:'K-TEST-'+indexId+'-'+n,indexId,subject,system,indexTitle:title,
    answer:'synthetic alpha beta',promptTarget:'Recall two facts',verification:'Verified',
@@ -53,20 +53,37 @@ function findNode(nodes,...path){
 const hierarchy=dynamicLibraryHierarchy(units,catalog,cards);
 const primary=findNode(hierarchy,'Anatomy','Thorax');
 assert.equal(primary.indexes.length,4);
-const linked=findNode(hierarchy,'Integrated','Pulmonology','Anatomy');
-assert.equal(linked.indexes.length,4,'All FOUR Anatomy indexes are in Integrated Pulmonology');
-assert.equal(linked.indexes[0].units.length,2,'Index KUs are not copied into two histories');
-const integratedMed=findNode(hierarchy,'Integrated','Pulmonology','Medicine');
-assert.equal(integratedMed.indexes.length,1,'Approved PYQ integrated link connects later Medicine KUs');
-const integratedPed=findNode(hierarchy,'Integrated','Pulmonology','Pediatrics');
-assert.equal(integratedPed.indexes.length,1,'Explicit future Pediatrics link included');
-assert.equal(findNode(hierarchy,'Medicine','Pulmonology').indexes.length,1);
-assert.equal(findNode(hierarchy,'Pediatrics','Respiratory System').indexes.length,1);
-assert.equal(hierarchy.find(x=>x.label==='Integrated').count,6);
-assert.equal(primary.indexes.find(x=>x.id==='ANAT-R3-067').units[0].id,linked.indexes.find(x=>x.id==='ANAT-R3-067').units[0].id);
+const integratedNode=findNode(hierarchy,'Integrated');
+assert.equal(integratedNode.children.length,0,'Pulmonology should be a direct collection, not a new subject tree');
+assert.equal(integratedNode.collections.length,1,'Pulmonology is exactly one collection tile');
+const pulm=integratedNode.collections[0];
+assert.equal(pulm.id,'INT-PULM');
+assert.equal(pulm.title,'Pulmonology');
+assert.equal(pulm.units.length,7,'Include 4 Anatomy indexes plus Medicine and Pediatrics without duplicate KUs');
+assert.equal(new Set(pulm.units.map(x=>x.id)).size,pulm.units.length);
+assert.equal(pulm.units.filter(u=>u.subject==='Anatomy').length,5);
+assert.equal(pulm.units.filter(u=>u.subject==='Medicine').length,1);
+assert.equal(pulm.units.filter(u=>u.subject==='Pediatrics').length,1);
+assert.equal(dynamicSelectedUnits(units,'INT-PULM',catalog,cards).length,7);
+assert.equal(dynamicSelectedUnits(units,'ANAT-R3-067',catalog,cards).length,2);
+assert.equal(dynamicSelectedUnits(units,'INT-PULM',catalog,cards).find(x=>x.id===anatomy[0].id),anatomy[0],
+  'Both index and integrated pool reference the exact same KU object');
 const unknown=unit('MED-NEW-99','Medicine','Pulmonology','New Unit',1);
-assert.equal(dynamicLibraryHierarchy([unknown],catalog,[]).find(n=>n.label==='Integrated'),undefined,
-  'Do not infer unapproved integrated medical relationships');
+assert.equal(dynamicIntegratedCollections([unknown],catalog,[]).length,0,
+  'Unapproved Medicine units are not auto-tagged Integrated Pulmonology');
+// Forecast uses only measured, successful provider responses and local safety caps.
+const est=dynamicUsageForecast({
+  requests:11,grades:10,tokens:6220,gradeResponses:10,gradeTokens:5000,
+  generateTokens:1220,generatedKUs:10,providerRemainingRequests:null},10);
+assert.equal(est.completedToday,10);
+assert.equal(est.remainingGrades,65);
+assert.equal(est.remainingRequests,114);
+assert.equal(est.averagePerAnswer,622);
+assert.equal(est.estimate,65,'Keep estimated questions inside local 75 grade/125 request caps');
+const constrained=dynamicUsageForecast({requests:11,grades:10,tokens:6220,
+  gradeResponses:10,gradeTokens:5000,generateTokens:1220,generatedKUs:10,providerRemainingRequests:3},10);
+assert.equal(constrained.estimate,2,'Account header RPD remaining must constrain local estimate');
+assert.equal(dynamicUsageForecast({requests:0,grades:0,tokens:0,providerRemainingRequests:null},0).hasSample,false);
 function walk(el,fn,out=[]){if(fn(el))out.push(el);for(const x of el.children)walk(x,fn,out);return out;}
 const plugin={indexes:catalog,cards,settings:{deviceId:'synthetic-device'}};
 const view=new MarrowDynamicRecallView({app:{}},plugin);
@@ -74,14 +91,25 @@ view.units=units;view.selectedIndex='ANAT-R3-067';view.screen='library';view.dra
 const summaries=walk(view.contentEl,e=>e.tag==='summary').map(e=>e.text);
 assert(summaries.some(x=>x.startsWith('Anatomy')));
 assert(summaries.some(x=>x.startsWith('Integrated')));
-assert(summaries.filter(x=>x.startsWith('Pulmonology')).length>=2);
-const selectMedic=walk(view.contentEl,e=>e.tag==='button'&&e.text.includes('MED-PULM-01'));
-assert(selectMedic.length>=2,'Both main and integrated index tiles must be available');
-selectMedic[1].events.click();
-assert.equal(view.selectedIndex,'MED-PULM-01','Same single index selection through integrated view');
-assert.equal(view.units.length,7,'Navigation must never modify KU feed');
-const allIndexButtons=walk(view.contentEl,e=>e.tag==='button'&&e.text.includes('ANAT-R3-067'));
-assert.equal(allIndexButtons.length,2);
+assert(!summaries.some(x=>x.startsWith('Pulmonology')),
+  'Pulmonology itself is a directly actionable integrated tile, not another accordion');
+const reviews=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review Pulmonology');
+const browses=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Browse Pulmonology');
+assert.equal(reviews.length,1);assert.equal(browses.length,1);
+assert(walk(view.contentEl,e=>e.text==='Today’s AI usage (UTC)').length>0,
+  'Daily usage panel must be visible on the Dynamic Recall home screen');
+browses[0].events.click();
+assert.equal(view.screen,'browse');
+assert.equal(view.selectedIndex,'INT-PULM');
+assert.equal(walk(view.contentEl,e=>e.tag==='details'&&e.classes.has('marrow-dynamic-browse-unit')).length,7);
+assert.equal(view.stats.size,0,'Browsing must not create graded attempts');
+const reviewFromBrowse=walk(view.contentEl,e=>e.tag==='button'&&e.text==='Review Pulmonology');
+assert.equal(reviewFromBrowse.length,1);
+reviewFromBrowse[0].events.click();
+assert.equal(view.screen,'collection');
+const startButtons=walk(view.contentEl,e=>e.tag==='button'&&e.text.startsWith('Study '));
+assert.equal(startButtons.length,4,'Direct Integrated Review presents four session sizes');
+view.screen='library';view.draw();
 assert(css.includes('.marrow-dynamic.marrow-dynamic-study.is-answer-focused .marrow-dynamic-header'));
 assert(css.includes('.marrow-dynamic .marrow-dynamic-question'));
 view.screen='study';view.queue=[anatomy[0]];view.index=0;
@@ -100,4 +128,4 @@ editors[0].events.focus();
 assert(view.contentEl.classes.has('is-answer-focused'));
 editors[0].events.blur();
 assert(!view.contentEl.classes.has('is-answer-focused'));
-console.log('Dynamic hierarchy/mobile regression passed: 4 Anatomy indexes in both paths, future Medicine and Pediatrics via verified links, single stable KU IDs, non-inference for unlinked KUs, phone question/answer scroll isolation and focus controls.');
+console.log('Dynamic hierarchy/mobile regression passed: one Integrated Pulmonology Review/Browse collection, source-index KU identity, approved Medicine/Pediatrics links, usage forecast and limits, no auto-tag inference, phone focus controls.');
