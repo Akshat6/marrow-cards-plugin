@@ -1773,7 +1773,11 @@ function validDynamicUnit(unit) {
     unit.verification === 'Verified' &&
     (unit.indexTitle === undefined || typeof unit.indexTitle === 'string') &&
     (unit.sourceExcerpt === undefined || typeof unit.sourceExcerpt === 'string') &&
-    (unit.sourceLocator === undefined || typeof unit.sourceLocator === 'string'));
+    (unit.sourceLocator === undefined || typeof unit.sourceLocator === 'string') &&
+    (unit.subject === undefined || typeof unit.subject === 'string') &&
+    (unit.system === undefined || typeof unit.system === 'string') &&
+    (unit.integratedIndexIds === undefined || (Array.isArray(unit.integratedIndexIds) &&
+      unit.integratedIndexIds.every(safeId))));
 }
 function validateDynamicUnits(data) {
   if (!data || data.schemaVersion !== 1 || data.kind !== 'marrow-dynamic-recall-units' ||
@@ -1941,11 +1945,73 @@ async function gradeDynamicAnswer(plugin,unit,question,answer) {
   return validatedDynamicGrade(response);
 }
 
+
+// Hierarchy for the same stable KU index IDs. Integrated groups are VIEWS,
+// never copied KUs; attempts and scores remain anchored to the original KU ID.
+// Primary grouping follows the verified KU subject/system or approved local catalog.
+// Future verified Medicine/Pediatrics KUs can opt into any integrated index via
+// integratedIndexIds, or an already-approved PYQ index-to-integrated link.
+function dynamicLibraryHierarchy(units, catalog=[], cards=[]) {
+  const metadata=new Map(catalog.filter(x=>x&&safeId(x.id)).map(x=>[x.id,x]));
+  const indexed=new Map();
+  for(const unit of units){
+    if(!indexed.has(unit.indexId))indexed.set(unit.indexId,{id:unit.indexId,
+      title:unit.indexTitle||'',subject:unit.subject||'',system:unit.system||'',
+      integratedIds:new Set(),units:[]});
+    const entry=indexed.get(unit.indexId);
+    entry.units.push(unit);
+    for(const id of unit.integratedIndexIds||[])entry.integratedIds.add(id);
+  }
+  const root={label:'',key:'',children:new Map(),indexes:new Map()};
+  const add=(parts,entry)=>{
+    let parent=root;
+    for(const label of parts){
+      const key=parent.key+'/'+label;
+      if(!parent.children.has(label))parent.children.set(label,
+        {label,key,children:new Map(),indexes:new Map()});
+      parent=parent.children.get(label);
+    }
+    parent.indexes.set(entry.id,entry);
+  };
+  for(const entry of indexed.values()){
+    const canonical=metadata.get(entry.id)||{};
+    const subject=entry.subject||canonical.subject||'Other';
+    const system=entry.system||canonical.system||'Indexes';
+    entry.title=entry.title||canonical.title||entry.id;
+    entry.subject=subject;entry.system=system;
+    add([subject,system],entry);
+    // Existing approved PYQ links help future verified KUs, without
+    // deciding a new medical/integrated relationship from text similarity.
+    for(const card of cards){
+      if(!card||!Array.isArray(card.indexIds)||!card.indexIds.includes(entry.id))continue;
+      for(const id of card.indexIds){
+        if(metadata.get(id)?.subject==='Integrated')entry.integratedIds.add(id);
+      }
+    }
+    for(const id of entry.integratedIds){
+      const integrated=metadata.get(id);
+      if(integrated&&integrated.subject!=='Integrated')continue;
+      const systemName=integrated?.system||(id==='INT-PULM'?'Pulmonology':id);
+      add(['Integrated',systemName,subject],entry);
+    }
+  }
+  const sortNode=node=>({
+    label:node.label,key:node.key,
+    count:[...node.indexes.values()].length+
+      [...node.children.values()].reduce((sum,child)=>sum+sortNode(child).count,0),
+    indexes:[...node.indexes.values()].sort((a,b)=>a.id.localeCompare(b.id)),
+    children:[...node.children.values()].map(sortNode).sort((a,b)=>a.label.localeCompare(b.label))
+  });
+  return [...root.children.values()].map(sortNode).sort((a,b)=>
+    a.label==='Integrated'?1:b.label==='Integrated'?-1:a.label.localeCompare(b.label));
+}
+
 class MarrowDynamicRecallView extends ItemView {
   constructor(leaf,plugin){
     super(leaf);this.plugin=plugin;this.units=[];this.selectedIndex='';this.screen='library';
     this.queue=[];this.index=0;this.questions=new Map();this.recent=new Map();
     this.stats=new Map();this.usage={requests:0,grades:0,tokens:0};this.typed='';this.result=null;this.busy=false;this.error='';
+    this.expandedGroups=new Set();
   }
   getViewType(){return DYNAMIC_VIEW_TYPE;}
   getDisplayText(){return 'Dynamic Recall';}
@@ -2038,6 +2104,7 @@ class MarrowDynamicRecallView extends ItemView {
   }
   draw(){
     const el=this.contentEl;el.empty();el.addClass('marrow-cards');el.addClass('marrow-dynamic');
+    if(this.screen==='study')el.addClass('marrow-dynamic-study');
     const h=el.createDiv({cls:'marrow-dynamic-header'});
     h.createEl('h2',{text:'Dynamic Recall'});
     h.createEl('p',{text:'Separate from approved PYQ Review · 0–10 AI recall scoring · Groq free-tier only · 75 grading calls/day per local quota'});
@@ -2050,34 +2117,65 @@ class MarrowDynamicRecallView extends ItemView {
     if(this.busy)el.createEl('p',{cls:'marrow-hint',text:'Working…'});
     if(this.screen==='library'){
       const summary=el.createDiv({cls:'marrow-dynamic-body'});
-      const ids=[...new Set(this.units.map(u=>u.indexId))];
-      summary.createEl('p',{text:this.units.length+' verified Knowledge Units installed. New KUs are added through the versioned private knowledge pack; no fixed 157-unit limit.'});
+      summary.createEl('p',{text:this.units.length+' verified Knowledge Units installed. New KUs are added through the versioned private knowledge pack.'});
       summary.createEl('p',{cls:'marrow-hint',text:'Today (UTC): '+this.usage.grades+' / '+DYNAMIC_DAY_GRADE_CAP+' grading calls · '+this.usage.requests+' / '+DYNAMIC_DAY_CALL_CAP+' total AI requests · '+this.usage.tokens+' measured response tokens.'});
-      if(!ids.length){summary.createEl('p',{text:'No knowledge units installed. Use Check knowledge units on GitHub. Your PYQ cards are unchanged.'});return;}
-      for(const id of ids){
-        const one=this.units.filter(u=>u.indexId===id);
-        const line=summary.createDiv({cls:'marrow-dynamic-index'});
-        const pick=line.createEl('button',{text:(this.selectedIndex===id?'● ':'○ ')+id+' — '+(one[0].indexTitle||'Index')+' ('+one.length+' KUs)'});
+      if(!this.units.length){summary.createEl('p',{text:'No knowledge units installed. Use Check knowledge units on GitHub. Your PYQ cards are unchanged.'});return;}
+      const hierarchy=dynamicLibraryHierarchy(this.units,this.plugin.indexes||[],this.plugin.cards||[]);
+      summary.createEl('p',{cls:'marrow-hint',text:'MBBS → Subject → System → Index. Integrated indexes also show their linked source subjects. Selecting an index never duplicates its KU history.'});
+      const picks=[];
+      const studyButtons=[];
+      const setSelection=id=>{
+        this.selectedIndex=id;
+        const n=this.units.filter(u=>u.indexId===id).length;
+        for(const entry of picks)entry.button.setText(
+          (entry.id===id?'● ':'○ ')+entry.text);
+        for(const entry of studyButtons){
+          entry.button.setText('Study '+Math.min(entry.count,n)+' units');
+          entry.button.disabled=this.busy||!n;
+        }
+      };
+      const drawEntry=(target,entry)=>{
+        const line=target.createDiv({cls:'marrow-dynamic-index'});
+        const label=entry.id+' — '+entry.title+' ('+entry.units.length+' KUs)';
+        const pick=line.createEl('button',{text:(this.selectedIndex===entry.id?'● ':'○ ')+label});
+        picks.push({id:entry.id,text:label,button:pick});
         pick.disabled=this.busy;
-        pick.addEventListener('click',()=>{this.selectedIndex=id;this.draw();});
-        const sampled=one.map(u=>this.stats.get(u.id)).filter(Boolean);
+        pick.addEventListener('click',()=>setSelection(entry.id));
+        const sampled=entry.units.map(u=>this.stats.get(u.id)).filter(Boolean);
         const latest={correct:0,partial:0,wrong:0};
-        for(const h of sampled)latest[h.lastGrade]++;
+        for(const h of sampled)if(h.lastGrade in latest)latest[h.lastGrade]++;
         const attempts=sampled.reduce((n,h)=>n+h.attempts,0);
         const scored=sampled.reduce((n,h)=>n+h.scored,0);
         const scoreSum=sampled.reduce((n,h)=>n+h.scoreSum,0);
         line.createEl('p',{cls:'marrow-hint',text:
-          'Covered '+sampled.length+'/'+one.length+' KUs · Average score '+
-          (scored ? (Math.round(10*scoreSum/scored)/10)+'/10' : '—')+
+          'Covered '+sampled.length+'/'+entry.units.length+' KUs · Average score '+
+          (scored?(Math.round(10*scoreSum/scored)/10)+'/10':'—')+
           ' ('+scored+' numeric attempts) · Correct '+latest.correct+
           ' · Partial '+latest.partial+' · Wrong '+latest.wrong+
           ' · Total graded attempts '+attempts});
-      }
-      const row=summary.createDiv({cls:'marrow-toolbar'});
+      };
+      const drawNode=(target,node,depth)=>{
+        const wrapper=target.createEl('details',{cls:'marrow-dynamic-section'});
+        wrapper.open=this.expandedGroups.has(node.key);
+        wrapper.createEl('summary',{text:node.label+' · '+node.count+
+          (node.count===1?' index':' indexes')});
+        wrapper.addEventListener('toggle',()=>{
+          if(wrapper.open)this.expandedGroups.add(node.key);
+          else this.expandedGroups.delete(node.key);
+        });
+        const inside=wrapper.createDiv({cls:'marrow-dynamic-section-body'});
+        for(const child of node.children)drawNode(inside,child,depth+1);
+        for(const entry of node.indexes)drawEntry(inside,entry);
+      };
+      const tree=summary.createDiv({cls:'marrow-dynamic-hierarchy'});
+      for(const node of hierarchy)drawNode(tree,node,0);
+      const row=summary.createDiv({cls:'marrow-toolbar marrow-dynamic-start-actions'});
       for(const count of [10,25,50,75]){
         const n=this.units.filter(u=>u.indexId===this.selectedIndex).length;
-        const b=row.createEl('button',{text:'Study '+Math.min(count,n)+' units'});
-        b.disabled=this.busy||!n;b.addEventListener('click',()=>void this.start(count));
+        const button=row.createEl('button',{text:'Study '+Math.min(count,n)+' units'});
+        button.disabled=this.busy||!n;
+        button.addEventListener('click',()=>void this.start(count));
+        studyButtons.push({button,count});
       }
       summary.createEl('p',{cls:'marrow-hint',text:'Choose one index. Lower 0–10 scores become due sooner; each session tests each chosen KU once. Generation is batched (up to 10); each typed answer uses one grading call.'});
       return;
@@ -2090,15 +2188,20 @@ class MarrowDynamicRecallView extends ItemView {
       again.addEventListener('click',()=>{this.screen='library';this.draw();});return;
     }
     const unit=this.queue[this.index];if(!unit)return;
-    const body=el.createDiv({cls:'marrow-dynamic-body'});
-    body.createEl('p',{cls:'marrow-hint',text:(this.index+1)+' / '+this.queue.length+' · '+unit.indexId+' · '+unit.id});
-    body.createEl('h3',{text:this.questions.get(unit.id)||'Question will appear when Groq is available.'});
+    // The question is OUTSIDE the editable scroll area, so Android keyboard
+    // auto-scroll cannot push the active question off-screen while typing.
+    const question=el.createDiv({cls:'marrow-dynamic-question'});
+    question.createEl('p',{cls:'marrow-hint',text:(this.index+1)+' / '+this.queue.length+' · '+unit.indexId+' · '+unit.id});
+    question.createEl('h3',{text:this.questions.get(unit.id)||'Question will appear when Groq is available.'});
+    const body=el.createDiv({cls:'marrow-dynamic-body marrow-dynamic-study-body'});
     if(!this.questions.has(unit.id)){
       const retry=body.createEl('button',{text:'Retry question generation'});
       retry.disabled=this.busy;retry.addEventListener('click',()=>void this.ensureBatch());return;
     }
     const editor=body.createEl('textarea',{cls:'marrow-dynamic-answer',attr:{placeholder:'Type the answer from memory. No MCQ options.',rows:'5'}});
     editor.value=this.typed;editor.disabled=this.busy||!!this.result;
+    editor.addEventListener('focus',()=>el.addClass('is-answer-focused'));
+    editor.addEventListener('blur',()=>el.removeClass('is-answer-focused'));
     editor.addEventListener('input',()=>{this.typed=editor.value;});
     if(!this.result){
       const submit=body.createEl('button',{text:'Grade my answer with AI',cls:'mod-cta'});
