@@ -292,6 +292,11 @@ class MarrowCardsPlugin extends Plugin {
     if(this.progressSyncPromise)throw new Error('Progress upload in progress. Retry when sync finishes.');
     if(this.app.workspace.getLeavesOfType(DYNAMIC_VIEW_TYPE).some(l=>l.view?.busy))
       throw new Error('Finish the active Dynamic Recall question before changing device identity.');
+    // Cancel any pre-existing timer for the cloned identity before rotating.
+    if(this.progressSyncTimer!==null){
+      window.clearTimeout(this.progressSyncTimer);
+      this.progressSyncTimer=null;
+    }
     // Flush queued writes while their old device ID is still authoritative.
     await this.dynamicWriteQueue;
     await this.writeQueue;
