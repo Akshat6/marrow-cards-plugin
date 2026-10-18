@@ -1,0 +1,44 @@
+# Dynamic Recall — permanent index-ingestion and revision-analysis handoff
+
+Last updated: 2026-10-18. Keep this guide current on **main**, and reference it from AGENTS.md, the private repo, and the workbook SOP. Do not depend on any one ChatGPT conversation or a model's memory.
+
+## Authoritative stores — do not confuse these
+
+1. **Original study material:** user-supplied Marrow notes/screenshots/PDFs. Preserve text, heading, qualifier, image/page references; report unclear or cropped details. In a new chat, confirm the original file is actually accessible; a prior chat's attachment isn't a reliable transferable URL.
+2. **Master study database:** [Marrow Dynamic Recall Database](https://docs.google.com/spreadsheets/d/1ZK_Tvz4rKi10hSVU-_j2aN-PKrPx4i9otqLDxdlqqmE/edit) (verified exact workbook). Read its tabs in order: `00 READ FIRST`, `01 END TO END SOP`, `02 FIELD GUIDE`, `03 APPROVAL RULES`, `04 QUIZ & REVISION`, `05 QA & HANDOFF`, and `06 CHANGELOG`. Core data tabs include `Sources`, `Coverage Map`, `Knowledge Units`, `Recall Attempts`, `Question Recipes`, `Approved PYQ Cards`, and `Verified Card Links`. Before writing, inspect current headers, stable IDs, validation, recent rows and formulas; read back all inserted records.
+3. **PYQ/index master maps:** use the live `Marrow PYQ Index Master` and `Master Marrow Index Tracker` where appropriate. Never confuse `Topic_ID` with `PYQ_Index_ID`. Map by source, not name similarity alone. Existing approved PYQ cards and their integrated links are separate from mere PYQ code mentions.
+4. **Private KU distribution:** `Akshat6/marrow-cards-data` → `dynamic-recall/knowledge-units.json`, schemaVersion 1. Bump its `version` on new content, keep verified old KU IDs/answers and `integratedIndexIds` intact. **Only verified units** are published. The private `manifest.json` controls PYQ packs only and must not be modified for a KU-only update.
+5. **Public plugin code/runbook:** `Akshat6/marrow-cards-plugin` main, `AGENTS.md`, `docs/plugin-maintenance.md`, this guide, and `docs/dynamic-recall-phase1.md`. BRAT plugin version bumps only when plugin code changes, not when private KU data grows.
+6. **Actual user attempts and private revision analysis:** local Obsidian vault `MarrowCards/dynamic-recall/attempts/<device-id>/YYYY-MM.jsonl` (append-only), local usage logs, and derived `MarrowCards/dynamic-recall/analysis/<device-id>/<INDEX_ID>.md` or `INT-PULM.md`. These are NOT automatically visible to GitHub, Google Sheets or a new chat. Syncthing can mirror files between devices; keep the vault and its historical logs backed up. Never copy answer transcripts, scores or private note content into the public repo.
+
+## New index ingestion — exact order
+
+1. Open all authoritative live sources above, including the complete workbook SOP (S01 onward) and QA gates (G01 onward), then find existing source files, related pages, Source_IDs, Index_IDs and KUs to avoid duplicates.
+2. Establish the subject, module/system, exact index title and verified `PYQ_Index_ID` (and independent `Topic_ID` where applicable); identify the user-provided PDF pages, original note headings, image visibility, cut-offs and exceptions. Resolve ambiguous ID matches instead of guessing. Obtain appropriate source access.
+3. Record source provenance under **Sources** and every readable testable source statement/table cell/diagram label under **Coverage Map**, with deliberate dispositions for unclear, non-testable, duplicate or unavailable portions. Do not silently omit content because it seems low-yield.
+4. Atomize source-backed concepts into **Knowledge Units** with stable unique `KU_ID`, original note heading, `Source_ID`, `Source_Locator`, `Recall_Target`, `Canonical_Answer` and verified indexing. Use **Unverified/Needs Review** for unclear facts; never fabricate clinical corrections.
+5. Map PYQ relationships only using **actual user-approved cards and verified link eligibility**. A PYQ mention or master index mapping is not approval to add a PYQ flashcard. Confirm any integrated membership explicitly (e.g. `INT-PULM`), never infer it from subject names.
+6. Validate uniqueness, FK/source provenance, coverage counts, canonical answer qualifiers, source-image readability and workbook formulas/validation; read back written rows. Update `06 CHANGELOG` and QA/handoff notes with exactly what changed. Preserve old existing rows and sheet data.
+7. Export only the newly **Verified** KU rows to the **private** `dynamic-recall/knowledge-units.json` feed. Preserve IDs for all earlier KUs; bump feed version; test JSON schema, medical-source provenance and integrated links. Never publish private note excerpts in public plugin code.
+8. On-device: Obsidian → Dynamic Recall → **Check knowledge units on GitHub**. This downloads the private verified feed. There is no BRAT update unless plugin code itself changed. Validate new index subject/system and Integrated review/browse if linked, with old scored histories undisturbed.
+9. Update the private repo handoff and this public non-sensitive workflow when process rules change. Do not claim an edit was saved to Google Sheets or GitHub without readback.
+10. In a new chat, use the **exact entry-point prompt** below; a new conversation is not guaranteed to remember this one or have the PDFs and local study attempts accessible.
+
+## Revision weakness reports
+
+- The plugin calculates a **local, zero-Groq-call** analytical summary from verified KUs and *actual* append-only graded attempts (including corrections). Analysis is based on original note `heading`, learning target and page locator, not external clinical guesses.
+- Five categories: **Revise first** (last 0–3/10, wrong or repeatedly low), **Revise next** (last 4–7/10 or recent weaker score), **Monitor** (one/uncertain good outcome), **Consistently strong** (two latest numeric answers both at least 8/10; can defer temporarily, never permanently skip), **Not assessed** (no graded attempt). Any conflicting AI feedback should be checked against verified notes.
+- On refreshing the KU/history or scoring/correcting an attempt, the device writes updated derived Markdown summaries per source index and Integrated collection to `MarrowCards/dynamic-recall/analysis/<device-id>/`. These report files may be overwritten because they are derived snapshots; **the original append-only attempts must never be rewritten**.
+- Reports contain each KU's stable ID, heading, recall target, source locator and recent grade, plus clearly labeled AI-marked omissions/incorrect claims; they omit canonical note answer texts, typed private responses and credentials. The files remain locally in the Obsidian vault / Syncthing only.
+- For ChatGPT to answer “what must I revise in [index]?”, **attach its most recently synced analysis Markdown report in that chat** (and the verified note PDF when detailed source interpretation is requested). The model cannot read local Obsidian scores magically. Reports are descriptive, not clinical competency certificates.
+- Integrated analysis aggregates linked original KUs with the same score histories; it does not manufacture duplicate units, overwrite source index stats, or change the existing coverage-first round scheduler.
+
+## Exact new-chat prompt
+
+> Read `https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md` and `https://github.com/Akshat6/marrow-cards-plugin/blob/main/docs/dynamic-recall-new-index-handoff.md`. Open the **Marrow Dynamic Recall Database** Google Sheet linked there and follow **00 READ FIRST → 01 END TO END SOP → 05 QA & HANDOFF**. Inspect my attached new Marrow notes PDF/images and the existing private feed `Akshat6/marrow-cards-data/dynamic-recall/knowledge-units.json`. For **[subject / index]**, deduplicate source lines, verify index IDs and facts, register sources/coverage/KUs in the exact existing Google Sheet (if I ask you to save), read back and log changes, then publish only verified KUs to the private feed when authorized. Preserve old IDs and reviews; ask only for essential missing source/approval. For study weaknesses, I will attach the latest local `MarrowCards/dynamic-recall/analysis/<device-id>/<index-id>.md` report; analyze its source-linked scores without inventing facts.
+
+## Current milestone log
+
+- 2026-10-18: user requested persistent per-index score-driven weakness/strength analysis and reusable new-chat ingestion instructions, without relying on one chat transcript.
+- Implemented derived zero-token analyzer and synced per-device local report files in Marrow Cards v0.3.8 (subject to CI and publish confirmation).
+- Confirmed current connected Google Sheet tab names and existing SOP/QA gates; no new index has been ingested in this feature change and **no workbook rows were modified**.
