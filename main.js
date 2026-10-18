@@ -1759,6 +1759,7 @@ const DYNAMIC_ROOT = ROOT + '/dynamic-recall';
 const DYNAMIC_UNITS_FILE = DYNAMIC_ROOT + '/units.json';
 const DYNAMIC_ATTEMPTS = DYNAMIC_ROOT + '/attempts';
 const DYNAMIC_USAGE = DYNAMIC_ROOT + '/usage';
+const DYNAMIC_ANALYSIS = DYNAMIC_ROOT + '/analysis';
 const DYNAMIC_GROQ_KEY = 'marrow-dynamic-groq-key';
 const DYNAMIC_MODEL = 'openai/gpt-oss-20b';
 const DYNAMIC_GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
@@ -2098,6 +2099,142 @@ function dynamicRoundPlan(units, stats) {
   return {round:minAttempts+1,total:units.length,completed:units.length-eligible.length,
     remaining:eligible.length,eligible,minAttempts};
 }
+
+// Derived, source-linked revision advice. No provider call or inferred clinical facts.
+// Grading history is authoritative; assistant feedback is marked AI-generated, while
+// page/heading/promptTarget come from the VERIFIED private note-derived KU pack.
+function dynamicRevisionAnalysis(units, attempts) {
+  const byKU=new Map();
+  for(const a of attempts||[]){
+    if(!a||a.type!=='graded'||!safeId(a.kuId))continue;
+    if(!byKU.has(a.kuId))byKU.set(a.kuId,[]);
+    byKU.get(a.kuId).push(a);
+  }
+  const groups={weak:[],revise:[],monitor:[],strong:[],unseen:[]};
+  const topics=new Map();
+  for(const unit of units){
+    const history=(byKU.get(unit.id)||[]).slice().sort((a,b)=>
+      String(a.at||'').localeCompare(String(b.at||'')));
+    const latest=history[history.length-1]||null;
+    const recent=history.slice(-2);
+    const scores=recent.filter(a=>validDynamicScore(a.score)).map(a=>a.score);
+    const last=latest&&validDynamicScore(latest.score)?latest.score:null;
+    let status;
+    if(!latest)status='unseen';
+    else if(last!==null&&last<=3 || latest.grade==='wrong' ||
+      scores.length===2&&scores.every(x=>x<=7))status='weak';
+    else if(last!==null&&last<=7 || latest.grade==='partial' ||
+      scores.some(x=>x<=7))status='revise';
+    else if(scores.length===2&&scores.every(x=>x>=8))status='strong';
+    else status='monitor';
+    const row={id:unit.id,indexId:unit.indexId,title:unit.indexTitle||unit.indexId,
+      heading:unit.heading||'Other verified facts',target:unit.promptTarget,
+      sourceLocator:unit.sourceLocator||'',sourceId:unit.sourceId||'',
+      attempts:history.length,lastScore:last,lastGrade:latest?.grade||'',
+      latestMissing:latest?.missing||'',latestIncorrect:latest?.incorrect||'',
+      status};
+    groups[status].push(row);
+    if(!topics.has(row.heading))topics.set(row.heading,{heading:row.heading,
+      weak:0,revise:0,monitor:0,strong:0,unseen:0,total:0});
+    const topic=topics.get(row.heading);
+    topic[status]++;topic.total++;
+  }
+  const importance={weak:0,revise:1,monitor:2,strong:3,unseen:4};
+  const sortRows=(a,b)=>importance[a.status]-importance[b.status]||
+    (a.lastScore??11)-(b.lastScore??11)||a.heading.localeCompare(b.heading)||a.id.localeCompare(b.id);
+  for(const list of Object.values(groups))list.sort(sortRows);
+  const headings=[...topics.values()].sort((a,b)=>
+    b.weak-a.weak||b.revise-a.revise||a.heading.localeCompare(b.heading));
+  return {total:units.length,assessed:units.length-groups.unseen.length,
+    groups,headings};
+}
+function dynamicRevisionReport(title,collectionId,analysis) {
+  // Markdown snapshots contain no typed student answers, provider keys, or
+  // canonical answer texts. They are disposable derived copies of the logs.
+  const clean=v=>String(v??'').replace(/\s+/g,' ').trim()
+    .replace(/[|]/g,'/').replace(/[\[\]_*#<>]/g,'');
+  const lines=[
+    '# Dynamic Recall revision analysis — '+clean(title),
+    '',
+    '- Collection / index: '+clean(collectionId),
+    '- Generated (UTC): '+new Date().toISOString(),
+    '- Scored coverage: '+analysis.assessed+'/'+analysis.total+
+      ' verified KUs',
+    '- Needs focused revision: '+analysis.groups.weak.length,
+    '- Revisit soon: '+analysis.groups.revise.length,
+    '- Keep monitoring: '+analysis.groups.monitor.length,
+    '- Consistently strong (defer for now): '+analysis.groups.strong.length,
+    '- Not yet scored: '+analysis.groups.unseen.length,
+    '',
+    'This is a score-based study guide, not proof of clinical mastery. '+
+    'Two recent independently graded scores of 8–10 support deferring an item, '+
+    'not skipping it permanently. The note locator is the source of truth; '+
+    'missing/incorrect text is AI feedback and may need verification.',
+    '',
+    '## Weakest note headings',
+    ...analysis.headings.filter(x=>x.weak||x.revise)
+      .map(x=>'- '+clean(x.heading)+': '+x.weak+' high-priority, '+
+        x.revise+' revisit, '+x.total+' total'),
+    ''
+  ];
+  for(const [key,label] of [
+    ['weak','Revise first'],['revise','Revise next'],
+    ['monitor','Monitor / confirm on next round'],
+    ['strong','Consistently strong — can defer for now'],
+    ['unseen','Unassessed — finish current round']
+  ]){
+    lines.push('## '+label);
+    for(const row of analysis.groups[key]){
+      lines.push('- **'+clean(row.heading)+' — '+clean(row.target)+
+        '** ('+clean(row.id)+', '+(row.lastScore===null?
+          (row.attempts?clean(row.lastGrade):'not attempted'):
+          row.lastScore+'/10')+', '+row.attempts+' attempts'+
+        (row.sourceLocator?', '+clean(row.sourceLocator):'')+')');
+      if((key==='weak'||key==='revise')&&row.latestMissing)
+        lines.push('  - AI-marked missing: '+clean(row.latestMissing));
+      if((key==='weak'||key==='revise')&&row.latestIncorrect)
+        lines.push('  - AI-marked incorrect: '+clean(row.latestIncorrect));
+    }
+    if(!analysis.groups[key].length)lines.push('- None currently.');
+    lines.push('');
+  }
+  return lines.join('\n')+'\n';
+}
+async function saveDynamicAnalysisReports(plugin, units, attempts, catalog=[], cards=[]) {
+  if(!units.length)return [];
+  const indexed=new Map();
+  for(const unit of units){
+    if(!indexed.has(unit.indexId))indexed.set(unit.indexId,[]);
+    indexed.get(unit.indexId).push(unit);
+  }
+  const collections=[...indexed].map(([id,items])=>({
+    id,title:items[0]?.indexTitle||id,units:items}));
+  collections.push(...dynamicIntegratedCollections(units,catalog,cards));
+  await plugin.ensureFolder(DYNAMIC_ROOT);
+  await plugin.ensureFolder(DYNAMIC_ANALYSIS);
+  const directory=DYNAMIC_ANALYSIS+'/'+plugin.settings.deviceId;
+  await plugin.ensureFolder(directory);
+  const paths=[];
+  for(const collection of collections){
+    if(!safeId(collection.id))continue;
+    const report=dynamicRevisionReport(collection.title,collection.id,
+      dynamicRevisionAnalysis(collection.units,attempts));
+    const path=directory+'/'+collection.id+'.md';
+    const write=async()=>{
+      const file=plugin.app.vault.getAbstractFileByPath(path);
+      if(file){
+        const before=await plugin.app.vault.read(file);
+        if(before!==report)await plugin.app.vault.modify(file,report);
+      }else await plugin.app.vault.create(path,report);
+    };
+    plugin.dynamicAnalysisWriteQueue=(plugin.dynamicAnalysisWriteQueue||Promise.resolve())
+      .catch(()=>{}).then(write);
+    await plugin.dynamicAnalysisWriteQueue;
+    paths.push(path);
+  }
+  return paths;
+}
+
 class MarrowDynamicRecallView extends ItemView {
   constructor(leaf,plugin){
     super(leaf);this.plugin=plugin;this.units=[];this.selectedIndex='';this.screen='library';
@@ -2105,6 +2242,7 @@ class MarrowDynamicRecallView extends ItemView {
     this.stats=new Map();this.usage={requests:0,grades:0,tokens:0};this.typed='';this.result=null;this.busy=false;this.error='';
     this.expandedGroups=new Set();this.completedToday=0;this.browseUnits=[];
     this.usageExpanded=false;this.showIndexDetails=false;
+    this.attemptHistory=[];this.analysisReturn='index';this.analysisWriteError='';
   }
   getViewType(){return DYNAMIC_VIEW_TYPE;}
   getDisplayText(){return 'Dynamic Recall';}
@@ -2115,6 +2253,8 @@ class MarrowDynamicRecallView extends ItemView {
       this.units=file?validateDynamicUnits(JSON.parse(await this.app.vault.read(file))).units:[];
       const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
       this.stats=history.totals;
+      this.attemptHistory=history.attempts;
+      await this.refreshAnalysisReports();
       const today=new Date().toISOString().slice(0,10);
       this.completedToday=history.attempts.filter(x=>String(x.at||'').slice(0,10)===today).length;
       this.usage=await dynamicUsageToday(this.plugin);
@@ -2125,6 +2265,16 @@ class MarrowDynamicRecallView extends ItemView {
       this.error='';
     }catch(e){this.error=e.message;this.units=[];}
     this.draw();
+  }
+  async refreshAnalysisReports(){
+    try{
+      this.analysisWriteError='';
+      await saveDynamicAnalysisReports(this.plugin,this.units,this.attemptHistory,
+        this.plugin.indexes||[],this.plugin.cards||[]);
+    }catch(error){
+      this.analysisWriteError=String(error&&error.message||error);
+      console.warn('[Dynamic Recall] Local analysis snapshot unavailable:',error);
+    }
   }
   async syncUnits(){
     if(this.busy)return;this.busy=true;this.draw();
@@ -2179,7 +2329,10 @@ class MarrowDynamicRecallView extends ItemView {
         correct:evaluation.correct,missing:evaluation.missing,incorrect:evaluation.incorrect,
         feedback:evaluation.feedback,model:DYNAMIC_MODEL
       });
-      this.result={...evaluation,attemptId};this.stats=(dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS))).totals;
+      this.result={...evaluation,attemptId};
+      const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
+      this.stats=history.totals;this.attemptHistory=history.attempts;
+      await this.refreshAnalysisReports();
       this.completedToday++;
       this.usage=await dynamicUsageToday(this.plugin);
     }catch(e){this.error=e.message;new Notice('Dynamic Recall grading failed: '+e.message);}
@@ -2193,7 +2346,9 @@ class MarrowDynamicRecallView extends ItemView {
       await appendDynamicJsonl(this.plugin,DYNAMIC_ATTEMPTS,{type:'override',
         attemptId:this.result.attemptId,score,grade});
       this.result.score=score;this.result.grade=grade;this.result.overridden=true;
-      this.stats=(dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS))).totals;
+      const history=dynamicReviewSummary(await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS));
+      this.stats=history.totals;this.attemptHistory=history.attempts;
+      await this.refreshAnalysisReports();
     }catch(e){this.error=e.message;}finally{this.busy=false;this.draw();}
   }
   async next(){
@@ -2364,6 +2519,10 @@ class MarrowDynamicRecallView extends ItemView {
       browse.addEventListener('click',()=>{
         this.browseUnits=entry;this.screen='browse';this.draw();
       });
+      const analysis=target.createEl('button',{text:'Revision analysis'});
+      analysis.addEventListener('click',()=>{
+        this.analysisReturn='index';this.screen='analysis';this.draw();
+      });
       return;
     }
     if(this.screen==='collection'){
@@ -2384,6 +2543,66 @@ class MarrowDynamicRecallView extends ItemView {
       }
       const browse=target.createEl('button',{text:'Browse '+collection.title});
       browse.addEventListener('click',()=>{this.browseUnits=collection.units;this.screen='browse';this.draw();});
+      const analysis=target.createEl('button',{text:'Revision analysis'});
+      analysis.addEventListener('click',()=>{
+        this.analysisReturn='collection';this.screen='analysis';this.draw();
+      });
+      return;
+    }
+    if(this.screen==='analysis'){
+      const target=el.createDiv({cls:'marrow-dynamic-body marrow-dynamic-analysis'});
+      const collection=dynamicIntegratedCollections(this.units,this.plugin.indexes||[],this.plugin.cards||[])
+        .find(x=>x.id===this.selectedIndex);
+      const units=collection?.units||dynamicSelectedUnits(this.units,this.selectedIndex);
+      const title=collection?.title||units[0]?.indexTitle||this.selectedIndex;
+      const report=dynamicRevisionAnalysis(units,this.attemptHistory);
+      target.createEl('h3',{text:'Revision analysis — '+title});
+      target.createEl('p',{cls:'marrow-hint',text:'Computed locally from your original KU scores, corrected overrides, note headings and source locators. No Groq call. Based on verified Marrow-derived KUs, not unseen portions of the original PDF.'});
+      target.createEl('p',{cls:'marrow-dynamic-round',text:
+        report.assessed+'/'+report.total+' scored · '+report.groups.weak.length+
+        ' urgent · '+report.groups.revise.length+' revise next · '+
+        report.groups.strong.length+' consistently strong'});
+      const top=report.headings.filter(x=>x.weak||x.revise);
+      if(top.length){
+        target.createEl('h4',{text:'Weakest note headings'});
+        for(const h of top.slice(0,12))target.createEl('p',{cls:'marrow-hint',text:
+          h.heading+' · '+h.weak+' urgent · '+h.revise+' revisit'});
+      }
+      const kinds=[
+        ['weak','Revise first'],['revise','Revise next'],
+        ['monitor','Monitor / confirm'],
+        ['strong','Strong — can defer for now'],
+        ['unseen','Not assessed yet']
+      ];
+      for(const [key,label] of kinds){
+        const items=report.groups[key];
+        const section=target.createEl('details',{cls:'marrow-dynamic-analysis-group'});
+        section.open=key==='weak';
+        section.createEl('summary',{text:label+' · '+items.length});
+        const content=section.createDiv();
+        if(!items.length)content.createEl('p',{cls:'marrow-hint',text:'None currently.'});
+        for(const item of items){
+          const card=content.createDiv({cls:'marrow-dynamic-analysis-item'});
+          card.createEl('strong',{text:item.heading+' — '+item.target});
+          card.createEl('p',{cls:'marrow-hint',text:
+            (item.lastScore===null?(item.attempts?'Prior category: '+item.lastGrade:'Not scored'):
+              'Latest '+item.lastScore+'/10')+
+            ' · '+item.attempts+' attempts'+
+            (item.sourceLocator?' · '+item.sourceLocator:'')});
+          if((key==='weak'||key==='revise')&&item.latestMissing)
+            card.createEl('p',{cls:'marrow-hint',text:'AI-marked missing: '+item.latestMissing});
+          if((key==='weak'||key==='revise')&&item.latestIncorrect)
+            card.createEl('p',{cls:'marrow-hint',text:'AI-marked incorrect: '+item.latestIncorrect});
+        }
+      }
+      target.createEl('p',{cls:'marrow-hint',text:'Strong means two most recent numerical grades ≥8/10; it is not a permanent exemption from spaced revision. AI feedback can be imperfect; check the verified source.'});
+      const path=DYNAMIC_ANALYSIS+'/'+this.plugin.settings.deviceId+'/'+this.selectedIndex+'.md';
+      target.createEl('p',{cls:'marrow-hint',text:this.analysisWriteError?
+        'Local report saving failed: '+this.analysisWriteError:
+        'Automatically updated Markdown report in your vault: '+path+
+        '. To discuss scores in a new chat, attach that report; ChatGPT cannot automatically read your device vault.'});
+      const back=target.createEl('button',{text:'← Back to Review'});
+      back.addEventListener('click',()=>{this.screen=this.analysisReturn;this.draw();});
       return;
     }
     if(this.screen==='browse'){

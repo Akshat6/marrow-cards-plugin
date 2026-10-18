@@ -887,3 +887,27 @@
   flex: 1 1 100%;
   min-width: 0;
 }
+
+/* v0.3.8: source-linked weakness reports, shown only on demand inside Review. */
+.marrow-dynamic .marrow-dynamic-analysis-group {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  margin: 10px 0;
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+.marrow-dynamic .marrow-dynamic-analysis-group > summary {
+  padding: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.marrow-dynamic .marrow-dynamic-analysis-group > div { padding: 0 10px 10px; }
+.marrow-dynamic .marrow-dynamic-analysis-item {
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding: 10px;
+  overflow-wrap: anywhere;
+}
+.marrow-dynamic .marrow-dynamic-analysis-item p { margin: 5px 0; }
+.marrow-dynamic .marrow-dynamic-analysis > button { min-height: 42px; }
