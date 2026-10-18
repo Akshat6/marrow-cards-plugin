@@ -148,3 +148,12 @@ A new chat is **not** guaranteed to load repo files or this context automaticall
 - **Never mutate, reassign, merge or delete old JSONL events** or old private GitHub device snapshot. All local PYQ/Dynamic stats continue aggregating saved history across device folders. After rotation, only future events get the tablet's new ID. If both devices previously used the same ID, that *historical* summary is a combined legacy identity with unknown physical provenance; aggregate it **once** in future analyses, plus new tablet device history once. Do not falsely attribute old grades to the new tablet ID.
 - `uploadDynamicProgress(plugin,allowEmpty=true)` is used only on explicit rotation and creates a valid 0-attempt private registration; normal auto upload still skips attempts-free installations. Existing fine-grained private repo token can stay configured on both devices.
 - Synthetic tests verify byte-identical old logs, manual correction history preservation, two distinct GitHub snapshot filenames, 0-attempt registration, sync-in-progress guard, and zero impact on original phone's ID. Inspect and verify on actual Android phone and tablet; automated mocks cannot confirm Syncthing settings.
+
+## v0.3.11 — remove temporary ID-rotation control after successful recovery
+
+- User confirmed legacy scores were intact on phone and tablet after separation and explicitly requested removing the temporary "Repair cloned device ID (tablet only)" button so it cannot accidentally generate further identities.
+- Remove **both** the Settings two-step UI and `rotateDeviceIdForThisInstall()` backend; no manually exposed ID-rotation function remains. Keep the Settings **Current device ID** read-only display, initial install's invalid/missing-ID fallback, and stable saved device IDs. Do not run migrations on load.
+- Remove rotation-only `allowEmpty` GitHub snapshot registration; ordinary progress sync still skips zero-attempt snapshots while preserving legitimate historical zero-attempt files already in the private repo.
+- Preserve all prior JSONL files, auto GitHub progress upload, automatic retry, legacy PYQ grading, Dynamic Recall rounds, verified KU feed, and private/public repository separation. No private files are modified or deleted as part of this release.
+- Regression tests must explicitly fail if either the temporary button text or callable manual rotation function reappears. Continue to keep `.obsidian` device-local via Syncthing ignore patterns.
+- Earlier v0.3.10 repair instructions above are **historical**, not valid current steps.
