@@ -14,15 +14,17 @@ jobs:
         with:
           node-version: '22'
       - name: Static JavaScript syntax
-        run: node --check main.js && node --check tests/smoke.js && node --check tests/dynamic-smoke.js && node --check tests/dynamic-integration.js && node --check tests/live-groq-eval.js
+        run: node --check main.js && node --check tests/smoke.js && node --check tests/dynamic-smoke.js && node --check tests/dynamic-integration.js && node --check tests/dynamic-hierarchy-mobile.js && node --check tests/live-groq-eval.js
       - name: Legacy PYQ reviewer regression tests
         run: node tests/smoke.js
       - name: Isolated Dynamic Recall regression tests
         run: node tests/dynamic-smoke.js
       - name: Repeat-session Dynamic Recall integration (synthetic Groq)
         run: node tests/dynamic-integration.js
+      - name: Mobile keyboard and subject/integrated hierarchy regressions
+        run: node tests/dynamic-hierarchy-mobile.js
       - name: Verify real-Groq test harness without a secret or API calls
         run: node tests/live-groq-eval.js --dry-run
       - name: Verify approved v0.3.0 release version and unchanged plugin ID
         run: |
-          node -e "const m=require('./manifest.json'); if(m.version !== '0.3.0'||m.id !== 'marrow-cards') process.exit(1)"
+          node -e "const m=require('./manifest.json'); if(m.version !== '0.3.1'||m.id !== 'marrow-cards') process.exit(1)"

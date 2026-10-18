@@ -25,10 +25,11 @@ jobs:
           node --check main.js
           node tests/smoke.js
           node --check tests/dynamic-smoke.js
-          node --check tests/dynamic-integration.js
+          node --check tests/dynamic-integration.js && node --check tests/dynamic-hierarchy-mobile.js
           node --check tests/live-groq-eval.js
           node tests/dynamic-smoke.js
           node tests/dynamic-integration.js
+          node tests/dynamic-hierarchy-mobile.js
           node tests/live-groq-eval.js --dry-run
           node -e "const m=require('./manifest.json');if(m.id!=='marrow-cards'||!m.version.match(/^[0-9]+[.][0-9]+[.][0-9]+$/))process.exit(1)"
           test -s styles.css
@@ -44,4 +45,4 @@ jobs:
           fi
           gh release create "$VERSION" main.js manifest.json styles.css \
             --title "$VERSION" --target "$GITHUB_SHA" \
-            --notes "Marrow Cards v0.3.0: existing PYQ Review and separate single-index Groq Dynamic Recall (0–10 scoring, persistent history and manual overrides). Preserve vault backups before updating; v0.2.10 remains available as a frozen-version rollback. Device-specific validation is not yet complete."
+            --notes "Marrow Cards $VERSION: existing PYQ Review and single-index Groq Dynamic Recall. v0.3.1 fixes phone question visibility when answering and adds Subject/System/Index and Integrated Pulmonology navigation, using verified private KU membership without duplicate histories. Back up the vault before installing; v0.3.0 and v0.2.10 remain available for rollback. Android device-specific validation still required."
