@@ -688,3 +688,49 @@
     flex: 1 1 calc(50% - 6px);
   }
 }
+
+/* v0.3.2: Integrated collection tiles behave as direct review/browse cards. */
+.marrow-dynamic .marrow-dynamic-integrated-tile {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 8px 0;
+}
+.marrow-dynamic .marrow-dynamic-integrated-tile h3 {
+  margin: 2px 0 8px;
+  font-size: 1.05em;
+}
+.marrow-dynamic .marrow-dynamic-integrated-tile .marrow-toolbar button {
+  flex: 1 1 130px;
+  min-height: 46px;
+}
+.marrow-dynamic .marrow-dynamic-usage {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 14px 0;
+}
+.marrow-dynamic .marrow-dynamic-usage h3 {
+  margin: 0 0 8px;
+}
+.marrow-dynamic .marrow-dynamic-usage p {
+  margin: 7px 0;
+  overflow-wrap: anywhere;
+}
+.marrow-dynamic .marrow-dynamic-browse-unit {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
+  padding: 12px;
+  margin: 8px 0;
+}
+.marrow-dynamic .marrow-dynamic-browse-unit summary {
+  touch-action: manipulation;
+  cursor: pointer;
+  font-weight: 600;
+}
+.marrow-dynamic .marrow-dynamic-browse-unit p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
