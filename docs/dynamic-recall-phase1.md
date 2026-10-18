@@ -157,3 +157,9 @@ Open GitHub repo Akshat6/marrow-cards-plugin, branch feature/dynamic-recall-groq
 
 - Display just verified index title in each Dynamic Recall library tile, no visible index code/ID. Reuse the PYQ Review tile and compact side-by-side Review/Browse buttons (same size/style, with hidden accessible descriptive labels). Integrated Pulmonology matches the compact buttons.
 - Optional expanded stats continue to show round, coverage, scoring and attempts; underlying stable IDs remain in the KU feed and attempt history. No other features or scheduling changes.
+
+## v0.3.8 — deterministic local performance analysis and cross-chat continuity
+
+- Verified KU note metadata (index, heading, promptTarget and source locator) can be joined to append-only real attempts by stable KU ID, including manual numeric overrides. This permits local, proactive (on refresh/score) weakness summaries without any Groq call, new AI model or source reinterpretation. UI shows weakest source headings and per-KU score/feedback; strong means at least two most recent scores >=8/10 and can only be deferred temporarily.
+- Per-device local Markdown snapshots in `MarrowCards/dynamic-recall/analysis/<device-id>/` are refreshed automatically; they do not change the original attempts. A new chat must receive the report file to view personal scoring history. Add no local scores or private note answers to public GitHub.
+- Permanent new-chat handoff is [dynamic-recall-new-index-handoff.md](dynamic-recall-new-index-handoff.md), grounded in the currently connected `Marrow Dynamic Recall Database` workbook SOP/QA tabs and private verified KU feed. The ingest process does not yet run automatically; new notes need source inspection, Sheet writes/readback, source verification, approved integrated links and private feed versioning.
