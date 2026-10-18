@@ -79,3 +79,18 @@ Event log is append-only, actual typed attempts recorded only after a successful
 ## New-chat starting prompt
 
 Open GitHub repo Akshat6/marrow-cards-plugin, branch feature/dynamic-recall-groq-phase1, and read docs/dynamic-recall-phase1.md and docs/plugin-maintenance.md; read its draft PR, smoke tests and Groq API implementation. Also inspect current private dynamic-recall/knowledge-units.json and Google Sheet for new verified KUs. Continue feature development and tests without touching main/release, static PYQ packs, old MarrowCards/reviews, user notes or media. Do not assume live Groq or Android validation has happened until documented in this file.
+
+
+## 2026-10-18 implementation log / independently verified checkpoints
+
+1. Created isolated plugin branch feature/dynamic-recall-groq-phase1 from v0.2.10 main. No code, release manifest or deployment was changed on main.
+2. Added new command / independent view, batched question generation by KU, typed response and strict JSON grade, append-only grading plus override events, independent quota usage logging, local secure Groq key settings, separate CSS selectors.
+3. Published independent PRIVATE data feed at Akshat6/marrow-cards-data/dynamic-recall/knowledge-units.json, version 1.0.0 containing 157 verified Anatomy units. Existing private approved-card manifest and packs unmodified. Added private-feed README for future export work.
+4. Added synthetic tests/dynamic-smoke.js and PR-only Dynamic Recall CI workflow. Existing tests/smoke.js unchanged. Automated run https://github.com/Akshat6/marrow-cards-plugin/actions/runs/39107462188 PASSED on code commit 8849ea485b3aeeb6b8883c7d3f3ae7f940eb5e0c (Node syntax, legacy reviewer tests, dynamic synthetic mocked AI tests). No real Groq API key or Android device involved.
+5. The development PR is https://github.com/Akshat6/marrow-cards-plugin/pull/1 (draft; do not merge/release yet). Main plugin version remains 0.2.10.
+6. Added progress per selected index (KUs ever answered / total, most recent correct/partial/wrong, total attempts). Added local daily request, grade and token summary. Added no-downgrade/no-disappearing-KU checks when fetching a newer private unit feed.
+7. Model selected: Groq openai/gpt-oss-20b with low reasoning effort, JSON output. Provider quota official reference https://console.groq.com/docs/rate-limits. The exact per-account free ceiling must be checked when key is set.
+
+**Pending before anything touches the installed plugin:** actual free Groq request validation with device-local token; negative/error and rate-limit behavior; real S23 FE and Tab S9 UI/regression checks; document and resolve any defects. User should NOT paste a private token into chat.
+
+**Additional known Phase 1 limitations:** history lives in local Obsidian vault (Syncthing-copyable), not automatically in Google Sheets or ChatGPT; no live online Sheets ingestion watcher; generating a KU feed update is a separate explicitly requested operation; one index per Dynamic Recall session; no offline LLM; Groq remains an external cloud processor of snippets and typed answers.
