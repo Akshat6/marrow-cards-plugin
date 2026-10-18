@@ -1717,13 +1717,13 @@ class MarrowSettingsTab extends PluginSettingTab {
 
     containerEl.createEl('h3', { text: 'Dynamic Recall — Groq free API (experimental)' });
     containerEl.createEl('p', { text: 'Separate from PYQ Review. A Groq key is stored only in local Obsidian SecretStorage. Never put your key in GitHub or a Syncthing vault file. Free-tier availability and limits depend on your Groq account; this plugin never enables billing.' });
+    let pendingGroqKey = '';
     new Setting(containerEl).setName('Groq API key (this device only)')
       .setDesc('Create a free GroqCloud API key, paste it here, and save locally. Leave blank if you are not ready to connect.')
-      .addText((input) => { input.inputEl.type = 'password'; input.setPlaceholder('gsk_...'); let key = '';
-        input.onChange((v) => { key = v.trim(); input.inputEl.dataset.pendingGroqKey = key; }); })
+      .addText((input) => { input.inputEl.type = 'password'; input.setPlaceholder('gsk_...');
+        input.onChange((v) => { pendingGroqKey = v.trim(); }); })
       .addButton((button) => button.setButtonText('Save Groq key').onClick(() => {
-        const el = containerEl.querySelector('input[data-pending-groq-key]');
-        const key = el && el.dataset.pendingGroqKey;
+        const key = pendingGroqKey;
         if (!key || !key.startsWith('gsk_')) { new Notice('Enter a valid Groq API key first.'); return; }
         if (!this.app.secretStorage || !this.app.secretStorage.setSecret) { new Notice('Obsidian SecretStorage is unavailable on this device.'); return; }
         this.app.secretStorage.setSecret(DYNAMIC_GROQ_KEY, key);
