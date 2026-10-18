@@ -27,4 +27,4 @@ jobs:
         run: node tests/live-groq-eval.js --dry-run
       - name: Verify approved v0.3.0 release version and unchanged plugin ID
         run: |
-          node -e "const m=require('./manifest.json'); if(m.version !== '0.3.1'||m.id !== 'marrow-cards') process.exit(1)"
+          node -e "const m=require('./manifest.json'); if(m.version !== '0.3.2'||m.id !== 'marrow-cards') process.exit(1)"
