@@ -2029,6 +2029,14 @@ class MarrowDynamicRecallView extends ItemView {
         const pick=line.createEl('button',{text:(this.selectedIndex===id?'● ':'○ ')+id+' — '+(one[0].indexTitle||'Index')+' ('+one.length+' KUs)'});
         pick.disabled=this.busy;
         pick.addEventListener('click',()=>{this.selectedIndex=id;this.draw();});
+        const sampled=one.map(u=>this.stats.get(u.id)).filter(Boolean);
+        const latest={correct:0,partial:0,wrong:0};
+        for(const h of sampled)latest[h.lastGrade]++;
+        const attempts=sampled.reduce((n,h)=>n+h.attempts,0);
+        line.createEl('p',{cls:'marrow-hint',text:
+          'Covered '+sampled.length+'/'+one.length+' KUs · Correct '+latest.correct+
+          ' · Partial '+latest.partial+' · Wrong '+latest.wrong+
+          ' · Total graded attempts '+attempts});
       }
       const row=summary.createDiv({cls:'marrow-toolbar'});
       for(const count of [10,25,50,75]){
