@@ -1,0 +1,47 @@
+# Live provider tests are strictly opt-in, only on development branch.
+# Only a deliberate change to the request file can start this workflow.
+# No pull_request or pull_request_target event uses the API key.
+name: Opt-in Groq scoring audit (development only)
+on:
+  push:
+    branches:
+      - feature/dynamic-recall-groq-phase1
+    paths:
+      - .github/live-groq-test-request.txt
+permissions:
+  contents: read
+concurrency:
+  group: opt-in-dynamic-groq-live-evaluation
+  cancel-in-progress: false
+jobs:
+  grading:
+    if: github.repository == 'Akshat6/marrow-cards-plugin' && github.ref == 'refs/heads/feature/dynamic-recall-groq-phase1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: groq-live-test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify development branch and mock suite
+        shell: bash
+        run: |
+          test "$GITHUB_REF" = "refs/heads/feature/dynamic-recall-groq-phase1"
+          node --check main.js
+          node --check tests/live-groq-eval.js
+          node tests/live-groq-eval.js --dry-run
+      - name: Run restricted real Groq evaluation
+        env:
+          GROQ_TEST_API_KEY: ${{ secrets.GROQ_TEST_API_KEY }}
+        run: node tests/live-groq-eval.js
+      - name: Upload sanitized score-only report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dynamic-groq-score-audit
+          path: live-groq-summary.json
+          if-no-files-found: ignore
+          retention-days: 7
