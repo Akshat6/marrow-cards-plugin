@@ -1759,6 +1759,7 @@ const DYNAMIC_ROOT = ROOT + '/dynamic-recall';
 const DYNAMIC_UNITS_FILE = DYNAMIC_ROOT + '/units.json';
 const DYNAMIC_ATTEMPTS = DYNAMIC_ROOT + '/attempts';
 const DYNAMIC_USAGE = DYNAMIC_ROOT + '/usage';
+const DYNAMIC_ANALYSIS = DYNAMIC_ROOT + '/analysis';
 const DYNAMIC_GROQ_KEY = 'marrow-dynamic-groq-key';
 const DYNAMIC_MODEL = 'openai/gpt-oss-20b';
 const DYNAMIC_GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
@@ -2098,6 +2099,142 @@ function dynamicRoundPlan(units, stats) {
   return {round:minAttempts+1,total:units.length,completed:units.length-eligible.length,
     remaining:eligible.length,eligible,minAttempts};
 }
+
+// Derived, source-linked revision advice. No provider call or inferred clinical facts.
+// Grading history is authoritative; assistant feedback is marked AI-generated, while
+// page/heading/promptTarget come from the VERIFIED private note-derived KU pack.
+function dynamicRevisionAnalysis(units, attempts) {
+  const byKU=new Map();
+  for(const a of attempts||[]){
+    if(!a||a.type!=='graded'||!safeId(a.kuId))continue;
+    if(!byKU.has(a.kuId))byKU.set(a.kuId,[]);
+    byKU.get(a.kuId).push(a);
+  }
+  const groups={weak:[],revise:[],monitor:[],strong:[],unseen:[]};
+  const topics=new Map();
+  for(const unit of units){
+    const history=(byKU.get(unit.id)||[]).slice().sort((a,b)=>
+      String(a.at||'').localeCompare(String(b.at||'')));
+    const latest=history[history.length-1]||null;
+    const recent=history.slice(-2);
+    const scores=recent.filter(a=>validDynamicScore(a.score)).map(a=>a.score);
+    const last=latest&&validDynamicScore(latest.score)?latest.score:null;
+    let status;
+    if(!latest)status='unseen';
+    else if(last!==null&&last<=3 || latest.grade==='wrong' ||
+      scores.length===2&&scores.every(x=>x<=7))status='weak';
+    else if(last!==null&&last<=7 || latest.grade==='partial' ||
+      scores.some(x=>x<=7))status='revise';
+    else if(scores.length===2&&scores.every(x=>x>=8))status='strong';
+    else status='monitor';
+    const row={id:unit.id,indexId:unit.indexId,title:unit.indexTitle||unit.indexId,
+      heading:unit.heading||'Other verified facts',target:unit.promptTarget,
+      sourceLocator:unit.sourceLocator||'',sourceId:unit.sourceId||'',
+      attempts:history.length,lastScore:last,lastGrade:latest?.grade||'',
+      latestMissing:latest?.missing||'',latestIncorrect:latest?.incorrect||'',
+      status};
+    groups[status].push(row);
+    if(!topics.has(row.heading))topics.set(row.heading,{heading:row.heading,
+      weak:0,revise:0,monitor:0,strong:0,unseen:0,total:0});
+    const topic=topics.get(row.heading);
+    topic[status]++;topic.total++;
+  }
+  const importance={weak:0,revise:1,monitor:2,strong:3,unseen:4};
+  const sortRows=(a,b)=>importance[a.status]-importance[b.status]||
+    (a.lastScore??11)-(b.lastScore??11)||a.heading.localeCompare(b.heading)||a.id.localeCompare(b.id);
+  for(const list of Object.values(groups))list.sort(sortRows);
+  const headings=[...topics.values()].sort((a,b)=>
+    b.weak-a.weak||b.revise-a.revise||a.heading.localeCompare(b.heading));
+  return {total:units.length,assessed:units.length-groups.unseen.length,
+    groups,headings};
+}
+function dynamicRevisionReport(title,collectionId,analysis) {
+  // Markdown snapshots contain no typed student answers, provider keys, or
+  // canonical answer texts. They are disposable derived copies of the logs.
+  const clean=v=>String(v??'').replace(/\s+/g,' ').trim()
+    .replace(/[|]/g,'/').replace(/[\[\]_*#<>]/g,'');
+  const lines=[
+    '# Dynamic Recall revision analysis — '+clean(title),
+    '',
+    '- Collection / index: '+clean(collectionId),
+    '- Generated (UTC): '+new Date().toISOString(),
+    '- Scored coverage: '+analysis.assessed+'/'+analysis.total+
+      ' verified KUs',
+    '- Needs focused revision: '+analysis.groups.weak.length,
+    '- Revisit soon: '+analysis.groups.revise.length,
+    '- Keep monitoring: '+analysis.groups.monitor.length,
+    '- Consistently strong (defer for now): '+analysis.groups.strong.length,
+    '- Not yet scored: '+analysis.groups.unseen.length,
+    '',
+    'This is a score-based study guide, not proof of clinical mastery. '+
+    'Two recent independently graded scores of 8–10 support deferring an item, '+
+    'not skipping it permanently. The note locator is the source of truth; '+
+    'missing/incorrect text is AI feedback and may need verification.',
+    '',
+    '## Weakest note headings',
+    ...analysis.headings.filter(x=>x.weak||x.revise)
+      .map(x=>'- '+clean(x.heading)+': '+x.weak+' high-priority, '+
+        x.revise+' revisit, '+x.total+' total'),
+    ''
+  ];
+  for(const [key,label] of [
+    ['weak','Revise first'],['revise','Revise next'],
+    ['monitor','Monitor / confirm on next round'],
+    ['strong','Consistently strong — can defer for now'],
+    ['unseen','Unassessed — finish current round']
+  ]){
+    lines.push('## '+label);
+    for(const row of analysis.groups[key]){
+      lines.push('- **'+clean(row.heading)+' — '+clean(row.target)+
+        '** ('+clean(row.id)+', '+(row.lastScore===null?
+          (row.attempts?clean(row.lastGrade):'not attempted'):
+          row.lastScore+'/10')+', '+row.attempts+' attempts'+
+        (row.sourceLocator?', '+clean(row.sourceLocator):'')+')');
+      if((key==='weak'||key==='revise')&&row.latestMissing)
+        lines.push('  - AI-marked missing: '+clean(row.latestMissing));
+      if((key==='weak'||key==='revise')&&row.latestIncorrect)
+        lines.push('  - AI-marked incorrect: '+clean(row.latestIncorrect));
+    }
+    if(!analysis.groups[key].length)lines.push('- None currently.');
+    lines.push('');
+  }
+  return lines.join('\n')+'\n';
+}
+async function saveDynamicAnalysisReports(plugin, units, attempts, catalog=[], cards=[]) {
+  if(!units.length)return [];
+  const indexed=new Map();
+  for(const unit of units){
+    if(!indexed.has(unit.indexId))indexed.set(unit.indexId,[]);
+    indexed.get(unit.indexId).push(unit);
+  }
+  const collections=[...indexed].map(([id,items])=>({
+    id,title:items[0]?.indexTitle||id,units:items}));
+  collections.push(...dynamicIntegratedCollections(units,catalog,cards));
+  await plugin.ensureFolder(DYNAMIC_ROOT);
+  await plugin.ensureFolder(DYNAMIC_ANALYSIS);
+  const directory=DYNAMIC_ANALYSIS+'/'+plugin.settings.deviceId;
+  await plugin.ensureFolder(directory);
+  const paths=[];
+  for(const collection of collections){
+    if(!safeId(collection.id))continue;
+    const report=dynamicRevisionReport(collection.title,collection.id,
+      dynamicRevisionAnalysis(collection.units,attempts));
+    const path=directory+'/'+collection.id+'.md';
+    const write=async()=>{
+      const file=plugin.app.vault.getAbstractFileByPath(path);
+      if(file){
+        const before=await plugin.app.vault.read(file);
+        if(before!==report)await plugin.app.vault.modify(file,report);
+      }else await plugin.app.vault.create(path,report);
+    };
+    plugin.dynamicAnalysisWriteQueue=(plugin.dynamicAnalysisWriteQueue||Promise.resolve())
+      .catch(()=>{}).then(write);
+    await plugin.dynamicAnalysisWriteQueue;
+    paths.push(path);
+  }
+  return paths;
+}
+
 class MarrowDynamicRecallView extends ItemView {
   constructor(leaf,plugin){
     super(leaf);this.plugin=plugin;this.units=[];this.selectedIndex='';this.screen='library';
