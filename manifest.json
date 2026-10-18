@@ -1,9 +1,9 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.2.10",
+  "version": "0.3.0",
   "minAppVersion": "1.11.4",
-  "description": "Marrow Cards: Clear all selected indexes across subjects while preserving reviews, notes and cards.",
+  "description": "Marrow Cards: existing PYQ Review plus single-index Groq Dynamic Recall with 0–10 AI scoring.",
   "author": "Marrow Cards",
   "isDesktopOnly": false
 }

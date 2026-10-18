@@ -2,7 +2,7 @@
 
 **Purpose:** A future ChatGPT session or developer can safely maintain the Obsidian plugin **without access to previous chats**. This file covers **plugin/UI/code** changes. For extracting and approving new PYQs, follow [flashcard-workflow.md](flashcard-workflow.md). Both workflows start at [../AGENTS.md](../AGENTS.md).
 
-_Last checked: 2026-10-16, during the v0.2.10 clear-selection upgrade._
+_Updated: 2026-10-18, for direct v0.3.0 Dynamic Recall release; device validation remains pending._
 
 ## 1. Re-read live source and preserve boundaries
 
@@ -69,3 +69,10 @@ Use in a new conversation:
 > Read https://github.com/Akshat6/marrow-cards-plugin/blob/main/AGENTS.md and https://github.com/Akshat6/marrow-cards-plugin/blob/main/docs/plugin-maintenance.md. I want to fix/upgrade [specific Marrow Cards behaviour]. Inspect the current GitHub plugin source and tests, preserve approved PYQs and local review/notes, add a regression test, publish a verified BRAT release, and tell me how to update.
 
 A new chat is **not** guaranteed to load repo files or this context automatically. Supply the links explicitly. No prior chat history is required once the live docs and repositories have been read.
+
+## v0.3.0 Dynamic Recall and downgrade strategy
+
+- **No separate plugin ID**: keep `marrow-cards`, `Open PYQ Review` and the new `Open Dynamic Recall` independent. Dynamic logs live strictly under `MarrowCards/dynamic-recall`; private PYQ packs, `MarrowCards/reviews`, notes and media remain unchanged. No automated Google Sheets ingestion, multi-index Dynamic Recall, local AI or offline question cache.
+- The user explicitly opted for direct `0.3.0` without beta despite pending real-device tests. The release CI must validate both the legacy and Dynamic Recall suites. A controlled 13-case real Groq grading audit passed on 2026-10-18, but larger medical validation and Android interaction remain unverified.
+- **Before installing** on each phone/tablet: make a copy of the entire vault including `.obsidian/` settings plus `MarrowCards/`, and let Syncthing finish. Keep the verified [0.2.10 release](https://github.com/Akshat6/marrow-cards-plugin/releases/tag/0.2.10) with `main.js`, `manifest.json`, `styles.css` as a rollback checkpoint. A GitHub code rollback is not a vault data restore.
+- For failure, use BRAT **frozen version** `0.2.10` for `Akshat6/marrow-cards-plugin` (BRAT v1.1+), then disable any automatic latest-version updates and reload Obsidian; or manually install those 3 files in the local plugin folder after backup. Switching back drops Dynamic Recall UI but **must not delete** its stored attempt logs or any older PYQ files. Follow [rollback steps](rollback-v0.3.0.md).
