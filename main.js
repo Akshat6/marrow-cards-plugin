@@ -3156,9 +3156,21 @@ function makePyqStyleMessages(packet) {
 async function generatePyqStyleAuditCandidate(plugin,b,units,provider=callDynamicGroq) {
   const packet=buildPyqStyleGroqPacket(b,units);
   const messages=makePyqStyleMessages(packet);
-  const raw=await provider(plugin,messages,'generate',1); // shared free-tier cap, no retry
-  const draft=pyqStyleDraftFromModel(raw,b,packet);
-  return {draft,packet};
+  let raw;
+  try{
+    raw=await provider(plugin,messages,'generate',1); // shared free-tier cap, no retry
+    const draft=pyqStyleDraftFromModel(raw,b,packet);
+    return {draft,packet};
+  }catch(error){
+    // Preserve a bounded, unapproved model JSON in the local audit log
+    // for later independent review; never attach credentials or auth headers.
+    if(raw!==undefined){
+      const encoded=JSON.stringify(raw);
+      if(encoded&&encoded.length<=12000)error.auditRawModelJson=raw;
+    }
+    error.auditPacket=packet;
+    throw error;
+  }
 }
 async function appendPyqStyleEvent(plugin,event){
   if(!safeId(plugin.settings.deviceId))throw new Error('Invalid device identity; cannot save MCQ attempt.');
@@ -3277,11 +3289,13 @@ class PyqStyleController {
       try{generated=await generatePyqStyleAuditCandidate(this.view.plugin,b,this.view.units);}
       catch(e){await appendPyqStyleEvent(this.view.plugin,{type:'candidate_rejected',
         blueprintId:b.blueprintId,indexId,reason:String(e.message||e).slice(0,350),
+        sourcePacket:e.auditPacket||null,rawModelJson:e.auditRawModelJson||null,
         promptVersion:PYQ_STYLE_PROMPT_VERSION,validator:'UNREVIEWED_SOURCE_LOCKED'});throw e;}
       const item=generated.draft;
       await appendPyqStyleEvent(this.view.plugin,{type:'candidate_unverified',
         blueprintId:b.blueprintId,indexId,questionId:item.questionId,question:item,
         sourceKuIds:b.kuIds,feedVersion:this.feed.version,model:DYNAMIC_MODEL,
+        sourcePacket:generated.packet,
         promptVersion:PYQ_STYLE_PROMPT_VERSION,sourcePacketVersion:PYQ_STYLE_PACKET_VERSION,
         sourcePolicy:PYQ_STYLE_SOURCE_POLICY,
         validator:'STRUCTURAL_AND_REFERENCE_ONLY_NOT_MEDICALLY_APPROVED'});
