@@ -27,6 +27,12 @@ In the isolated development branch's `main.js`:
 - simulated HTTP 429 and unusable provider JSON each resulting in **one** metered network attempt (under mock transport), appropriate rejected audit records and no new student-facing questions;
 - preexisting source, image, versioning, selection rotation, local event and legacy regression tests.
 
+## Follow-up text-only versus image-card regression
+
+A second review caught a genuine distinction: an H-lane blueprint may have `sourceCardId` to establish an approved *historical pattern* without requesting a displayed picture. The Groq response is now required to use `sourceCardId:null` whenever `sourceImage:null`, while a genuine approved-original-image blueprint retains the exact same-card media reference. Tests explicitly accept the text-only H case, reject a spurious model image-card assertion, accept the authorized image pair and reject image/card mismatches.
+
+[Updated complete CI run 39650649824](https://github.com/Akshat6/marrow-cards-plugin/actions/runs/39650649824) passed at commit `128a6849eb758fadfc060a32bed59f36740618c4`. No image pixels were generated or modified.
+
 ## Unresolved and intentionally blocked
 
 **Step 4 is an interface and structural provenance boundary, not a medical semantic truth verifier.** A model can cite the correct KU while composing a medically unsupported statement; neither citation shape, key matching nor the model's own explanation proves clinical validity. Exact clinical truth and one-best-answer judgments, image-label answer leakage, examiner-style novelty and historical near-duplication require the Step 5 source/manual audits. A first real Groq batch must remain audit-only and preserve immutable raw provider outputs and token/usage metadata in a separately authorized controlled experiment.
