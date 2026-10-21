@@ -3365,7 +3365,8 @@ function validatePyqExperimentalFeed(f, units){
        !b.sourceIndexIds.includes(b.homeIndexId)||
        !['N','A','S'].includes(b.evidenceLane)||
        (b.evidenceLane==='S'?b.sourceKuIds.length!==1:b.sourceKuIds.length<2)||
-       !['P1','P2','P3','S'].includes(b.analystPriority)||
+       !['P1','P2','P3','S','X'].includes(b.analystPriority)||
+       (b.analystPriority==='X'&&b.experimentalEnabled!==false)||
        !safeId(b.cognitiveFamily)||typeof b.conceptLabel!=='string'||!b.conceptLabel.trim()||
        typeof b.analystAssessment!=='string'||
        typeof b.cognitiveOperation!=='string'||b.cognitiveOperation.length<12||
