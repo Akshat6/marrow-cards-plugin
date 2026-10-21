@@ -191,10 +191,14 @@ assert.equal(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-index-title')&
 const sampleTile=walk(view.contentEl,e=>e.classes.has('marrow-dynamic-index')&&e.classes.has('marrow-index-tile'))[0];
 assert(sampleTile,'Dynamic index must use existing PYQ index-tile structure');
 const sampleActions=sampleTile.children.filter(e=>e.tag==='button');
-assert.deepEqual(sampleActions.map(e=>e.text),['Review','Browse']);
+assert.deepEqual(sampleActions.map(e=>e.text),['Review','Browse','PYQ-style']);
+assert.equal(sampleActions[2].classes.has('marrow-start-pyq-style'),true,
+  'New source-index PYQ-style mode must be distinct from existing Review/Browse');
 assert(sampleActions.every(e=>e.classes.has('marrow-start-single')),
   'Review and Browse must share the existing PYQ compact button class');
 assert(sampleActions[1].classes.has('marrow-start-browse'));
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='PYQ-style practice Anatomy 067').length,1,
+  'Exactly one source-index PYQ-style action is shown');
 view.expandedGroups.add('/Anatomy');
 firstToggle[0].events.click();
 assert.equal(view.showIndexDetails,true);
