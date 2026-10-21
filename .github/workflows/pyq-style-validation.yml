@@ -1,7 +1,7 @@
 name: PYQ-style prototype tests (no publishing)
 on:
   push:
-    branches: [feature/pyq-style-practice-m2, feature/pyq-style-step2-feed-hardening, feature/pyq-style-step3-notes-selector, feature/pyq-style-step4-provider-safety]
+    branches: [feature/pyq-style-practice-m2, feature/pyq-style-step2-feed-hardening, feature/pyq-style-step3-notes-selector, feature/pyq-style-step4-provider-safety, feature/pyq-style-home-index-audit-v092]
   pull_request:
     branches: [main]
 permissions:
@@ -19,7 +19,10 @@ jobs:
           set -euo pipefail
           node --check main.js
           node --check tests/pyq-style-smoke.js
+          node --check pyq-style-multi-index-audit.js
+          node --check tests/pyq-style-multi-index-audit.js
           node tests/pyq-style-smoke.js
+          node tests/pyq-style-multi-index-audit.js
           node tests/smoke.js
           node tests/dynamic-smoke.js
           node tests/dynamic-integration.js
