@@ -26,7 +26,7 @@ const obsidian={Plugin:class{},ItemView,Notice:class{},PluginSettingTab:class{},
  base64ToArrayBuffer:()=>{},normalizePath:x=>x
 };
 const m={exports:{}};
-vm.runInNewContext(source+'\nmodule.exports.pyqTest={validatePyqStyleBlueprint,validatePyqStyleQuestion,validatePyqStyleRuntime,pyqStyleVerifiedOriginalImage,pyqStyleDraftFromModel,PyqStyleController,MarrowDynamicRecallView,PYQ_STYLE_FEED_FILE,PYQ_STYLE_FEED_REMOTE,PYQ_STYLE_EVENTS};',{
+vm.runInNewContext(source+'\nmodule.exports.pyqTest={validatePyqStyleBlueprint,validatePyqStyleQuestion,validatePyqStyleRuntime,pyqStyleVerifiedOriginalImage,pyqStyleDraftFromModel,selectPyqStyleBlueprint,PyqStyleController,MarrowDynamicRecallView,PYQ_STYLE_FEED_FILE,PYQ_STYLE_FEED_REMOTE,PYQ_STYLE_EVENTS};',{
  module:m,exports:m.exports,require(n){if(n==='obsidian')return obsidian;throw Error(n);},
  console,TextDecoder,Date,Promise,JSON,setTimeout,clearTimeout
 },{filename:'main.js'});
@@ -35,7 +35,7 @@ const unit={id:'KU-000001',indexId:'ANA-TEST',subject:'Synthetic',indexTitle:'Im
  sourceId:'SRC-TEST-001',sourceLocator:'Synthetic fixture #1',
  promptTarget:'Synthetic matching only',answer:'First sample',sourceExcerpt:'Imaginary source A maps to the first sample.',
  verification:'Verified'};
-const bp={blueprintId:'BP-TEST-001',indexId:'ANA-TEST',version:'1.0',evidenceLane:'N',
+const bp={blueprintId:'BP-TEST-001',indexId:'ANA-TEST',version:'1.0',evidenceLane:'S',
  sourceScope:'VERIFIED_MARROW_KUS_ONLY',externalKnowledgeUsed:false,
  status:'GENERATOR_ELIGIBLE_REVIEWED',kuIds:[unit.id],
  cognitiveOperation:'Match source-defined imaginary categories',
@@ -74,6 +74,45 @@ async function run(){
  assert.throws(()=>API.validatePyqStyleQuestion({...q,options:q.options.map((o,i)=>({...o,text:i<2?'same':'different-'+i}))}),/Duplicate/);
  assert.throws(()=>API.validatePyqStyleQuestion({...q,claimedHistoricalPyq:true}),/original PYQ/);
  assert.equal(API.validatePyqStyleRuntime(feed,view.units),feed);
+
+ // Step 3: source-index isolation, N/S cold-start coverage, and real trace reuse.
+ const allScope={...feed,verifiedQuestions:[]};
+ const unit2={...unit,id:'KU-000002',sourceId:'SRC-TEST-002',
+   sourceExcerpt:'Imaginary second reference states another distinct test-only property.'};
+ const n={...bp,blueprintId:'BP-TEST-002',evidenceLane:'N',
+   kuIds:[unit.id,unit2.id],cognitiveOperation:'Compare two imaginary source categories'};
+ const selectionFeed={...allScope,blueprints:[bp,n]};
+ const chosen=API.selectPyqStyleBlueprint(selectionFeed,[unit,unit2],[], 'ANA-TEST',[]);
+ assert.equal(chosen.blueprint.blueprintId,'BP-TEST-002'); // N before S when no history
+ assert.equal(chosen.trace.estimatedFutureExamProbability,null);
+ assert.equal(chosen.trace.externalKnowledgeUsed,false);
+ const traceEvent={type:'blueprint_selected',...chosen.trace};
+ const rotated=API.selectPyqStyleBlueprint(selectionFeed,[unit,unit2],[],'ANA-TEST',[traceEvent]);
+ assert.equal(rotated.blueprint.blueprintId,'BP-TEST-001');
+ assert.equal(rotated.trace.actualSelectionEvents,1);
+ assert.throws(()=>API.selectPyqStyleBlueprint(selectionFeed,[unit,unit2],[],'ANA-OTHER',[]),/No independently/);
+
+ assert.throws(()=>API.selectPyqStyleBlueprint({...allScope,blueprints:[]},[unit,unit2],[],'ANA-TEST',[]),/No independently/);
+ assert.throws(()=>API.selectPyqStyleBlueprint({...selectionFeed,blueprints:[{...n,evidenceLane:'H',sourceCardId:'HISTORY-1'}]},[unit,unit2],[],'ANA-TEST',[]),/Historical/);
+ assert.throws(()=>API.selectPyqStyleBlueprint({...selectionFeed,blueprints:[{...n,evidenceLane:'A'}]},[unit,unit2],[],'ANA-TEST',[]),/Historical/);
+ assert.throws(()=>API.selectPyqStyleBlueprint({...selectionFeed,blueprints:[{...bp,evidenceLane:'S',historicalEvidence:[{sourceCardId:'HISTORY'}]}]},[unit,unit2],[],'ANA-TEST',[]),/N\/S/);
+ assert.throws(()=>API.selectPyqStyleBlueprint({...selectionFeed,blueprints:[{...n,evidenceLane:'S'}]},[unit,unit2],[],'ANA-TEST',[]),/N\/S/);
+ const proof={sourceCardId:'APPROVED-FAKE',approvalId:'APR-FAKE',
+   verifiedLinkId:'LINK-FAKE',linkedKuId:unit.id,
+   correlationStatus:'Confirmed',eligibilityCheck:'VALID'};
+ const fakeHistoricalCard={id:'APPROVED-FAKE',type:'pyq',status:'approved',
+   indexIds:['ANA-TEST'],images:[]};
+ const h={...bp,blueprintId:'BP-H-001',evidenceLane:'H',
+   sourceCardId:'APPROVED-FAKE',historicalEvidence:[proof]};
+ const a={...n,blueprintId:'BP-A-001',evidenceLane:'A',historicalEvidence:[proof]};
+ assert.equal(API.validatePyqStyleRuntime({...allScope,blueprints:[h,a]},[unit,unit2],[fakeHistoricalCard]).blueprints.length,2);
+ assert.throws(()=>API.validatePyqStyleRuntime({...allScope,blueprints:[h]},[unit,unit2],[]),/Historical/);
+ assert.throws(()=>API.validatePyqStyleRuntime({...allScope,blueprints:[a]},[unit,unit2],[{...fakeHistoricalCard,indexIds:['OTHER']}]),/Historical/);
+ assert.throws(()=>API.validatePyqStyleRuntime({...allScope,blueprints:[{...a,historicalEvidence:[{...proof,eligibilityCheck:'INVALID'}]}]},[unit,unit2],[fakeHistoricalCard]),/Historical/);
+ const dedup={...n,blueprintId:'BP-TEST-003'};
+ const dedupPlan=API.selectPyqStyleBlueprint({...allScope,blueprints:[n,dedup]},[unit,unit2],[],'ANA-TEST',[]);
+ assert.equal(dedupPlan.trace.candidateCount,1);
+
 
  // Step 2: strict notes-only eligibility, verified source pointers and release provenance.
  assert.throws(()=>API.validatePyqStyleRuntime({...feed,sourcePolicy:'EXTERNAL_EXPANDED'},view.units),/notes-only/);
@@ -145,6 +184,9 @@ async function run(){
  assert.equal(requests.length,1);assert.equal(ctrl.queue.length,before);
  const events=files.get(evPath).trim().split('\n').map(JSON.parse);
  assert.equal(events.filter(x=>x.type==='candidate_unverified').length,1);
+ assert.equal(events.filter(x=>x.type==='blueprint_selected').length,1);
+ assert.equal(events.find(x=>x.type==='blueprint_selected').evidenceLane,'S');
+ assert.equal(events.find(x=>x.type==='blueprint_selected').sourceKuIds[0],unit.id);
  assert(![...files.keys()].some(x=>x.startsWith('MarrowCards/reviews/')||
   x.startsWith('MarrowCards/notes/')||x.startsWith('MarrowCards/packs/')));
  assert(source.includes("text:'PYQ-style'"));
