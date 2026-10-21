@@ -3326,18 +3326,19 @@ class PyqStyleController {
 // Dev branch only. Explicit user acceptance of question *usefulness* is not
 // clinical certification. Do not add experimental attempts to scored progress.
 // ---------------------------------------------------------------------------
-const PYQ_EXPERIMENTAL_REMOTE='exam-intelligence/experimental/ai-mcq-study-v1.json';
-const PYQ_EXPERIMENTAL_KIND='marrow-pyq-style-experimental-ai-v1';
-const PYQ_EXPERIMENTAL_PROMPT='pyq-style-experimental-notes-v1';
+const PYQ_EXPERIMENTAL_REMOTE='exam-intelligence/experimental/ai-mcq-full-v2.json';
+const PYQ_EXPERIMENTAL_KIND='marrow-pyq-style-experimental-ai-v2';
+const PYQ_EXPERIMENTAL_PROMPT='pyq-style-experimental-full-intelligence-v2';
 function validatePyqExperimentalFeed(f, units){
-  if(!f||f.schemaVersion!==1||f.kind!==PYQ_EXPERIMENTAL_KIND||
+  if(!f||f.schemaVersion!==2||f.kind!==PYQ_EXPERIMENTAL_KIND||
      f.status!=='USER_ACCEPTED_FOR_OPT_IN_EXPERIMENTAL_STUDY'||
      f.userAcceptedExperimentalUse!==true||f.clinicallyCertified!==false||
      f.runtimeApproved!==false||f.sourcePolicy!==PYQ_STYLE_SOURCE_POLICY||
      f.externalKnowledgeEnabled!==false||f.originalImagesEnabled!==false||
      f.publicationStatus!=='UNVERIFIED_PERSONAL_EXPERIMENT'||
      !/^[a-f0-9]{40}$/.test(f.sourceKuBlobSha||'')||
-     !Array.isArray(f.blueprints)||!f.blueprints.length||f.blueprints.length>30)
+     !Array.isArray(f.blueprints)||!f.blueprints.length||
+     !f.researchCatalog||!Array.isArray(f.researchCatalog.allVerifiedKuIds))
     throw Error('Private experimental intelligence feed unavailable or not opt-in.');
   if(!Array.isArray(units)||!units.length)throw Error('Download original Verified Knowledge Units before generating.');
   const map=new Map();
@@ -3348,21 +3349,33 @@ function validatePyqExperimentalFeed(f, units){
       throw Error('Original KU feed is incomplete or contains duplicates.');
     map.set(u.id,u);
   }
+  if(f.researchCatalog.allVerifiedKuIds.length!==units.length||
+     !pyqStyleUniqueIds(f.researchCatalog.allVerifiedKuIds)||
+     f.researchCatalog.allVerifiedKuIds.some(id=>!map.has(id)))
+    throw Error('Experimental intelligence catalog is missing original Verified KUs.');
   const seen=new Set();
   for(const b of f.blueprints){
     if(!b||!safeId(b.blueprintId)||seen.has(b.blueprintId)||
        !safeId(b.homeIndexId)||typeof b.homeIndexRationale!=='string'||b.homeIndexRationale.trim().length<12||
        typeof b.version!=='string'||!/^\d+\.\d+\.\d+$/.test(b.version)||
-       !Array.isArray(b.sourceKuIds)||b.sourceKuIds.length<2||b.sourceKuIds.length>12||
+       !Array.isArray(b.sourceKuIds)||b.sourceKuIds.length<1||b.sourceKuIds.length>12||
        !b.sourceKuIds.every(pyqStyleOriginalKuId)||!pyqStyleUniqueIds(b.sourceKuIds)||
        !Array.isArray(b.sourceIndexIds)||!b.sourceIndexIds.length||
        !b.sourceIndexIds.every(safeId)||!pyqStyleUniqueIds(b.sourceIndexIds)||
        !b.sourceIndexIds.includes(b.homeIndexId)||
-       !['N','A'].includes(b.evidenceLane)||
+       !['N','A','S'].includes(b.evidenceLane)||
+       (b.evidenceLane==='S'?b.sourceKuIds.length!==1:b.sourceKuIds.length<2)||
+       !['P1','P2','P3','S','X'].includes(b.analystPriority)||
+       (b.analystPriority==='X'&&b.experimentalEnabled!==false)||
+       !safeId(b.cognitiveFamily)||typeof b.conceptLabel!=='string'||!b.conceptLabel.trim()||
+       typeof b.analystAssessment!=='string'||
        typeof b.cognitiveOperation!=='string'||b.cognitiveOperation.length<12||
        typeof b.operationRequirement!=='string'||b.operationRequirement.length<12||
        !Array.isArray(b.forbiddenTransformations)||b.forbiddenTransformations.length<2||
-       b.experimentalEnabled!==true||b.userAcceptedForExperimentalUse!==true||
+       (b.experimentalEnabled!==true&&b.experimentalEnabled!==false)||
+       b.userAcceptedForExperimentalUse!==b.experimentalEnabled||
+       (b.experimentalEnabled===false&&(!b.holdReason||typeof b.holdReason!=='string'))||
+       (b.experimentalEnabled===true&&b.holdReason!==null)||
        b.clinicallyCertified!==false||b.runtimeApproved!==false||
        b.providerTrialApproved!==false||b.pluginMaySelect!==false||
        b.historicalFullCombinationObserved!==false||
@@ -3390,23 +3403,36 @@ function selectPyqExperimentalBlueprint(f,units,homeIndexId,events=[]){
   if(!safeId(homeIndexId))throw Error('Select exactly one home index.');
   validatePyqExperimentalFeed(f,units);
   if(!Array.isArray(events))throw Error('Invalid experimental selection history.');
-  const candidates=f.blueprints.filter(b=>b.homeIndexId===homeIndexId);
-  if(!candidates.length)throw Error('No user-accepted experimental KU link for this index yet.');
-  const selectedCounts=new Map();
+  const candidates=f.blueprints.filter(b=>b.homeIndexId===homeIndexId&&b.experimentalEnabled===true);
+  if(!candidates.length)throw Error('No source-backed experimental blueprint for this index.');
+  const selectedCounts=new Map(),familyCounts=new Map(),kuCounts=new Map();
+  const byId=new Map(f.blueprints.map(b=>[b.blueprintId,b]));
   for(const e of events){
     if(e?.type!=='experimental_blueprint_selected'||e.homeIndexId!==homeIndexId||!safeId(e.blueprintId))continue;
     selectedCounts.set(e.blueprintId,(selectedCounts.get(e.blueprintId)||0)+1);
+    const bp=byId.get(e.blueprintId);
+    if(bp){
+      familyCounts.set(bp.cognitiveFamily,(familyCounts.get(bp.cognitiveFamily)||0)+1);
+      for(const id of bp.sourceKuIds)kuCounts.set(id,(kuCounts.get(id)||0)+1);
+    }
   }
+  const tier={P1:0,P2:1,P3:2,S:3};
+  const exposure=b=>b.sourceKuIds.reduce((total,id)=>total+(kuCounts.get(id)||0),0);
   candidates.sort((a,b)=>(selectedCounts.get(a.blueprintId)||0)-(selectedCounts.get(b.blueprintId)||0)||
-     a.blueprintId.localeCompare(b.blueprintId));
+    (familyCounts.get(a.cognitiveFamily)||0)-(familyCounts.get(b.cognitiveFamily)||0)||
+    tier[a.analystPriority]-tier[b.analystPriority]||
+    exposure(a)-exposure(b)||a.blueprintId.localeCompare(b.blueprintId));
   const b=candidates[0];
   return {blueprint:b,trace:{homeIndexId,blueprintId:b.blueprintId,
     sourceKuIds:b.sourceKuIds.slice(),sourceIndexIds:b.sourceIndexIds.slice(),
     evidenceLane:b.evidenceLane,cognitiveOperation:b.cognitiveOperation,
+    analystPriority:b.analystPriority,cognitiveFamily:b.cognitiveFamily,
+    selectionReason:'LEAST_USED_BLUEPRINT_FAMILY_THEN_ANALYST_PRIORITY_AND_KU_COVERAGE',
     sourceScope:PYQ_STYLE_SOURCE_POLICY,estimatedFutureExamProbability:null,
     clinicallyCertified:false,runtimeApproved:false}};
 }
-function buildPyqExperimentalPacket(b,units){
+function buildPyqExperimentalPacket(b,units,events=[]){
+  if(b.experimentalEnabled!==true)throw Error('Held intelligence cannot be sent to Groq.');
   const byId=new Map(units.map(u=>[u.id,u]));
   const sources=b.sourceKuIds.map(k=>{
     const u=byId.get(k);if(!u)throw Error('Source KU missing at generation.');
@@ -3417,14 +3443,38 @@ function buildPyqExperimentalPacket(b,units){
   const sourceIndexIds=[...new Set(sources.map(s=>s.indexId))];
   if(JSON.stringify(sourceIndexIds)!==JSON.stringify(b.sourceIndexIds)||!sourceIndexIds.includes(b.homeIndexId))
     throw Error('Source KU index mismatch; no model request.');
-  const packet={kind:'MARROW_EXPERIMENTAL_AI_MCQ_AUDIT_NOT_MEDICALLY_VERIFIED',schemaVersion:1,
+  const previousStems=events.filter(e=>e?.type==='experimental_candidate_unverified'&&
+    e.homeIndexId===b.homeIndexId&&typeof e.question?.stem==='string')
+    .slice(-8).map(e=>e.question.stem.slice(0,350));
+  const packet={kind:'MARROW_EXPERIMENTAL_AI_MCQ_AUDIT_NOT_MEDICALLY_VERIFIED',schemaVersion:2,
     blueprintId:b.blueprintId,homeIndexId:b.homeIndexId,sourceIndexIds,sourceKuIds:b.sourceKuIds.slice(),
+    conceptLabel:b.conceptLabel,cognitiveFamily:b.cognitiveFamily,analystPriority:b.analystPriority,
+    analystAssessment:b.analystAssessment,confusionTarget:b.confusionTarget,
     cognitiveOperation:b.cognitiveOperation,operationRequirement:b.operationRequirement,
     forbiddenTransformations:b.forbiddenTransformations.slice(),sourceKUs:sources,
+    previousQuestionStemsForNoveltyOnly:previousStems,
     sourceScope:PYQ_STYLE_SOURCE_POLICY,externalKnowledgeAllowed:false,sourceImage:null,
     sourceCardId:null,clinicallyCertified:false,practiceMode:'OPT_IN_UNVERIFIED_EXPERIMENT'};
-  if(JSON.stringify(packet).length>18000)throw Error('Experimental source packet too large.');
+  if(JSON.stringify(packet).length>18000)throw Error('Source packet too large; select a narrower reviewed relationship.');
   return packet;
+}
+function pyqExperimentalNormalizedStem(s){
+  return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+}
+function pyqExperimentalRejectDuplicate(q,events,homeIndexId){
+  const now=pyqExperimentalNormalizedStem(q.stem);
+  const words=new Set(now.split(' ').filter(x=>x.length>2));
+  for(const e of events){
+    if(e?.type!=='experimental_candidate_unverified'||e.homeIndexId!==homeIndexId)continue;
+    const old=pyqExperimentalNormalizedStem(e.question?.stem);
+    if(!old)continue;
+    if(now===old)throw Error('Repeated question: existing stem already generated; next attempt rotates blueprint.');
+    const other=new Set(old.split(' ').filter(x=>x.length>2));
+    const shared=[...words].filter(x=>other.has(x)).length;
+    const union=new Set([...words,...other]).size;
+    if(words.size>=8&&other.size>=8&&shared/Math.max(1,union)>=0.88)
+      throw Error('Near-duplicate question detected; next attempt rotates blueprint.');
+  }
 }
 function validatePyqExperimentalModel(raw,p){
   if(raw?.unableToConstruct===true)throw Error('Groq could not support a unique source-limited MCQ.');
@@ -3457,7 +3507,9 @@ function pyqExperimentalMessages(packet){
     {role:'system',content:[
       'Write ONE new medical anatomy PYQ-style MCQ with A-D options and a single best answer, based ONLY on the supplied original Verified source KUs.',
       'This is an explicitly user-chosen experimental mode, NOT clinically certified. Do not invent clinical facts, cases, diagrams, routes, procedures, or additional anatomy.',
-      'Use the cognitiveOperation and operationRequirement as goals, but if the integrated task is not feasible, prefer a truthful simpler source-grounded question to fabricating facts.',
+      'Use analystPriority, conceptLabel, cognitiveOperation, operationRequirement, confusionTarget, analystAssessment and forbiddenTransformations to design a distinct source-bounded question. Analyst priorities are NOT future-exam probabilities.',
+      'Use previousQuestionStemsForNoveltyOnly only to avoid repeated question stems and operations; those stems are NOT medical evidence.',
+      'If the integrated task is not feasible, prefer a truthful simpler source-grounded question to fabricating facts.',
       'Respect modal qualifiers (MAY versus always), anatomical level and laterality. Avoid obviously repeated or unsupported distractors when possible.',
       'A positive one-correct or a clearly worded one-incorrect stem is permitted, but correctOptionId must unequivocally identify one answer. Mark each rationale isCorrect as referring to the keyed choice, not to whether its medical statement is true.',
       'Return ONLY a JSON object with exactly keys blueprintId,homeIndexId,sourceIndexIds,sourceKuIds,stem,options,correctOptionId,optionRationales,answerExplanation,testedKuIds,sourceScope,externalKnowledgeUsed,sourceImage,sourceCardId.',
@@ -3471,12 +3523,13 @@ function pyqExperimentalMessages(packet){
 }
 async function generatePyqExperimentalDraft(plugin,feed,units,homeIndexId,events=[],provider=callDynamicGroq){
   const picked=selectPyqExperimentalBlueprint(feed,units,homeIndexId,events);
-  const packet=buildPyqExperimentalPacket(picked.blueprint,units);
+  const packet=buildPyqExperimentalPacket(picked.blueprint,units,events);
   const messages=pyqExperimentalMessages(packet);
   let raw;
   try {
     raw=await provider(plugin,messages,'generate',1); // shared quota and free-tier protections
     const q=validatePyqExperimentalModel(raw,packet);
+    pyqExperimentalRejectDuplicate(q,events,homeIndexId);
     return {packet,trace:picked.trace,rawModelJson:raw,question:{
       ...q,questionId:'MCQ-EXP-'+uniqueId().replace(/[^A-Za-z0-9_-]/g,''),
       homeIndexId:packet.homeIndexId,sourceIndexIds:packet.sourceIndexIds,
@@ -3498,8 +3551,10 @@ PyqStyleController.prototype.experimentalGenerate=async function(homeIndexId){
     const f=validatePyqExperimentalFeed(
       JSON.parse(await this.view.plugin.fetchGithub(PYQ_EXPERIMENTAL_REMOTE)),this.view.units);
     const events=await readDynamicEvents(this.view.plugin,PYQ_STYLE_EVENTS);
+    const selection=selectPyqExperimentalBlueprint(f,this.view.units,homeIndexId,events);
+    // Persist even failed attempts: the next tap advances instead of repeating a failed blueprint.
+    await appendPyqStyleEvent(this.view.plugin,{type:'experimental_blueprint_selected',...selection.trace});
     const trial=await generatePyqExperimentalDraft(this.view.plugin,f,this.view.units,homeIndexId,events);
-    await appendPyqStyleEvent(this.view.plugin,{type:'experimental_blueprint_selected',...trial.trace});
     await appendPyqStyleEvent(this.view.plugin,{
       type:'experimental_candidate_unverified',homeIndexId,blueprintId:trial.question.blueprintId,
       sourceIndexIds:trial.question.sourceIndexIds,sourceKuIds:trial.question.sourceKuIds,

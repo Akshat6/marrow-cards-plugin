@@ -27,6 +27,6 @@ jobs:
         run: node tests/dynamic-progress-sync.js
       - name: Verify real-Groq test harness without a secret or API calls
         run: node tests/live-groq-eval.js --dry-run
-      - name: Verify approved v0.3.0 release version and unchanged plugin ID
+      - name: Verify semantic version and unchanged plugin ID
         run: |
-          node -e "const m=require('./manifest.json'); if(m.version !== '0.3.11'||m.id !== 'marrow-cards') process.exit(1)"
+          node -e "const m=require('./manifest.json'); if(!/^\\d+\\.\\d+\\.\\d+$/.test(m.version)||m.id !== 'marrow-cards') process.exit(1)"

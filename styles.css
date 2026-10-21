@@ -936,3 +936,33 @@
 .marrow-dynamic .marrow-pyq-style .marrow-pyq-option:disabled {
   opacity: 0.76;
 }
+
+/* Expanded PYQ-style MCQs: long four/five-line alternatives grow with their text.
+   Override Obsidian theme button heights without disturbing review navigation. */
+.marrow-dynamic .marrow-pyq-style button.marrow-pyq-option {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto !important;
+  min-height: 48px;
+  max-height: none !important;
+  flex: 0 0 auto;
+  padding: 12px 14px;
+  margin: 10px 0;
+  line-height: 1.55 !important;
+  white-space: pre-wrap !important;
+  overflow: visible !important;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-align: left;
+}
+.marrow-cards button.marrow-option-choice {
+  box-sizing: border-box;
+  height: auto !important;
+  max-height: none !important;
+  line-height: 1.5;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
