@@ -3136,8 +3136,10 @@ class PyqStyleController {
     try{
       await this.loadLocal();
       if(!this.feed)throw new Error('No approved runtime blueprint feed. Draft milestone files cannot generate questions.');
-      const b=this.feed.blueprints.find(b=>b.indexId===indexId);
-      if(!b)throw new Error('No reviewed generator-eligible blueprint for this index.');
+      const history=await readDynamicEvents(this.view.plugin,PYQ_STYLE_EVENTS);
+      const selection=selectPyqStyleBlueprint(this.feed,this.view.units,indexId,history);
+      const b=selection.blueprint;
+      await appendPyqStyleEvent(this.view.plugin,{type:'blueprint_selected',...selection.trace});
       let item;
       try{item=await generatePyqStyleAuditCandidate(this.view.plugin,b,this.view.units);}
       catch(e){await appendPyqStyleEvent(this.view.plugin,{type:'candidate_rejected',
