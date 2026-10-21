@@ -200,6 +200,22 @@ async function run(){
  assert.throws(()=>API.buildPyqStyleGroqPacket(bp,[unit,unit]),/exact original KUs/);
  const goodModel=rawCandidate();
  assert.equal(API.validatePyqStyleModelPayload(goodModel,bp,packet),true);
+
+ // The H/A sourceCardId denotes *historical provenance*; absent image it must
+ // not be used as a model's claimed image file/source card.
+ const hNoImagePacket=API.buildPyqStyleGroqPacket(h,[unit]);
+ assert.equal(hNoImagePacket.image,null);
+ assert.equal(API.validatePyqStyleModelPayload({...goodModel,
+   blueprintId:h.blueprintId},h,hNoImagePacket),true);
+ assert.throws(()=>API.validatePyqStyleModelPayload({...goodModel,
+   blueprintId:h.blueprintId,sourceCardId:h.sourceCardId},h,hNoImagePacket),/Groq response/);
+ const imagePacket=API.buildPyqStyleGroqPacket(bImage,[unit]);
+ assert.equal(imagePacket.image.modelHasNotInspectedPixels,true);
+ assert.equal(API.validatePyqStyleModelPayload({...goodModel,
+   sourceImage:'fake-original.png',sourceCardId:'APPROVED-FAKE'},bImage,imagePacket),true);
+ assert.throws(()=>API.validatePyqStyleModelPayload({...goodModel,
+   sourceImage:'fake-original.png',sourceCardId:'WRONG-CARD'},bImage,imagePacket),/Groq response/);
+
  for(const extra of [
    {approvedForPractice:true},{reviewStatus:'VERIFIED_SYNTHETIC'},
    {releaseApprovalId:'RELEASE-FAKE-001'},{sourceAuditId:'AUDIT-FAKE'},
