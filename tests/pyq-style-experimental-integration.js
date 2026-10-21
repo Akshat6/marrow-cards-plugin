@@ -90,7 +90,7 @@ async function run(){
  x=>x.optionRationales[0].kuIds=['KU-000003'],x=>x.correctOptionId='A'];
  for(const f of mutes){const q=cp(mockQuestion(packet));f(q);bad('model field tamper',()=>P.validatePyqExperimentalModel(q,packet));}
  const fmutes=[x=>x.clinicallyCertified=true,x=>x.runtimeApproved=true,
- x=>x.status='APPROVED_FOR_RUNTIME',x=>x.blueprints[0].homeIndexId='IDX-TWO',
+ x=>x.status='APPROVED_FOR_RUNTIME',x=>x.blueprints[0].homeIndexId='IDX-THREE',
  x=>x.blueprints[0].sourceIndexIds=['IDX-TWO','IDX-ONE'],
  x=>x.blueprints[0].sourceKuIds.push('KU-000003'),
  x=>x.blueprints[0].exactSourceKUs[0].canonicalAnswer='changed',
