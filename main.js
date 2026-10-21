@@ -3506,7 +3506,9 @@ function pyqExperimentalMessages(packet){
     {role:'system',content:[
       'Write ONE new medical anatomy PYQ-style MCQ with A-D options and a single best answer, based ONLY on the supplied original Verified source KUs.',
       'This is an explicitly user-chosen experimental mode, NOT clinically certified. Do not invent clinical facts, cases, diagrams, routes, procedures, or additional anatomy.',
-      'Use the cognitiveOperation and operationRequirement as goals, but if the integrated task is not feasible, prefer a truthful simpler source-grounded question to fabricating facts.',
+      'Use analystPriority, conceptLabel, cognitiveOperation, operationRequirement, confusionTarget, analystAssessment and forbiddenTransformations to design a distinct source-bounded question. Analyst priorities are NOT future-exam probabilities.',
+      'Use previousQuestionStemsForNoveltyOnly only to avoid repeated question stems and operations; those stems are NOT medical evidence.',
+      'If the integrated task is not feasible, prefer a truthful simpler source-grounded question to fabricating facts.',
       'Respect modal qualifiers (MAY versus always), anatomical level and laterality. Avoid obviously repeated or unsupported distractors when possible.',
       'A positive one-correct or a clearly worded one-incorrect stem is permitted, but correctOptionId must unequivocally identify one answer. Mark each rationale isCorrect as referring to the keyed choice, not to whether its medical statement is true.',
       'Return ONLY a JSON object with exactly keys blueprintId,homeIndexId,sourceIndexIds,sourceKuIds,stem,options,correctOptionId,optionRationales,answerExplanation,testedKuIds,sourceScope,externalKnowledgeUsed,sourceImage,sourceCardId.',
@@ -3520,12 +3522,13 @@ function pyqExperimentalMessages(packet){
 }
 async function generatePyqExperimentalDraft(plugin,feed,units,homeIndexId,events=[],provider=callDynamicGroq){
   const picked=selectPyqExperimentalBlueprint(feed,units,homeIndexId,events);
-  const packet=buildPyqExperimentalPacket(picked.blueprint,units);
+  const packet=buildPyqExperimentalPacket(picked.blueprint,units,events);
   const messages=pyqExperimentalMessages(packet);
   let raw;
   try {
     raw=await provider(plugin,messages,'generate',1); // shared quota and free-tier protections
     const q=validatePyqExperimentalModel(raw,packet);
+    pyqExperimentalRejectDuplicate(q,events,homeIndexId);
     return {packet,trace:picked.trace,rawModelJson:raw,question:{
       ...q,questionId:'MCQ-EXP-'+uniqueId().replace(/[^A-Za-z0-9_-]/g,''),
       homeIndexId:packet.homeIndexId,sourceIndexIds:packet.sourceIndexIds,
@@ -3547,8 +3550,10 @@ PyqStyleController.prototype.experimentalGenerate=async function(homeIndexId){
     const f=validatePyqExperimentalFeed(
       JSON.parse(await this.view.plugin.fetchGithub(PYQ_EXPERIMENTAL_REMOTE)),this.view.units);
     const events=await readDynamicEvents(this.view.plugin,PYQ_STYLE_EVENTS);
+    const selection=selectPyqExperimentalBlueprint(f,this.view.units,homeIndexId,events);
+    // Persist even failed attempts: the next tap advances instead of repeating a failed blueprint.
+    await appendPyqStyleEvent(this.view.plugin,{type:'experimental_blueprint_selected',...selection.trace});
     const trial=await generatePyqExperimentalDraft(this.view.plugin,f,this.view.units,homeIndexId,events);
-    await appendPyqStyleEvent(this.view.plugin,{type:'experimental_blueprint_selected',...trial.trace});
     await appendPyqStyleEvent(this.view.plugin,{
       type:'experimental_candidate_unverified',homeIndexId,blueprintId:trial.question.blueprintId,
       sourceIndexIds:trial.question.sourceIndexIds,sourceKuIds:trial.question.sourceKuIds,
