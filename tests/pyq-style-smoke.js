@@ -68,7 +68,7 @@ async function run(){
  assert.equal(API.validatePyqStyleQuestion(q),q);
  assert.throws(()=>API.validatePyqStyleRuntime({kind:'marrow-examination-intelligence'},view.units),/No approved/);
  assert.throws(()=>API.validatePyqStyleRuntime({...feed,status:'DRAFT_NOT_RUNTIME'},view.units),/No approved/);
- assert.throws(()=>API.validatePyqStyleRuntime({...feed,verifiedQuestions:[{...q,reviewStatus:'DRAFT'}]},view.units),/source review/);
+ assert.throws(()=>API.validatePyqStyleRuntime({...feed,verifiedQuestions:[{...q,reviewStatus:'DRAFT'}]},view.units),/missing review/);
  assert.throws(()=>API.validatePyqStyleQuestion({...q,options:[q.options[0],q.options[0],q.options[2],q.options[3]]}),/A–D/);
  assert.throws(()=>API.validatePyqStyleQuestion({...q,correctOptionId:'B'}),/A–D/);
  assert.throws(()=>API.validatePyqStyleQuestion({...q,options:q.options.map((o,i)=>({...o,text:i<2?'same':'different-'+i}))}),/Duplicate/);
