@@ -3583,13 +3583,13 @@ MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
   const body=el.createDiv({cls:'marrow-dynamic-body marrow-pyq-style'});
   body.createEl('h3',{text:'PYQ-style Practice — '+(this.units.find(u=>u.indexId===indexId)?.indexTitle||indexId)});
   body.createEl('p',{cls:'marrow-hint',text:
-    'Separate MCQ mode · Source-reviewed synthetic questions only · Originals remain in PYQ Review. Draft Groq MCQs are archived for audit, not presented until independently verified.'});
+    'Separate MCQ mode · Source-reviewed and opt-in Experimental AI MCQs. Experimental answers are AI-generated, unverified and kept separate from verified learning scores.'});
   if(p.error)body.createEl('p',{cls:'marrow-dynamic-error',text:p.error});
   if(p.busy)body.createEl('p',{cls:'marrow-hint',text:'Working…'});
   if(p.experimentalQuestion){drawPyqExperimentalQuestion(body,p);return;}
   if(p.status==='home'){
     body.createEl('p',{cls:'marrow-hint',text:
-      'Milestone 1 analysis is not a published MCQ bank. Load a separately approved runtime feed before practice; no model output is automatically accepted as medically correct.'});
+      'Approved question-bank practice requires a reviewed feed. The separate opt-in Experimental AI MCQ mode uses only user-accepted original Verified KUs but model answers are not clinically certified.'});
     const row=body.createDiv({cls:'marrow-toolbar'});
     const sync=row.createEl('button',{text:'Check reviewed MCQ feed'});
     sync.disabled=p.busy;sync.addEventListener('click',()=>void p.syncApproved());
