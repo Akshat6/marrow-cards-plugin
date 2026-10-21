@@ -2967,6 +2967,27 @@ function validatePyqStyleRuntime(data,units,cards=[]) {
        b.kuIds.some(id=>unitById.get(id)?.indexId!==b.indexId)||
        (b.sourceImage && !pyqStyleApprovedOriginalImageCard(cards,b)))
       throw new Error('Unapproved notes-only blueprint, original image or KU/index mismatch.');
+    // H/A anchors are exact declared approved card-index-KU links, not forecasts.
+    const h=b.historicalEvidence;
+    if(b.evidenceLane==='H'||b.evidenceLane==='A'){
+      if(!Array.isArray(h)||!h.length||(b.evidenceLane==='A'&&b.kuIds.length<2))
+        throw new Error('Historical H/A source-link evidence missing.');
+      const seen=new Set();
+      for(const x of h){
+        const card=(cards||[]).find(c=>c.id===x?.sourceCardId&&c.type==='pyq'&&
+          c.status==='approved'&&Array.isArray(c.indexIds)&&c.indexIds.includes(b.indexId));
+        if(!card||!safeId(x.approvalId)||!safeId(x.verifiedLinkId)||
+           x.correlationStatus!=='Confirmed'||x.eligibilityCheck!=='VALID'||
+           !b.kuIds.includes(x.linkedKuId)||seen.has(x.verifiedLinkId)||
+           (b.evidenceLane==='H'&&x.sourceCardId!==b.sourceCardId))
+          throw new Error('Historical H/A card-index-KU link claim invalid.');
+        seen.add(x.verifiedLinkId);
+      }
+    }else if((h!==undefined&&(!Array.isArray(h)||h.length!==0))||
+       (b.evidenceLane==='N'&&b.kuIds.length<2)||
+       (b.evidenceLane==='S'&&b.kuIds.length!==1)){
+      throw new Error('N/S notes-only source provenance invalid.');
+    }
     blueprintById.set(b.blueprintId,b);
   }
   const questionIds=new Set();
