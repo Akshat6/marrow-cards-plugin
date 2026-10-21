@@ -3307,7 +3307,7 @@ class PyqStyleController {
     if(this.busy)return;this.busy=true;this.error='';this.view.draw();
     try{
       const all=await readDynamicEvents(this.view.plugin,PYQ_STYLE_EVENTS);
-      const rows=all.filter(e=>e.indexId===indexId).slice(-400);
+      const rows=all.filter(e=>e.indexId===indexId||e.homeIndexId===indexId).slice(-400);
       const path=PYQ_STYLE_EXPORTS+'/'+this.view.plugin.settings.deviceId+
         '/batch-'+new Date().toISOString().replace(/[^0-9TZ]/g,'')+'-'+uniqueId().replace(/[^A-Za-z0-9_-]/g,'')+'.json';
       await this.view.plugin.ensureFolder(PYQ_STYLE_ROOT);

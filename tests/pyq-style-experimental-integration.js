@@ -116,6 +116,17 @@ async function run(){
  assert.equal(answer.countedTowardVerifiedLearningScores,false);
  assert(rows.some(x=>x.type==='experimental_flagged'));
  assert(!rows.some(x=>x.type==='answered'||x.type==='question'));
+ plugin.writeJson=async(path,data)=>saved.set(path,JSON.stringify(data));
+ await ctrl.exportRecords('IDX-ONE');
+ assert.equal(ctrl.error,'');
+ const exp=[...saved.entries()].find(([name])=>name.startsWith('MarrowCards/pyq-style/exports/')&&name.endsWith('.json'));
+ assert(exp,'Experimental source/answer export must be written');
+ const exported=JSON.parse(exp[1]);
+ assert.equal(exported.indexId,'IDX-ONE');
+ assert(exported.rows.some(x=>x.type==='experimental_candidate_unverified'));
+ assert(exported.rows.some(x=>x.type==='experimental_answered'));
+ assert(exported.rows.some(x=>x.type==='experimental_flagged'));
+ assert(!exported.rows.some(x=>x.homeIndexId==='IDX-TWO'));
  const screen=new El();view.drawPyqStyle(screen);
  assert(screen.findText('Groq answer: C · Different'));
  assert(screen.findText('Generate another experimental MCQ'));
