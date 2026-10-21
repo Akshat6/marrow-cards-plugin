@@ -3326,18 +3326,19 @@ class PyqStyleController {
 // Dev branch only. Explicit user acceptance of question *usefulness* is not
 // clinical certification. Do not add experimental attempts to scored progress.
 // ---------------------------------------------------------------------------
-const PYQ_EXPERIMENTAL_REMOTE='exam-intelligence/experimental/ai-mcq-study-v1.json';
-const PYQ_EXPERIMENTAL_KIND='marrow-pyq-style-experimental-ai-v1';
-const PYQ_EXPERIMENTAL_PROMPT='pyq-style-experimental-notes-v1';
+const PYQ_EXPERIMENTAL_REMOTE='exam-intelligence/experimental/ai-mcq-full-v2.json';
+const PYQ_EXPERIMENTAL_KIND='marrow-pyq-style-experimental-ai-v2';
+const PYQ_EXPERIMENTAL_PROMPT='pyq-style-experimental-full-intelligence-v2';
 function validatePyqExperimentalFeed(f, units){
-  if(!f||f.schemaVersion!==1||f.kind!==PYQ_EXPERIMENTAL_KIND||
+  if(!f||f.schemaVersion!==2||f.kind!==PYQ_EXPERIMENTAL_KIND||
      f.status!=='USER_ACCEPTED_FOR_OPT_IN_EXPERIMENTAL_STUDY'||
      f.userAcceptedExperimentalUse!==true||f.clinicallyCertified!==false||
      f.runtimeApproved!==false||f.sourcePolicy!==PYQ_STYLE_SOURCE_POLICY||
      f.externalKnowledgeEnabled!==false||f.originalImagesEnabled!==false||
      f.publicationStatus!=='UNVERIFIED_PERSONAL_EXPERIMENT'||
      !/^[a-f0-9]{40}$/.test(f.sourceKuBlobSha||'')||
-     !Array.isArray(f.blueprints)||!f.blueprints.length||f.blueprints.length>30)
+     !Array.isArray(f.blueprints)||!f.blueprints.length||
+     !f.researchCatalog||!Array.isArray(f.researchCatalog.allVerifiedKuIds))
     throw Error('Private experimental intelligence feed unavailable or not opt-in.');
   if(!Array.isArray(units)||!units.length)throw Error('Download original Verified Knowledge Units before generating.');
   const map=new Map();
@@ -3348,21 +3349,32 @@ function validatePyqExperimentalFeed(f, units){
       throw Error('Original KU feed is incomplete or contains duplicates.');
     map.set(u.id,u);
   }
+  if(f.researchCatalog.allVerifiedKuIds.length!==units.length||
+     !pyqStyleUniqueIds(f.researchCatalog.allVerifiedKuIds)||
+     f.researchCatalog.allVerifiedKuIds.some(id=>!map.has(id)))
+    throw Error('Experimental intelligence catalog is missing original Verified KUs.');
   const seen=new Set();
   for(const b of f.blueprints){
     if(!b||!safeId(b.blueprintId)||seen.has(b.blueprintId)||
        !safeId(b.homeIndexId)||typeof b.homeIndexRationale!=='string'||b.homeIndexRationale.trim().length<12||
        typeof b.version!=='string'||!/^\d+\.\d+\.\d+$/.test(b.version)||
-       !Array.isArray(b.sourceKuIds)||b.sourceKuIds.length<2||b.sourceKuIds.length>12||
+       !Array.isArray(b.sourceKuIds)||b.sourceKuIds.length<1||b.sourceKuIds.length>12||
        !b.sourceKuIds.every(pyqStyleOriginalKuId)||!pyqStyleUniqueIds(b.sourceKuIds)||
        !Array.isArray(b.sourceIndexIds)||!b.sourceIndexIds.length||
        !b.sourceIndexIds.every(safeId)||!pyqStyleUniqueIds(b.sourceIndexIds)||
        !b.sourceIndexIds.includes(b.homeIndexId)||
-       !['N','A'].includes(b.evidenceLane)||
+       !['N','A','S'].includes(b.evidenceLane)||
+       (b.evidenceLane==='S'?b.sourceKuIds.length!==1:b.sourceKuIds.length<2)||
+       !['P1','P2','P3','S'].includes(b.analystPriority)||
+       !safeId(b.cognitiveFamily)||typeof b.conceptLabel!=='string'||!b.conceptLabel.trim()||
+       typeof b.analystAssessment!=='string'||
        typeof b.cognitiveOperation!=='string'||b.cognitiveOperation.length<12||
        typeof b.operationRequirement!=='string'||b.operationRequirement.length<12||
        !Array.isArray(b.forbiddenTransformations)||b.forbiddenTransformations.length<2||
-       b.experimentalEnabled!==true||b.userAcceptedForExperimentalUse!==true||
+       (b.experimentalEnabled!==true&&b.experimentalEnabled!==false)||
+       b.userAcceptedForExperimentalUse!==b.experimentalEnabled||
+       (b.experimentalEnabled===false&&(!b.holdReason||typeof b.holdReason!=='string'))||
+       (b.experimentalEnabled===true&&b.holdReason!==null)||
        b.clinicallyCertified!==false||b.runtimeApproved!==false||
        b.providerTrialApproved!==false||b.pluginMaySelect!==false||
        b.historicalFullCombinationObserved!==false||
