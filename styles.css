@@ -911,3 +911,28 @@
 }
 .marrow-dynamic .marrow-dynamic-analysis-item p { margin: 5px 0; }
 .marrow-dynamic .marrow-dynamic-analysis > button { min-height: 42px; }
+
+
+/* Milestone 2 PYQ-style prototype; isolated from existing Review, Browse and PYQ cards. */
+.marrow-dynamic .marrow-start-pyq-style {
+  border-color: var(--interactive-accent);
+}
+.marrow-dynamic .marrow-pyq-style {
+  overflow-y: auto;
+  min-height: 0;
+}
+.marrow-dynamic .marrow-pyq-style .marrow-pyq-option {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  margin: 8px 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.marrow-dynamic .marrow-pyq-style .marrow-pyq-option:disabled {
+  opacity: 0.76;
+}

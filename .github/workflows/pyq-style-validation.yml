@@ -1,0 +1,34 @@
+name: PYQ-style prototype tests (no publishing)
+on:
+  push:
+    branches: [feature/pyq-style-practice-m2, feature/pyq-style-step2-feed-hardening, feature/pyq-style-step3-notes-selector, feature/pyq-style-step4-provider-safety, feature/pyq-style-home-index-audit-v092]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and synthetic regression
+        run: |
+          set -euo pipefail
+          node --check main.js
+          node --check tests/pyq-style-smoke.js
+          node --check pyq-style-multi-index-audit.js
+          node --check tests/pyq-style-multi-index-audit.js
+          node --check tests/pyq-style-experimental-integration.js
+          node tests/pyq-style-smoke.js
+          node tests/pyq-style-multi-index-audit.js
+          node tests/pyq-style-experimental-integration.js
+          node tests/smoke.js
+          node tests/dynamic-smoke.js
+          node tests/dynamic-integration.js
+          node tests/dynamic-hierarchy-mobile.js
+          node tests/dynamic-progress-sync.js
+          node tests/live-groq-eval.js --dry-run
+          test -s styles.css

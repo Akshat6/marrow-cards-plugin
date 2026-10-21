@@ -191,10 +191,14 @@ assert.equal(walk(view.contentEl,e=>e.classes.has('marrow-dynamic-index-title')&
 const sampleTile=walk(view.contentEl,e=>e.classes.has('marrow-dynamic-index')&&e.classes.has('marrow-index-tile'))[0];
 assert(sampleTile,'Dynamic index must use existing PYQ index-tile structure');
 const sampleActions=sampleTile.children.filter(e=>e.tag==='button');
-assert.deepEqual(sampleActions.map(e=>e.text),['Review','Browse']);
+assert.deepEqual(sampleActions.map(e=>e.text),['Review','Browse','PYQ-style']);
+assert.equal(sampleActions[2].classes.has('marrow-start-pyq-style'),true,
+  'New source-index PYQ-style mode must be distinct from existing Review/Browse');
 assert(sampleActions.every(e=>e.classes.has('marrow-start-single')),
   'Review and Browse must share the existing PYQ compact button class');
 assert(sampleActions[1].classes.has('marrow-start-browse'));
+assert.equal(walk(view.contentEl,e=>e.tag==='button'&&e.attr['aria-label']==='PYQ-style practice Anatomy 067').length,1,
+  'Exactly one source-index PYQ-style action is shown');
 view.expandedGroups.add('/Anatomy');
 firstToggle[0].events.click();
 assert.equal(view.showIndexDetails,true);
@@ -284,6 +288,16 @@ assert.equal(goBack.length,1);
 goBack[0].events.click();
 assert.equal(view.screen,'index');
 view.screen='library';view.draw();
+const pyqAction=walk(view.contentEl,e=>e.tag==='button'&&
+  e.attr['aria-label']==='PYQ-style practice Anatomy 067');
+assert.equal(pyqAction.length,1,'One new PYQ-style action per source index');
+const oldStatsSize=view.stats.size;
+pyqAction[0].events.click();
+assert.equal(view.screen,'pyq-style');
+assert(walk(view.contentEl,e=>e.text==='Check reviewed MCQ feed').length===1);
+assert(walk(view.contentEl,e=>e.text==='Generate ONE audit-only draft with Groq').length===1);
+assert.equal(view.stats.size,oldStatsSize,'Opening PYQ-style must not grade Dynamic Recall KUs');
+view.screen='library';view.draw();
 assert(css.includes('.marrow-dynamic.marrow-dynamic-study.is-answer-focused .marrow-dynamic-header'));
 assert(css.includes('.marrow-dynamic .marrow-dynamic-question'));
 view.screen='study';view.queue=[anatomy[0]];view.index=0;
@@ -302,4 +316,4 @@ editors[0].events.focus();
 assert(view.contentEl.classes.has('is-answer-focused'));
 editors[0].events.blur();
 assert(!view.contentEl.classes.has('is-answer-focused'));
-console.log('Dynamic hierarchy/mobile regression passed: name-only PYQ-sized Review/Browse actions, stats toggle, original KU IDs and history, usage forecast and phone focus controls.');
+console.log('Dynamic hierarchy/mobile regression passed: name-only Review/Browse/PYQ-style actions, no-grade third-mode entry, stats toggle, original KU IDs and history, usage forecast and phone focus controls.');
