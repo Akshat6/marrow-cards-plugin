@@ -1,9 +1,13 @@
 # Marrow Cards — Obsidian plugin for indexed MBBS review
 
-**Marrow Cards v0.3.0 release:** Existing PYQ Review stays available, with a new, separate **Dynamic Recall** mode for one index at a time. The 0–10 Groq grader, KU-linked history, manual score correction and batched generation have passed synthetic and a limited real Groq audit. **Android device tests remain pending.** Back up your vault and review [rollback instructions](docs/rollback-v0.3.0.md) before updating.
+**Released plugin v0.3.11 (manifest checked 2026-10-22):** Existing PYQ Review stays available, with a new, separate **Dynamic Recall** mode for one index at a time. The 0–10 Groq grader, KU-linked history, manual score correction and batched generation have passed synthetic and a limited real Groq audit. **Android device tests remain pending.** Back up your vault and review [rollback instructions](docs/rollback-v0.3.0.md) before updating.
 
 
 An offline-first Obsidian flashcard reviewer for **user-approved** MBBS PYQs and personal facts. The public repository contains the **plugin code and instructions**. Approved cards and original images live in the separate, **private** `Akshat6/marrow-cards-data` repository. Android phone/tablet review logs are maintained per device and can sync through Syncthing.
+
+## PYQ-style dynamic exam-intelligence project — current recovery entry
+
+For the proposed **intelligence-guided Groq PYQ-style MCQ generator** (different from both existing historical PYQ Review and established Dynamic Recall), start with the [**private Step 5 v0.8 execution runbook**](https://github.com/Akshat6/marrow-cards-data/blob/main/exam-intelligence/STEP5-NEXT-CHAT-RUNBOOK-v0.8.md), the [private project next-chat handoff](https://github.com/Akshat6/marrow-cards-data/blob/main/exam-intelligence/NEXT-CHAT-HANDOFF.md), and [public plugin AGENTS](AGENTS.md) — **before** touching the experimental Step 3/4 plugin branch. The current source-locked research contains four *preview packets* (two same-index and two cross-index with **one owning home index each**); [source-only CI passed](https://github.com/Akshat6/marrow-cards-data/actions/runs/39679151308). It has **not** produced clinically approved real Groq MCQs, and **no student-facing PYQ-style runtime feed or released feature exists**. A separate clinical/source review, source-safe multi-index adapter, real Groq trial, option-by-option QA, regression and release permission are pending. **Do not upload proprietary KU excerpts, historical PYQs, raw model results, secrets or private medical data to this public code repo.**
 
 ## New ChatGPT conversation? Start here
 
