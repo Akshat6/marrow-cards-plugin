@@ -13,6 +13,7 @@ class El {
 }
 class ItemView {constructor(leaf){this.app=leaf.app;this.contentEl=new El();}}
 const requests=[];
+let fakeProviderStatus=200, fakeProviderContent=null;
 const rawCandidate=()=>({blueprintId:'BP-TEST-001',indexId:'ANA-TEST',sourceScope:'VERIFIED_MARROW_KUS_ONLY',externalKnowledgeUsed:false,stem:'Which imaginary relationship correctly follows from the supplied test-only reference?',
  options:['First sample','Second sample','Third sample','Fourth sample'].map((text,i)=>({id:'ABCD'[i],text})),
  correctOptionId:'A',optionRationales:['A','B','C','D'].map((id,i)=>({id,isCorrect:i===0,why:'Synthetic source rationale number '+i,kuIds:['KU-000001']})),
@@ -22,7 +23,9 @@ const obsidian={Plugin:class{},ItemView,Notice:class{},PluginSettingTab:class{},
  requestUrl:async request=>{requests.push(request);assert.equal(request.method,'POST');
   assert.equal(request.headers.Authorization,'Bearer gsk_mock');
   assert.equal(JSON.parse(request.body).model,'openai/gpt-oss-20b');
-  return {status:200,json:{choices:[{message:{content:JSON.stringify(rawCandidate())}}],usage:{total_tokens:42}}};},
+  if(fakeProviderStatus!==200)return {status:fakeProviderStatus,
+    json:{error:{message:'Simulated provider rate limit'}}};
+  return {status:200,json:{choices:[{message:{content:fakeProviderContent??JSON.stringify(rawCandidate())}}],usage:{total_tokens:42}}};},
  base64ToArrayBuffer:()=>{},normalizePath:x=>x
 };
 const m={exports:{}};
@@ -240,6 +243,8 @@ async function run(){
  assert.equal(requests.length,1);assert.equal(ctrl.queue.length,before);
  const events=files.get(evPath).trim().split('\n').map(JSON.parse);
  assert.equal(events.filter(x=>x.type==='candidate_unverified').length,1);
+ assert.equal(events.find(x=>x.type==='candidate_unverified').sourcePacket.sourceKUs[0].sourceExcerpt,unit.sourceExcerpt);
+ assert.equal(events.find(x=>x.type==='candidate_unverified').sourcePacket.publicationStatus,'UNREVIEWED_AUDIT_ONLY');
  assert.equal(events.find(x=>x.type==='candidate_unverified').question.reviewStatus,'UNVERIFIED_MODEL_DRAFT');
  assert.equal(events.find(x=>x.type==='candidate_unverified').question.approvedForPractice,false);
  assert.equal(events.find(x=>x.type==='candidate_unverified').promptVersion,'pyq-style-notes-only-v0.2-offline');
@@ -247,6 +252,33 @@ async function run(){
  assert.equal(events.filter(x=>x.type==='blueprint_selected').length,1);
  assert.equal(events.find(x=>x.type==='blueprint_selected').evidenceLane,'S');
  assert.equal(events.find(x=>x.type==='blueprint_selected').sourceKuIds[0],unit.id);
+
+ // Actual transport error simulations: quota/429 and malformed model JSON
+ // consume exactly one request each, never retry and never enter practice.
+ const acceptedBefore=events.filter(x=>x.type==='candidate_unverified').length;
+ const before429=requests.length;
+ fakeProviderStatus=429;
+ await ctrl.auditCandidate('ANA-TEST');
+ assert.equal(requests.length,before429+1);
+ assert.match(ctrl.error,/rate limit/);
+ let log=files.get(evPath).trim().split('\n').map(JSON.parse);
+ assert.equal(log.filter(x=>x.type==='candidate_unverified').length,acceptedBefore);
+ assert.equal(log.filter(x=>x.type==='candidate_rejected').length,1);
+ assert.equal(log.find(x=>x.type==='candidate_rejected').sourcePacket.sourceKUs[0].sourceId,unit.sourceId);
+ assert.equal(log.find(x=>x.type==='candidate_rejected').rawModelJson,null);
+ fakeProviderStatus=200;
+ fakeProviderContent=JSON.stringify({unableToConstruct:true});
+ const beforeInvalid=requests.length;
+ await ctrl.auditCandidate('ANA-TEST');
+ assert.equal(requests.length,beforeInvalid+1);
+ assert.match(ctrl.error,/Groq response/);
+ log=files.get(evPath).trim().split('\n').map(JSON.parse);
+ assert.equal(log.filter(x=>x.type==='candidate_unverified').length,acceptedBefore);
+ assert.equal(log.filter(x=>x.type==='candidate_rejected').length,2);
+ assert.equal(log.filter(x=>x.type==='candidate_rejected').at(-1).rawModelJson.unableToConstruct,true);
+ assert.equal(log.filter(x=>x.type==='candidate_rejected').at(-1).sourcePacket.sourceKUs.length,1);
+ fakeProviderContent=null;
+
  assert(![...files.keys()].some(x=>x.startsWith('MarrowCards/reviews/')||
   x.startsWith('MarrowCards/notes/')||x.startsWith('MarrowCards/packs/')));
  assert(source.includes("text:'PYQ-style'"));
