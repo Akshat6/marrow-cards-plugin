@@ -2884,6 +2884,10 @@ const PYQ_STYLE_FEED_REMOTE = 'exam-intelligence/runtime-approved-v1.json';
 const PYQ_STYLE_EVENTS = PYQ_STYLE_ROOT + '/events';
 const PYQ_STYLE_EXPORTS = PYQ_STYLE_ROOT + '/exports';
 const PYQ_STYLE_SCHEMA = 1;
+const PYQ_STYLE_SOURCE_POLICY = 'VERIFIED_MARROW_KUS_ONLY';
+const PYQ_STYLE_SOURCE_KU_PATH = 'dynamic-recall/knowledge-units.json';
+const pyqStyleOriginalKuId = id => typeof id === 'string' && /^KU-\d{6}$/.test(id);
+const pyqStyleUniqueIds = ids => Array.isArray(ids) && new Set(ids).size === ids.length;
 
 function validatePyqStyleBlueprint(b) {
   return Boolean(b && safeId(b.blueprintId) && safeId(b.indexId) &&
@@ -2891,7 +2895,9 @@ function validatePyqStyleBlueprint(b) {
     ['H','A','N','S'].includes(b.evidenceLane) &&
     b.status === 'GENERATOR_ELIGIBLE_REVIEWED' &&
     Array.isArray(b.kuIds) && b.kuIds.length>0 && b.kuIds.length<=12 &&
-    b.kuIds.every(safeId) &&
+    b.kuIds.every(pyqStyleOriginalKuId) && pyqStyleUniqueIds(b.kuIds) &&
+    b.sourceScope === PYQ_STYLE_SOURCE_POLICY && b.externalKnowledgeUsed === false &&
+    (!b.externalKuIds || (Array.isArray(b.externalKuIds) && !b.externalKuIds.length)) &&
     typeof b.cognitiveOperation === 'string' && b.cognitiveOperation.length>=10 && b.cognitiveOperation.length<=800 &&
     typeof b.stemIntent === 'string' && b.stemIntent.length>=8 && b.stemIntent.length<=1200 &&
     typeof b.distractorStrategy === 'string' && b.distractorStrategy.length>=8 && b.distractorStrategy.length<=1500 &&
@@ -2906,7 +2912,10 @@ function validatePyqStyleQuestion(q) {
      !Array.isArray(q.optionRationales)||q.optionRationales.length!==4||
      !['A','B','C','D'].includes(q.correctOptionId)||
      typeof q.answerExplanation!=='string'||q.answerExplanation.length<8||q.answerExplanation.length>2200||
-     !Array.isArray(q.testedKuIds)||!q.testedKuIds.length||!q.testedKuIds.every(safeId))
+     !Array.isArray(q.testedKuIds)||!q.testedKuIds.length||!q.testedKuIds.every(pyqStyleOriginalKuId)||
+     !pyqStyleUniqueIds(q.testedKuIds)||
+     q.sourceScope!==PYQ_STYLE_SOURCE_POLICY||q.externalKnowledgeUsed!==false||
+     (q.externalKuIds!==undefined && (!Array.isArray(q.externalKuIds)||q.externalKuIds.length>0)))
     throw new Error('MCQ structure, answer or source IDs invalid.');
   const ids=['A','B','C','D'];
   const normalized=new Set();
@@ -2915,7 +2924,8 @@ function validatePyqStyleQuestion(q) {
     if(!op||op.id!==ids[i]||typeof op.text!=='string'||op.text.trim().length<2||op.text.length>500 ||
        !rr||rr.id!==ids[i]||typeof rr.why!=='string'||rr.why.trim().length<8||rr.why.length>1200||
        rr.isCorrect !== (ids[i]===q.correctOptionId)||
-       !Array.isArray(rr.kuIds)||!rr.kuIds.length||!rr.kuIds.every(k=>q.testedKuIds.includes(k))){
+       !Array.isArray(rr.kuIds)||!rr.kuIds.length||!pyqStyleUniqueIds(rr.kuIds)||
+       !rr.kuIds.every(k=>q.testedKuIds.includes(k))){
       throw new Error('A–D alternatives or per-option source rationales invalid.');
     }
     const v=op.text.trim().toLowerCase().replace(/\s+/g,' ');
@@ -2929,38 +2939,57 @@ function validatePyqStyleQuestion(q) {
   if(q.claimedHistoricalPyq===true)throw new Error('Generated MCQ cannot claim to be an original PYQ.');
   return q;
 }
-function validatePyqStyleRuntime(data,units) {
+// Feed metadata and audit IDs are release contracts, not cryptographic proof of medical review.
+// Source-only scope and original image membership are checked before local acceptance.
+function pyqStyleApprovedOriginalImageCard(cards,entry) {
+  if(!entry.sourceImage)return null;
+  return (cards||[]).find(c=>c && c.id===entry.sourceCardId &&
+    c.status==='approved' && Array.isArray(c.indexIds) && c.indexIds.includes(entry.indexId) &&
+    Array.isArray(c.images) && c.images.includes(entry.sourceImage)) || null;
+}
+function validatePyqStyleRuntime(data,units,cards=[]) {
   if(!data||data.schemaVersion!==PYQ_STYLE_SCHEMA||data.kind!=='marrow-pyq-style-runtime'||
      data.status!=='APPROVED_FOR_RUNTIME'||data.approvedRelease!==true||
-     typeof data.version!=='string'||!Array.isArray(data.blueprints)||
-     !Array.isArray(data.verifiedQuestions))
-    throw new Error('No approved PYQ-style runtime feed. Draft intelligence is not eligible.');
-  const ids=new Set((units||[]).filter(validDynamicUnit).map(u=>u.id));
-  const blueprintIds=new Set();
+     data.sourcePolicy!==PYQ_STYLE_SOURCE_POLICY||
+     data.sourceKuPath!==PYQ_STYLE_SOURCE_KU_PATH||data.externalKnowledgeEnabled!==false||
+     !safeId(data.releaseId)||!safeId(data.releaseAuditId)||
+     typeof data.version!=='string'||!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(data.version)||
+     !Array.isArray(data.blueprints)||!Array.isArray(data.verifiedQuestions))
+    throw new Error('No approved notes-only PYQ-style runtime feed. Draft/external intelligence is not eligible.');
+  const validUnits=(units||[]).filter(u=>validDynamicUnit(u) &&
+    pyqStyleOriginalKuId(u.id) && safeId(u.sourceId) &&
+    typeof u.sourceExcerpt==='string' && u.sourceExcerpt.trim().length>0 &&
+    typeof u.sourceLocator==='string' && u.sourceLocator.trim().length>0);
+  const unitById=new Map(validUnits.map(u=>[u.id,u]));
+  const blueprintById=new Map();
   for(const b of data.blueprints){
-    if(!validatePyqStyleBlueprint(b)||blueprintIds.has(b.blueprintId)||
-       b.kuIds.some(id=>!ids.has(id)||(units||[]).find(u=>u.id===id).indexId!==b.indexId))
-      throw new Error('Unapproved blueprint or KU/index mismatch.');
-    blueprintIds.add(b.blueprintId);
+    if(!validatePyqStyleBlueprint(b)||blueprintById.has(b.blueprintId)||
+       b.kuIds.some(id=>unitById.get(id)?.indexId!==b.indexId)||
+       (b.sourceImage && !pyqStyleApprovedOriginalImageCard(cards,b)))
+      throw new Error('Unapproved notes-only blueprint, original image or KU/index mismatch.');
+    blueprintById.set(b.blueprintId,b);
   }
   const questionIds=new Set();
   for(const q of data.verifiedQuestions){
     validatePyqStyleQuestion(q);
-    const b=data.blueprints.find(item=>item.blueprintId===q.blueprintId);
+    const b=blueprintById.get(q.blueprintId);
     if(!b||b.indexId!==q.indexId||q.testedKuIds.some(id=>!b.kuIds.includes(id))||
        q.reviewStatus!=='VERIFIED_SYNTHETIC'||!safeId(q.sourceAuditId)||
+       q.approvedForPractice!==true||q.releaseApprovalId!==data.releaseId||
        questionIds.has(q.questionId) ||
-       (q.sourceImage && (q.sourceImage!==b.sourceImage||q.sourceCardId!==b.sourceCardId)))
-      throw new Error('Synthetic question missing independent source review or blueprint match.');
+       Boolean(q.sourceImage)!==Boolean(b.sourceImage) ||
+       (q.sourceImage && (q.sourceImage!==b.sourceImage||
+          q.sourceCardId!==b.sourceCardId||
+          !pyqStyleApprovedOriginalImageCard(cards,q))))
+      throw new Error('Synthetic question missing review, release approval or blueprint/image match.');
     questionIds.add(q.questionId);
   }
   return data;
 }
 function pyqStyleVerifiedOriginalImage(plugin,q) {
   if(!q.sourceImage)return null;
-  const card=(plugin.cards||[]).find(c=>c.id===q.sourceCardId&&c.status==='approved'&&
-    c.indexIds.includes(q.indexId)&&Array.isArray(c.images)&&c.images.includes(q.sourceImage));
-  if(!card)throw new Error('Original image is not in an approved card for this index.');
+  if(!pyqStyleApprovedOriginalImageCard(plugin.cards,q))
+    throw new Error('Original image is not in an approved card for this index.');
   const file=plugin.app.vault.getAbstractFileByPath(MEDIA+'/'+q.sourceImage);
   if(!file)throw new Error('Original approved image has not been downloaded yet.');
   return plugin.app.vault.getResourcePath(file);
@@ -3002,18 +3031,35 @@ class PyqStyleController {
   constructor(view){this.view=view;this.feed=null;this.busy=false;this.error='';this.queue=[];
     this.cursor=0;this.current=null;this.selected=null;this.sessionId='';this.indexId='';this.history=[];this.status='home';this.startedAt=null;this.flagged=new Set();}
   async loadLocal(){
+    this.feed=null; // fail closed even if a previously loaded cache has been corrupted
     const file=this.view.app.vault.getAbstractFileByPath(PYQ_STYLE_FEED_FILE);
-    if(!file){this.feed=null;return null;}
-    this.feed=validatePyqStyleRuntime(JSON.parse(await this.view.app.vault.read(file)),this.view.units);
+    if(!file)return null;
+    this.feed=validatePyqStyleRuntime(JSON.parse(await this.view.app.vault.read(file)),
+      this.view.units,this.view.plugin.cards);
     return this.feed;
   }
   async syncApproved(){
     if(this.busy)return;this.busy=true;this.error='';this.view.draw();
     try{
       const raw=await this.view.plugin.fetchGithub(PYQ_STYLE_FEED_REMOTE);
-      const feed=validatePyqStyleRuntime(JSON.parse(raw),this.view.units);
-      await this.view.plugin.ensureFolder(PYQ_STYLE_ROOT);
-      await this.view.plugin.writeJson(PYQ_STYLE_FEED_FILE,feed);
+      const feed=validatePyqStyleRuntime(JSON.parse(raw),this.view.units,this.view.plugin.cards);
+      const oldFile=this.view.app.vault.getAbstractFileByPath(PYQ_STYLE_FEED_FILE);
+      let shouldWrite=true;
+      if(oldFile){
+        const previous=validatePyqStyleRuntime(JSON.parse(await this.view.app.vault.read(oldFile)),
+          this.view.units,this.view.plugin.cards);
+        const order=compareVersions(feed.version,previous.version);
+        if(order<0)throw new Error('Refusing approved PYQ-style feed downgrade.');
+        if(order===0){
+          if(JSON.stringify(feed)!==JSON.stringify(previous))
+            throw new Error('Approved PYQ-style feed changed without a version increase.');
+          shouldWrite=false;
+        }
+      }
+      if(shouldWrite){
+        await this.view.plugin.ensureFolder(PYQ_STYLE_ROOT);
+        await this.view.plugin.writeJson(PYQ_STYLE_FEED_FILE,feed);
+      }
       this.feed=feed;new Notice('Reviewed PYQ-style intelligence loaded.');
     }catch(e){this.error='Reviewed runtime feed unavailable: '+e.message;}
     finally{this.busy=false;this.view.draw();}
