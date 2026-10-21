@@ -26,7 +26,7 @@ const obsidian={Plugin:class{},ItemView,Notice:class{},PluginSettingTab:class{},
  base64ToArrayBuffer:()=>{},normalizePath:x=>x
 };
 const m={exports:{}};
-vm.runInNewContext(source+'\nmodule.exports.pyqTest={validatePyqStyleBlueprint,validatePyqStyleQuestion,validatePyqStyleRuntime,pyqStyleVerifiedOriginalImage,pyqStyleDraftFromModel,selectPyqStyleBlueprint,PyqStyleController,MarrowDynamicRecallView,PYQ_STYLE_FEED_FILE,PYQ_STYLE_FEED_REMOTE,PYQ_STYLE_EVENTS};',{
+vm.runInNewContext(source+'\nmodule.exports.pyqTest={validatePyqStyleBlueprint,validatePyqStyleQuestion,validatePyqStyleRuntime,pyqStyleVerifiedOriginalImage,pyqStyleDraftFromModel,buildPyqStyleGroqPacket,validatePyqStyleModelPayload,generatePyqStyleAuditCandidate,selectPyqStyleBlueprint,PyqStyleController,MarrowDynamicRecallView,PYQ_STYLE_FEED_FILE,PYQ_STYLE_FEED_REMOTE,PYQ_STYLE_EVENTS};',{
  module:m,exports:m.exports,require(n){if(n==='obsidian')return obsidian;throw Error(n);},
  console,TextDecoder,Date,Promise,JSON,setTimeout,clearTimeout
 },{filename:'main.js'});
@@ -180,10 +180,70 @@ async function run(){
  await ctrl.exportRecords('ANA-TEST');
  const exportFile=[...files.keys()].find(x=>x.startsWith('MarrowCards/pyq-style/exports/')&&x.endsWith('.json'));
  assert(exportFile);assert.equal(JSON.parse(files.get(exportFile)).rows.filter(x=>x.type==='answered').length,1);
+ // Step 4: enforce exact original KU evidence before transport; a fake
+ // provider injection proves no live token, request or student item is needed.
+ const packet=API.buildPyqStyleGroqPacket(bp,[unit]);
+ assert.equal(packet.sourcePolicy,'VERIFIED_MARROW_KUS_ONLY');
+ assert.equal(packet.publicationStatus,'UNREVIEWED_AUDIT_ONLY');
+ assert.equal(packet.sourceKUs.length,1);
+ assert.equal(packet.sourceKUs[0].sourceExcerpt,unit.sourceExcerpt);
+ assert.equal(packet.sourceKUs[0].sourceLocator,unit.sourceLocator);
+ assert.equal(packet.indexId,bp.indexId);
+ assert(!JSON.stringify(packet).includes('EXKU-'));
+ assert.throws(()=>API.buildPyqStyleGroqPacket(bp,[{...unit,verification:'Unverified'}]),/Unverified/);
+ assert.throws(()=>API.buildPyqStyleGroqPacket(bp,[{...unit,indexId:'ANA-OTHER'}]),/out-of-scope/);
+ assert.throws(()=>API.buildPyqStyleGroqPacket(bp,[{...unit,id:'EXKU-000001'}]),/Unverified/);
+ assert.throws(()=>API.buildPyqStyleGroqPacket(bp,[{...unit,sourceExcerpt:''}]),/incomplete/);
+ assert.throws(()=>API.buildPyqStyleGroqPacket(bp,[unit,unit]),/exact original KUs/);
+ const goodModel=rawCandidate();
+ assert.equal(API.validatePyqStyleModelPayload(goodModel,bp,packet),true);
+ for(const extra of [
+   {approvedForPractice:true},{reviewStatus:'VERIFIED_SYNTHETIC'},
+   {releaseApprovalId:'RELEASE-FAKE-001'},{sourceAuditId:'AUDIT-FAKE'},
+   {claimedHistoricalPyq:true},{externalKuIds:['EXKU-000001']},
+   {unableToConstruct:true},
+   {sourceScope:'EXTERNAL'},{externalKnowledgeUsed:true},
+   {blueprintId:'SOME-OTHER'},{indexId:'ANOTHER-INDEX'},
+   {testedKuIds:['EXKU-000001']},{sourceImage:'fake-original.png'},
+   {sourceCardId:'UNVERIFIED-SOURCE'}]) {
+   assert.throws(()=>API.validatePyqStyleModelPayload({...goodModel,...extra},bp,packet),
+     /Groq|MCQ/);
+ }
+ const fakeCalls=[];
+ const safeResponse=await API.generatePyqStyleAuditCandidate(plugin,bp,[unit],
+   async (_plugin,messages,kind,count)=>{
+     fakeCalls.push({messages,kind,count});
+     return rawCandidate();
+   });
+ assert.equal(fakeCalls.length,1);
+ assert.equal(fakeCalls[0].kind,'generate');
+ assert.equal(fakeCalls[0].count,1);
+ assert.equal(fakeCalls[0].messages[0].role,'system');
+ assert.equal(fakeCalls[0].messages[1].role,'user');
+ assert.equal(JSON.parse(fakeCalls[0].messages[1].content).sourceKUs[0].sourceExcerpt,unit.sourceExcerpt);
+ assert.equal(safeResponse.draft.reviewStatus,'UNVERIFIED_MODEL_DRAFT');
+ assert.equal(safeResponse.draft.approvedForPractice,false);
+ assert.equal(safeResponse.draft.eligibleForStudentPractice,false);
+ assert.equal(safeResponse.draft.sourceImage,null);
+ assert.equal(safeResponse.packet.sourceKUs.length,1);
+ await assert.rejects(
+   ()=>API.generatePyqStyleAuditCandidate(plugin,bp,[unit],
+     async()=>({...goodModel,approvedForPractice:true})),/Groq response/);
+ await assert.rejects(
+   ()=>API.generatePyqStyleAuditCandidate(plugin,bp,[unit],
+     async()=>({unableToConstruct:true})),/Groq response/);
+ await assert.rejects(
+   ()=>API.generatePyqStyleAuditCandidate(plugin,bp,[unit],
+     async()=>{throw Error('Simulated HTTP 429');}),/429/);
+
  const before=ctrl.queue.length;ctrl.status='home';await ctrl.auditCandidate('ANA-TEST');
  assert.equal(requests.length,1);assert.equal(ctrl.queue.length,before);
  const events=files.get(evPath).trim().split('\n').map(JSON.parse);
  assert.equal(events.filter(x=>x.type==='candidate_unverified').length,1);
+ assert.equal(events.find(x=>x.type==='candidate_unverified').question.reviewStatus,'UNVERIFIED_MODEL_DRAFT');
+ assert.equal(events.find(x=>x.type==='candidate_unverified').question.approvedForPractice,false);
+ assert.equal(events.find(x=>x.type==='candidate_unverified').promptVersion,'pyq-style-notes-only-v0.2-offline');
+ assert.equal(events.find(x=>x.type==='candidate_unverified').sourcePacketVersion,'1.0.0');
  assert.equal(events.filter(x=>x.type==='blueprint_selected').length,1);
  assert.equal(events.find(x=>x.type==='blueprint_selected').evidenceLane,'S');
  assert.equal(events.find(x=>x.type==='blueprint_selected').sourceKuIds[0],unit.id);
