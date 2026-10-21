@@ -2998,9 +2998,13 @@ function pyqStyleVerifiedOriginalImage(plugin,q) {
 // uniqueness of the medically best answer, or image label answer leakage.
 function pyqStyleDraftFromModel(raw,b,availableKuIds) {
   if(!raw||typeof raw!=='object')throw new Error('Groq MCQ JSON invalid.');
+  if(raw.externalKnowledgeUsed===true||
+     (raw.externalKuIds!==undefined&&(!Array.isArray(raw.externalKuIds)||raw.externalKuIds.length>0)))
+    throw new Error('Outside medical facts are not allowed in notes-only MCQs.');
   const allowed=new Set(availableKuIds);
   const q={...raw,questionId:'MCQ-'+uniqueId().replace(/[^A-Za-z0-9_-]/g,''),
-    blueprintId:b.blueprintId,indexId:b.indexId,claimedHistoricalPyq:false};
+    blueprintId:b.blueprintId,indexId:b.indexId,claimedHistoricalPyq:false,
+    sourceScope:PYQ_STYLE_SOURCE_POLICY,externalKnowledgeUsed:false};
   validatePyqStyleQuestion(q);
   if(q.testedKuIds.some(id=>!allowed.has(id)))throw new Error('Groq cited an unknown KU.');
   if(q.sourceImage && (q.sourceImage!==b.sourceImage||q.sourceCardId!==b.sourceCardId))
