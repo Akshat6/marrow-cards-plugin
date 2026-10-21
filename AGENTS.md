@@ -1,5 +1,7 @@
 # Marrow Cards — instructions for a new ChatGPT session
 
+**PYQ-style dynamic MCQ generation (current, 2026-10-22):** For the examination-intelligence engine, read the **private** [canonical NEXT-CHAT-HANDOFF](https://github.com/Akshat6/marrow-cards-data/blob/main/exam-intelligence/NEXT-CHAT-HANDOFF.md), then the [binding architecture contract](https://github.com/Akshat6/marrow-cards-data/blob/main/exam-intelligence/ARCHITECTURE-CONTRACT.md), before working on Step 5 or plugin integration. This is **not** the ordinary approved PYQ card-publication workflow or Groq Dynamic Recall. ChatGPT stores examiner/KU selection intelligence; Obsidian selects/validates/archives; Groq writes fresh A–D MCQs dynamically. The current source-locked v0.7 Step 5 research is **offline only**, with independent medical/real Groq gates pending; never enable draft blueprints, put proprietary content in this public repository, or describe fixtures as real Groq output.
+
 **Dynamic Recall v0.3.0:** Same plugin; legacy PYQ Review remains independent, and one-index Groq Dynamic Recall adds 0–10 grading. User expressly chose a direct release without beta after automated tests and a limited real Groq audit, with Android device validation still pending. See [docs/dynamic-recall-phase1.md](docs/dynamic-recall-phase1.md) and [docs/rollback-v0.3.0.md](docs/rollback-v0.3.0.md). Keep old 0.2.10 assets and all local vault data safe. Future features still require specific user authorization.
 
 
