@@ -3113,7 +3113,7 @@ function validatePyqStyleModelPayload(raw,b,packet) {
      raw.blueprintId!==b.blueprintId||raw.indexId!==b.indexId||
      raw.sourceScope!==PYQ_STYLE_SOURCE_POLICY||raw.externalKnowledgeUsed!==false||
      raw.sourceImage!==(b.sourceImage||null)||
-     raw.sourceCardId!==(b.sourceCardId||null))
+     raw.sourceCardId!==(b.sourceImage?b.sourceCardId:null))
     throw new Error('Groq response altered protected source scope, identifiers or image.');
   const sourceIds=new Set(packet.sourceKUs.map(x=>x.kuId));
   if(!Array.isArray(raw.testedKuIds)||
