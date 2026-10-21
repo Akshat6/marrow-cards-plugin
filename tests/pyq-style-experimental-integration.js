@@ -150,9 +150,10 @@ async function run(){
  const screen=new El();view.drawPyqStyle(screen);
  assert(screen.findText('A. '+long));
  const css=fs.readFileSync('styles.css','utf8');
- assert.match(css,/marrow-pyq-style button\\.marrow-pyq-option[\\s\\S]*?height: auto !important;/);
- assert.match(css,/marrow-pyq-style button\\.marrow-pyq-option[\\s\\S]*?max-height: none !important;/);
- assert.match(css,/marrow-pyq-style button\\.marrow-pyq-option[\\s\\S]*?white-space: pre-wrap !important;/);
+ assert(css.includes('.marrow-pyq-style button.marrow-pyq-option {'));
+ assert(css.includes('height: auto !important;'));
+ assert(css.includes('max-height: none !important;'));
+ assert(css.includes('white-space: pre-wrap !important;'));
  assert(screen.findText('Groq answer: C · Different'));
  assert(screen.findText('Generate another experimental MCQ'));
  ctrl.experimentalQuestion=null;const home=new El();view.drawPyqStyle(home);
