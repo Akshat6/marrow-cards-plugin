@@ -1,7 +1,7 @@
 name: PYQ-style prototype tests (no publishing)
 on:
   push:
-    branches: [feature/pyq-style-practice-m2]
+    branches: [feature/pyq-style-practice-m2, feature/pyq-style-step2-feed-hardening]
   pull_request:
     branches: [main]
 permissions:
