@@ -2986,6 +2986,50 @@ function validatePyqStyleRuntime(data,units,cards=[]) {
   }
   return data;
 }
+// Step 3: select WHAT to test from reviewed original-KU blueprints only.
+// Local history is used for coverage, never as a predicted exam frequency.
+function selectPyqStyleBlueprint(feed,units,cards,indexId,events=[]) {
+  if(!safeId(indexId))throw new Error('Explicit source index required for MCQ selection.');
+  validatePyqStyleRuntime(feed,units,cards);
+  if(!Array.isArray(events))throw new Error('Invalid local selection history.');
+  const candidates=feed.blueprints.filter(b=>b.indexId===indexId);
+  if(!candidates.length)throw new Error('No independently reviewed notes-only blueprint for this index.');
+  const unique=new Map();
+  for(const b of candidates.slice().sort((a,b)=>a.blueprintId.localeCompare(b.blueprintId))){
+    const signature=b.kuIds.slice().sort().join(',')+'|'+b.cognitiveOperation.toLowerCase().replace(/\s+/g,' ').trim();
+    if(!unique.has(signature))unique.set(signature,{b,signature});
+  }
+  const history=events.filter(e=>e&&e.type==='blueprint_selected'&&
+    e.indexId===indexId&&safeId(e.blueprintId)&&
+    Array.isArray(e.sourceKuIds)&&e.sourceKuIds.every(pyqStyleOriginalKuId)&&
+    ['H','A','N','S'].includes(e.evidenceLane));
+  const count=predicate=>history.reduce((n,e)=>n+(predicate(e)?1:0),0);
+  const rows=[...unique.values()].map(({b,signature})=>({
+    b,signature,
+    uses:count(e=>e.blueprintId===b.blueprintId),
+    kuUses:count(e=>e.sourceKuIds.some(id=>b.kuIds.includes(id))),
+    laneUses:count(e=>e.evidenceLane===b.evidenceLane),
+    operationUses:count(e=>e.cognitiveOperation===b.cognitiveOperation)
+  }));
+  const coldTie={N:0,S:1,A:2,H:3};
+  rows.sort((a,b)=>a.uses-b.uses||a.kuUses-b.kuUses||
+    a.laneUses-b.laneUses||a.operationUses-b.operationUses||
+    coldTie[a.b.evidenceLane]-coldTie[b.b.evidenceLane]||
+    a.b.blueprintId.localeCompare(b.b.blueprintId));
+  const choice=rows[0],b=choice.b;
+  return {blueprint:b,trace:{
+    policy:'M2_STEP3_NOTES_KU_COVERAGE_V1',indexId,blueprintId:b.blueprintId,
+    sourceKuIds:b.kuIds.slice(),evidenceLane:b.evidenceLane,
+    cognitiveOperation:b.cognitiveOperation,
+    historicalClaim:b.evidenceLane==='H'?'OBSERVED_PATTERN_ONLY':
+      b.evidenceLane==='A'?'ANCHORED_KU_ONLY':'NO_HISTORICAL_CLAIM',
+    selectionReason:'LEAST_BLUEPRINT_THEN_KU_THEN_LANE_THEN_OPERATION',
+    priorBlueprintSelections:choice.uses,priorSourceKuSelections:choice.kuUses,
+    priorLaneSelections:choice.laneUses,
+    candidateCount:rows.length,actualSelectionEvents:history.length,
+    estimatedFutureExamProbability:null,externalKnowledgeUsed:false,
+    practiceApproved:false}};
+}
 function pyqStyleVerifiedOriginalImage(plugin,q) {
   if(!q.sourceImage)return null;
   if(!pyqStyleApprovedOriginalImageCard(plugin.cards,q))
@@ -3137,7 +3181,7 @@ class PyqStyleController {
       await this.loadLocal();
       if(!this.feed)throw new Error('No approved runtime blueprint feed. Draft milestone files cannot generate questions.');
       const history=await readDynamicEvents(this.view.plugin,PYQ_STYLE_EVENTS);
-      const selection=selectPyqStyleBlueprint(this.feed,this.view.units,indexId,history);
+      const selection=selectPyqStyleBlueprint(this.feed,this.view.units,this.view.plugin.cards,indexId,history);
       const b=selection.blueprint;
       await appendPyqStyleEvent(this.view.plugin,{type:'blueprint_selected',...selection.trace});
       let item;
