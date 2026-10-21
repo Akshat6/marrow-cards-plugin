@@ -3000,7 +3000,7 @@ async function appendPyqStyleEvent(plugin,event){
 }
 class PyqStyleController {
   constructor(view){this.view=view;this.feed=null;this.busy=false;this.error='';this.queue=[];
-    this.cursor=0;this.current=null;this.selected=null;this.sessionId='';this.indexId='';this.history=[];this.status='home';}
+    this.cursor=0;this.current=null;this.selected=null;this.sessionId='';this.indexId='';this.history=[];this.status='home';this.startedAt=null;this.flagged=new Set();}
   async loadLocal(){
     const file=this.view.app.vault.getAbstractFileByPath(PYQ_STYLE_FEED_FILE);
     if(!file){this.feed=null;return null;}
@@ -3048,7 +3048,7 @@ class PyqStyleController {
     await appendPyqStyleEvent(this.view.plugin,{type:'question',sessionId:this.sessionId,questionId:q.questionId,
       indexId:q.indexId,question:q,feedVersion:this.feed.version,
       sourceAuditId:q.sourceAuditId,modelOrigin:'VERIFIED_SYNTHETIC_BANK'});
-    this.current=q;this.selected=null;
+    this.current=q;this.selected=null;this.startedAt=Date.now();
   }
   async choose(letter){
     if(this.busy||this.selected||!this.current||!['A','B','C','D'].includes(letter))return;
@@ -3058,9 +3058,20 @@ class PyqStyleController {
         questionId:this.current.questionId,indexId:this.current.indexId,
         selectedOptionId:letter,correctOptionId:this.current.correctOptionId,
         correct:letter===this.current.correctOptionId,
-        blueprintId:this.current.blueprintId});
+        responseTimeMs:Number.isFinite(this.startedAt)?Math.max(0,Date.now()-this.startedAt):null,
+        feedVersion:this.feed.version,blueprintId:this.current.blueprintId});
       this.selected=letter;
     }catch(e){this.error='Could not save choice: '+e.message;}
+    finally{this.busy=false;this.view.draw();}
+  }
+  async flagCurrent(){
+    if(this.busy||!this.current||this.flagged.has(this.current.questionId))return;
+    this.busy=true;this.view.draw();
+    try{await appendPyqStyleEvent(this.view.plugin,{type:'flagged',sessionId:this.sessionId,
+      questionId:this.current.questionId,indexId:this.current.indexId,
+      reason:'Student flagged for source/ambiguity review'});
+      this.flagged.add(this.current.questionId);
+    }catch(e){this.error='Could not save flag: '+e.message;}
     finally{this.busy=false;this.view.draw();}
   }
   async next(){
@@ -3084,7 +3095,7 @@ class PyqStyleController {
       await appendPyqStyleEvent(this.view.plugin,{type:'candidate_unverified',
         blueprintId:b.blueprintId,indexId,questionId:item.questionId,question:item,
         sourceKuIds:b.kuIds,feedVersion:this.feed.version,model:DYNAMIC_MODEL,
-        validator:'STRUCTURAL_ONLY_NOT_MEDICALLY_APPROVED'});
+        promptVersion:'pyq-style-prototype-v0.1',validator:'STRUCTURAL_ONLY_NOT_MEDICALLY_APPROVED'});
       new Notice('Generated candidate archived for ChatGPT/source audit. It is not study-approved.');
     }catch(e){this.error=e.message;}
     finally{this.busy=false;this.view.draw();}
@@ -3161,6 +3172,8 @@ MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
     for(const rationale of q.optionRationales)
       body.createEl('p',{cls:'marrow-hint',text:rationale.id+' — '+rationale.why+
         ' ['+rationale.kuIds.join(', ')+']'});
+    const flag=body.createEl('button',{text:p.flagged.has(q.questionId)?'Flag saved':'Flag question for ChatGPT review'});
+    flag.disabled=p.busy||p.flagged.has(q.questionId);flag.addEventListener('click',()=>void p.flagCurrent());
     const next=body.createEl('button',{text:'Next MCQ →',cls:'mod-cta'});
     next.disabled=p.busy;next.addEventListener('click',()=>void p.next());
   }
