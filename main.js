@@ -3971,24 +3971,29 @@ MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
   }
   if(p.status==='home'){
     body.createEl('p',{cls:'marrow-hint',text:
-      'Approved question-bank practice requires a reviewed feed. The separate opt-in Experimental AI MCQ mode uses only user-accepted original Verified KUs but model answers are not clinically certified.'});
-    const row=body.createDiv({cls:'marrow-toolbar'});
+      'Generate source-grounded AI practice questions. No pre-approval needed; model answers remain unverified.'});
+    const generation=body.createDiv({cls:'marrow-toolbar'});
+    for(const n of [1,10,20]){
+      const btn=generation.createEl('button',{text:'Generate '+n+' experimental MCQ'+(n===1?'':'s'),
+        cls:n===10?'mod-cta':''});
+      btn.disabled=p.busy;btn.addEventListener('click',()=>void p.experimentalGenerate(indexId,n));
+    }
+    body.createEl('p',{cls:'marrow-hint',text:
+      'Tap an answer to flip the card. Bookmark excellent questions and flag questionable ones. Feedback stays local unless private full-question sync is enabled in Settings.'});
+    const advanced=body.createEl('details');
+    advanced.createEl('summary',{text:'Advanced: reviewed bank and manual auditing'});
+    advanced.createEl('p',{cls:'marrow-hint',text:
+      'Reviewed-bank practice requires a separately medically reviewed question feed, which may not yet be available.'});
+    const row=advanced.createDiv({cls:'marrow-toolbar'});
     const sync=row.createEl('button',{text:'Check reviewed MCQ feed'});
     sync.disabled=p.busy;sync.addEventListener('click',()=>void p.syncApproved());
     for(const n of [10,20]){
-      const start=row.createEl('button',{text:'Practise '+n+' reviewed MCQs',cls:n===10?'mod-cta':''});
+      const start=row.createEl('button',{text:'Practise '+n+' reviewed MCQs'});
       start.disabled=p.busy;start.addEventListener('click',()=>void p.start(indexId,n));
     }
-    const experimentRow=body.createDiv({cls:'marrow-toolbar'});
-    for(const n of [1,10,20]){
-      const experiment=experimentRow.createEl('button',{text:'Generate '+n+' experimental MCQ'+(n===1?'':'s'),cls:n===10?'mod-cta':''});
-      experiment.disabled=p.busy;
-      experiment.addEventListener('click',()=>void p.experimentalGenerate(indexId,n));
-    }
-    const warning=body.createEl('p',{cls:'marrow-hint',text:'Experimental Groq questions are source-checked but NOT independently medically certified. Answers may be wrong. Your experimental choices remain separate from verified learning scores.'});
-    const candidate=body.createEl('button',{text:'Generate ONE audit-only draft with Groq'});
-    candidate.disabled=p.busy;candidate.addEventListener('click',()=>void p.auditCandidate(indexId));
-    const exportButton=body.createEl('button',{text:'Export generated questions + answers for ChatGPT'});
+    const draft=advanced.createEl('button',{text:'Generate ONE audit-only draft with Groq'});
+    draft.disabled=p.busy;draft.addEventListener('click',()=>void p.auditCandidate(indexId));
+    const exportButton=advanced.createEl('button',{text:'Export generated questions + answers for ChatGPT'});
     exportButton.disabled=p.busy;exportButton.addEventListener('click',()=>void p.exportRecords(indexId));
     return;
   }
