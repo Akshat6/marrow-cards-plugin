@@ -1,4 +1,4 @@
-# Experimental PYQ-style practice — feedback workflow (proposed v0.3.15)
+# Experimental PYQ-style practice — feedback workflow (v0.3.16)
 
 ## What the student does
 1. Open Dynamic Recall > PYQ-style for a home index, then **Generate 1**, **10** or **20 experimental MCQs**.
@@ -7,8 +7,8 @@
 4. Tap **Next question** or **Finish practice**. The original device-local append-only logs remain authoritative.
 
 ## Generation
-- Bulk requests use up to three source-locked packets per Groq call to amortize instruction overhead. Output is a JSON object with ordered \`questions\`; each answer is independently checked against its own packet and source KU identities.
-- Missing/invalid items are rejected independently; valid items are kept. Retries are bounded. If a provider quota, missing key or rate limit blocks completion, the session may contain fewer questions than requested and explicitly reports this.
+- Bulk requests use up to **two** source-locked packets per Groq call to fit the free model's per-minute token budget more conservatively. The previous three-packet requests could reserve 7,200 output tokens before including input. Valid questions become answerable while the rest of the batch is generated. Output is a JSON object with ordered \`questions\`; each answer is independently checked against its own packet and source KU identities.
+- Missing/invalid items are rejected independently; valid items are kept. Temporary Groq HTTP 429 rate limits use the provider's `retry-after` header with bounded, cancellation-aware cooldowns while Obsidian remains open. Daily exhaustion, credentials or exhausted waiting budgets stop safely. If completion is impossible, the session keeps the valid questions and explicitly reports a partial batch. No quota bypass, automatic paid fallback, or guarantee of 10/20 within one minute.
 - Candidate generation and attempted answers are **experimental, unverified**, never added to genuine historical PYQ packs, approved cards or Verified learning scores.
 - Multi-KU relationships are prioritized at a default 60% source-supported selection target; multi-KU questions must declare at least two actually tested KUs. This does **not** prove meaningful integration or medical correctness; qualitative assessment follows from flags/bookmarks.
 - Optional private generator style guidance is loaded from \`exam-intelligence/feedback/generator-guidance-v1.json\`, schema 1. It accepts only whitelisted style codes and a 0–80% integration target; arbitrary generated medical facts are never accepted as guidance.
