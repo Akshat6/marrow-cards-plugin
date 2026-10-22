@@ -164,6 +164,10 @@ The user judged the first real Groq 006/068 anatomy outputs decent and requested
 
 **Release gate:** Run `tests/pyq-style-smoke.js`, `tests/pyq-style-multi-index-audit.js`, `tests/pyq-style-experimental-integration.js`, all legacy smoke/Dynamic Recall/mobile tests and dry-run Groq. Back up the entire vault before updating via BRAT and check both phone/tablet. Verify one-home assignment in 067/070, question tap and model-key display, flag/export, repeated question generation, missing private token/key and free-tier limits, source mismatch rejection, separate per-device logs, and rollback to v0.3.11. Real Android taps and clinical correctness **cannot** be certified by synthetic CI alone.
 
+## v0.3.16 — Groq 429 recovery in experimental batches
+
+The v0.3.15 up-to-three-packet generator hit HTTP 429 (shown on Android as only 1/10 questions). v0.3.16 sends at most two packets with 4,000 maximum completion tokens, honors the provider's numeric `retry-after` header on temporary per-minute limits, and keeps the partial batch usable while later questions are generated. Waiting is bounded and cancelled when the user leaves; daily quota/credential failures stop honestly. Synthetic regression verifies an injected 429 on the second provider request and full 10/20 completion; actual Groq free-tier/Android interaction remains unverified. Never bypass local request caps or retry daily exhaustion.
+
 ## v0.3.15 — opt-in private feedback + 1/10/20 experimental PYQ cards
 
 Follow [the dedicated feedback-workflow contract](pyq-feedback-workflow.md). This upgrade adds a separate device-local session queue (up to 3 source-locked packets per provider call), bounded retry/fallback, multi-KU-tested checks, bookmark/unbookmark and flag/unflag events, and a front/back answer card. The legacy approved/runtime feed and historical PYQ cards remain unchanged. Favor only whitelisted private style-guidance codes; never treat feedback as medical certification.

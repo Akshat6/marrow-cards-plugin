@@ -2136,7 +2136,18 @@ async function callDynamicGroq(plugin, messages, kind, unitCount=1, completionTo
   if (response.status !== 200) {
     const body = response.json || {};
     const msg = body.error && body.error.message ? String(body.error.message).slice(0,200) : 'HTTP '+response.status;
-    throw new Error('Groq rejected the request (HTTP '+response.status+'): '+msg+'. Free-tier quotas may apply.');
+    const error=new Error('Groq rejected the request (HTTP '+response.status+'): '+msg+'. Free-tier quotas may apply.');
+    error.groqHttpStatus=response.status;
+    if(response.status===429){
+      const header=Object.entries(response.headers||{}).find(([name])=>
+        String(name).toLowerCase()==='retry-after');
+      const seconds=Number(header?.[1]);
+      // Provider retry-after is seconds. Do not retry unbounded/daily exhaustion.
+      error.groqRetryAfterMs=Number.isFinite(seconds)&&seconds>0?
+        Math.ceil(seconds*1000):65000;
+      error.groqDailyLimit=/requests per day|tokens per day|daily|per-day|rpd|tpd/i.test(msg);
+    }
+    throw error;
   }
   const result = response.json;
   const content = result && result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content;
@@ -3748,12 +3759,33 @@ async function pyqExperimentalSaveCandidate(p,f,homeIndexId,trial,history){
   history.push({...event,at:new Date().toISOString(),deviceId:p.view.plugin.settings.deviceId});
   return q;
 }
+// Return control to the event loop during a provider-directed rate-limit pause.
+// Cancellation is checked between short waits; never spin on a daily quota.
+async function pyqExperimentalCooldown(p,ms){
+  const delay=Math.max(1000,Math.min(120000,Math.ceil(ms)));
+  let remaining=delay;
+  while(remaining>0){
+    if(p.experimentalCancelled)return false;
+    p.experimentalProgress='Groq free-tier cooling down · retry in about '+
+      Math.ceil(remaining/1000)+'s · '+(p.experimentalQueue?.length||0)+
+      '/'+(p.experimentalRequestedCount||1)+' ready';
+    if(!p.experimentalQuestion)p.view.draw();
+    const step=Math.min(remaining,5000);
+    await new Promise(resolve=>setTimeout(resolve,step));
+    remaining-=step;
+  }
+  return !p.experimentalCancelled;
+}
 async function pyqExperimentalCreateBatch(p,f,homeIndexId,history,count){
   const questions=[];
-  const maxRequests=Math.max(4,Math.ceil(count/3)*3+3);
-  let requests=0,oneAtTime=false,lastError='';
-  while(questions.length<count&&requests<maxRequests){
-    const number=oneAtTime?1:Math.min(3,count-questions.length);
+  p.experimentalQueue=questions;
+  const maxRequests=Math.max(6,Math.ceil(count/2)*3+4);
+  const maxCooldown=count===20?12*60*1000:7*60*1000;
+  let requests=0,oneAtTime=false,lastError='',spentCooling=0;
+  while(questions.length<count&&requests<maxRequests&&!p.experimentalCancelled){
+    // Two source packets per call: 3 x 2400 output tokens in v0.3.15
+    // could reserve 7200 before input, almost the entire free 8K TPM cap.
+    const number=oneAtTime?1:Math.min(2,count-questions.length);
     const packets=[];
     for(let i=0;i<number;i++){
       const picked=selectPyqExperimentalBlueprint(f,p.view.units,homeIndexId,history,p.pyqGuidance);
@@ -3762,25 +3794,43 @@ async function pyqExperimentalCreateBatch(p,f,homeIndexId,history,count){
       history.push({...selected,at:new Date().toISOString()});
       packets.push(pyqApplyGuidance(buildPyqExperimentalPacket(picked.blueprint,p.view.units,history),p.pyqGuidance));
     }
-    requests++;
-    let raw;
-    try{
-      raw=number===1?
-        await callDynamicGroq(p.view.plugin,pyqExperimentalMessages(packets[0]),'generate',1):
-        await callDynamicGroq(p.view.plugin,pyqExperimentalBatchMessages(packets),
-          'generate',number,Math.min(7600,2400*number));
-    }catch(e){
-      lastError=String(e.message||e);
-      await appendPyqStyleEvent(p.view.plugin,{type:'experimental_candidate_rejected',
-        homeIndexId,blueprintIds:packets.map(x=>x.blueprintId),reason:lastError.slice(0,240)});
-      // Do not pound an unavailable service or exhaust free-tier limits.
-      if(/key|token|cap|quota|rate|HTTP (401|402|403|429)|fetch failed/i.test(lastError))break;
-      // A bad batched request can fall back to a bounded single-question request.
-      oneAtTime=true;continue;
+    let raw,rateRetries=0;
+    while(!p.experimentalCancelled){
+      requests++;
+      try{
+        raw=number===1?
+          await callDynamicGroq(p.view.plugin,pyqExperimentalMessages(packets[0]),'generate',1):
+          await callDynamicGroq(p.view.plugin,pyqExperimentalBatchMessages(packets),
+            'generate',number,4000);
+        break;
+      }catch(e){
+        lastError=String(e.message||e);
+        if(e.groqHttpStatus===429 && !e.groqDailyLimit &&
+          rateRetries<4 && requests<maxRequests){
+          const pause=Number.isFinite(e.groqRetryAfterMs)?e.groqRetryAfterMs:65000;
+          if(pause<=120000 && spentCooling+pause<=maxCooldown){
+            rateRetries++;spentCooling+=pause;
+            const canContinue=await pyqExperimentalCooldown(p,pause+1000);
+            if(!canContinue)break;
+            continue; // same source packets; no wasted blueprint rerotation
+          }
+        }
+        await appendPyqStyleEvent(p.view.plugin,{
+          type:'experimental_candidate_rejected',homeIndexId,
+          blueprintIds:packets.map(x=>x.blueprintId),reason:lastError.slice(0,240)});
+        // Authentication, day limits, or exhausted cooldown are terminal for this batch.
+        if(e.groqHttpStatus===429 || /key|token|cap|quota|rate|HTTP (401|402|403|429)|fetch failed/i.test(lastError)){
+          return {questions,lastError};
+        }
+        oneAtTime=true;raw=null;break;
+      }
     }
+    if(p.experimentalCancelled)break;
+    if(!raw)continue;
     const rawItems=number===1?[raw]:Array.isArray(raw?.questions)?raw.questions:[];
     let added=0;
     for(let i=0;i<packets.length;i++){
+      if(p.experimentalCancelled)break;
       const packet=packets[i],item=rawItems[i];
       try{
         const validated=validatePyqExperimentalModel(item,packet);
@@ -3794,6 +3844,19 @@ async function pyqExperimentalCreateBatch(p,f,homeIndexId,history,count){
           promptVersion:PYQ_EXPERIMENTAL_PROMPT};
         questions.push(await pyqExperimentalSaveCandidate(p,f,homeIndexId,{
           question:q,packet},history));added++;
+        // As soon as one valid item exists, let the student answer it while
+        // subsequent batches are generated or held by the provider's cooldown.
+        if(!p.experimentalQuestion){
+          const nextIndex=p.experimentalWaitingForNext?(p.experimentalCursor||0)+1:0;
+          if(nextIndex<questions.length){
+            p.experimentalCursor=nextIndex;
+            p.experimentalQuestion=questions[nextIndex];
+            p.experimentalChoice=null;
+            p.experimentalFlagged=false;p.experimentalBookmarked=false;
+            p.experimentalWaitingForNext=false;
+            p.busy=false;
+          }
+        }
       }catch(e){
         lastError=String(e.message||e);
         await appendPyqStyleEvent(p.view.plugin,{type:'experimental_candidate_rejected',
@@ -3803,14 +3866,22 @@ async function pyqExperimentalCreateBatch(p,f,homeIndexId,history,count){
       }
     }
     oneAtTime=added===0;
-    p.experimentalProgress='Generated '+questions.length+' / '+count+' · '+requests+' request(s)';
+    p.experimentalProgress='Generated '+questions.length+' / '+count+
+      ' · '+requests+' Groq request(s)';
     p.view.draw();
   }
   return {questions,lastError};
 }
+
 PyqStyleController.prototype.experimentalGenerate=async function(homeIndexId,count=1){
   if(this.busy)return;
   this.busy=true;this.error='';this.experimentalFinished=false;
+  this.experimentalCancelled=false;
+  this.experimentalGenerating=count>1;
+  this.experimentalRequestedCount=count;
+  this.experimentalQueue=[];this.experimentalCursor=0;
+  this.experimentalQuestion=null;this.experimentalChoice=null;
+  this.experimentalWaitingForNext=false;
   this.experimentalProgress='Preparing '+count+' experimental question(s)…';this.view.draw();
   try{
     if(![1,10,20].includes(count))throw Error('Choose 1, 10 or 20 questions.');
@@ -3842,22 +3913,40 @@ PyqStyleController.prototype.experimentalGenerate=async function(homeIndexId,cou
       }
       generated={questions:q?[q]:[],lastError};
     }else generated=await pyqExperimentalCreateBatch(this,f,homeIndexId,history,count);
+    if(this.experimentalCancelled)return;
     if(!generated.questions.length)
       throw Error(generated.lastError||'No valid experimental MCQs were generated.');
-    this.experimentalQueue=generated.questions;this.experimentalCursor=0;
-    this.experimentalQuestion=generated.questions[0];this.experimentalChoice=null;
-    this.experimentalFlagged=false;this.experimentalBookmarked=false;
-    if(generated.questions.length<count)
-      this.error='Only '+generated.questions.length+' of '+count+
-        ' requested questions could be generated. '+generated.lastError.slice(0,110);
+    this.experimentalQueue=generated.questions;
+    if(this.experimentalWaitingForNext){
+      if(this.experimentalCursor+1<generated.questions.length){
+        this.experimentalCursor++;
+        this.experimentalQuestion=generated.questions[this.experimentalCursor];
+        this.experimentalWaitingForNext=false;
+      }else{
+        this.experimentalFinished=true;
+        this.experimentalWaitingForNext=false;
+      }
+    }else if(!this.experimentalQuestion){
+      this.experimentalCursor=0;this.experimentalQuestion=generated.questions[0];
+    }
+    if(this.experimentalQuestion && !this.experimentalChoice){
+      this.experimentalFlagged=false;this.experimentalBookmarked=false;
+    }
+    if(generated.questions.length<count){
+      this.error='Prepared '+generated.questions.length+' of '+count+
+        '. Groq could not complete the remaining questions within its free-tier limits.';
+    }
   }catch(e){
     this.error='Experimental MCQ unavailable: '+String(e.message||e).slice(0,240);
-  }finally{this.busy=false;this.experimentalProgress='';this.view.draw();}
+  }finally{this.experimentalGenerating=false;this.busy=false;this.experimentalProgress='';this.view.draw();}
 };
 PyqStyleController.prototype.experimentalNext=function(){
   if(this.busy||!this.experimentalChoice)return;
   if((this.experimentalCursor||0)+1>=(this.experimentalQueue?.length||1)){
     this.experimentalQuestion=null;this.experimentalChoice=null;
+    if(this.experimentalGenerating){
+      this.experimentalWaitingForNext=true;this.view.draw();return;
+    }
     this.experimentalFinished=true;this.view.draw();return;
   }
   this.experimentalCursor++;
@@ -3915,7 +4004,7 @@ function drawPyqExperimentalQuestion(body,p){
   const q=p.experimentalQuestion,flipped=Boolean(p.experimentalChoice);
   body.createEl('p',{cls:'marrow-hint',text:
     'EXPERIMENTAL · AI-generated, medically unverified · Question '+
-    ((p.experimentalCursor||0)+1)+'/'+(p.experimentalQueue?.length||1)+
+    ((p.experimentalCursor||0)+1)+'/'+(p.experimentalRequestedCount||p.experimentalQueue?.length||1)+
     ' · '+q.homeIndexId});
   const card=body.createDiv({cls:'marrow-pyq-flip-card'});
   card.createEl('p',{cls:'marrow-pyq-face',text:flipped?'BACK · ANSWER':'FRONT · QUESTION'});
@@ -3959,8 +4048,10 @@ function drawPyqExperimentalQuestion(body,p){
   const toolbar=body.createDiv({cls:'marrow-toolbar'});
   const leave=toolbar.createEl('button',{text:'Leave experimental practice'});
   leave.disabled=p.busy;leave.addEventListener('click',()=>{
+    p.experimentalCancelled=true;
     p.experimentalQuestion=null;p.experimentalChoice=null;p.experimentalQueue=[];
-    p.experimentalFinished=false;p.error='';p.view.draw();
+    p.experimentalFinished=false;p.experimentalWaitingForNext=false;
+    p.experimentalGenerating=false;p.error='';p.view.draw();
   });
 }
 MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
@@ -3971,9 +4062,21 @@ MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
   body.createEl('p',{cls:'marrow-hint',text:
     'Separate MCQ mode · Source-reviewed and opt-in Experimental AI MCQs. Experimental answers are AI-generated, unverified and kept separate from verified learning scores.'});
   if(p.error)body.createEl('p',{cls:'marrow-dynamic-error',text:p.error});
-  if(p.busy)body.createEl('p',{cls:'marrow-hint',text:p.experimentalProgress||'Working…'});
+  if(p.busy||p.experimentalGenerating)body.createEl('p',{cls:'marrow-hint',text:p.experimentalProgress||'Working…'});
   body.createEl('p',{cls:'marrow-hint',text:'Private feedback sync: '+(this.plugin.pyqSyncStatus||'Off')});
   if(p.experimentalQuestion){drawPyqExperimentalQuestion(body,p);return;}
+  if(p.experimentalWaitingForNext){
+    body.createEl('h4',{text:'Preparing the next question…'});
+    body.createEl('p',{cls:'marrow-hint',text:'The questions already generated are saved. Groq may need a free-tier cooldown.'});
+    const leave=body.createEl('button',{text:'Leave practice'});
+    leave.addEventListener('click',()=>{
+      p.experimentalCancelled=true;p.experimentalWaitingForNext=false;
+      p.experimentalGenerating=false;p.experimentalQueue=[];
+      p.experimentalQuestion=null;p.experimentalChoice=null;
+      p.status='home';this.draw();
+    });
+    return;
+  }
   if(p.experimentalFinished){
     body.createEl('h4',{text:'Experimental practice complete · '+(p.experimentalQueue?.length||1)+' questions.'});
     const again=body.createEl('button',{text:'Generate more questions',cls:'mod-cta'});

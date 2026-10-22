@@ -11,7 +11,7 @@ class El{
  findText(s){if(this.text===s)return this;for(const c of this.children){const n=c.findText(s);if(n)return n;}return null;}
 }
 class ItemView{constructor(leaf){this.app=leaf.app;this.contentEl=new El();}}
-let count=0;
+let count=0,rateLimitAt=Infinity,rateLimitsHit=0,usableAtRateLimit=false;
 function mockQuestion(p){return {
  blueprintId:p.blueprintId,homeIndexId:p.homeIndexId,sourceIndexIds:p.sourceIndexIds,
  sourceKuIds:p.sourceKuIds,stem:'Which fictional sample category matches the imaginary description provided?',
@@ -24,6 +24,13 @@ function mockQuestion(p){return {
 const obsidian={
  Plugin:class{},ItemView,PluginSettingTab:class{},Setting:class{},Notice:class{},
  requestUrl:async r=>{count++;assert.equal(r.method,'POST');assert.equal(r.headers.Authorization,'Bearer mock-secret');
+  if(count===rateLimitAt){
+    rateLimitsHit++;
+    usableAtRateLimit=Boolean(ctrl.experimentalQuestion && !ctrl.busy &&
+      ctrl.experimentalQueue.length===2);
+    return {status:429,headers:{'Retry-After':'0.001'},
+      json:{error:{message:'Synthetic tokens per minute limit reached'}}};
+  }
   const input=JSON.parse(JSON.parse(r.body).messages[1].content);
   const reply=input.packets?{questions:input.packets.map((packet,i)=>({
     ...mockQuestion(packet),
@@ -175,13 +182,23 @@ async function run(){
  assert(home.findText('Generate 1 experimental MCQ'));
  assert(home.findText('Generate 10 experimental MCQs'));
  assert(home.findText('Generate 20 experimental MCQs'));
+ rateLimitAt=count+2; // Force a genuine provider HTTP 429 on the second batch request.
  await ctrl.experimentalGenerate('IDX-ONE',10);
+ assert.equal(rateLimitsHit,1,'an actual HTTP 429 must be retried after cooldown');
+ assert(usableAtRateLimit,'first two questions must already be answerable during provider cooldown');
+ assert.equal(ctrl.error,'','a temporary token-per-minute rate limit is not a partial-session failure');
  assert.equal(ctrl.experimentalQueue.length,10);
+ assert.equal(ctrl.experimentalRequestedCount,10);
+ assert.equal(ctrl.experimentalGenerating,false);
  assert.equal(ctrl.experimentalQuestion.questionId,ctrl.experimentalQueue[0].questionId);
  await ctrl.experimentalAnswer('C');
  ctrl.experimentalNext();
  assert.equal(ctrl.experimentalCursor,1);
  assert.equal(ctrl.experimentalChoice,null);
+ await ctrl.experimentalGenerate('IDX-ONE',20);
+ assert.equal(ctrl.experimentalQueue.length,20,'20-question request should fill twenty source-backed slots');
+ assert.equal(ctrl.experimentalRequestedCount,20);
+ assert.equal(ctrl.experimentalCursor,0);
  assert(home.findText('Check reviewed MCQ feed'));
  console.log('PASS expanded experimental intelligence: 35+ blueprints, standalone/held, rotation, duplicate rejection, multiline options, three-index source and isolated logs.');
 }
