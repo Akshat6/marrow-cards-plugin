@@ -25,7 +25,11 @@ const obsidian={
  Plugin:class{},ItemView,PluginSettingTab:class{},Setting:class{},Notice:class{},
  requestUrl:async r=>{count++;assert.equal(r.method,'POST');assert.equal(r.headers.Authorization,'Bearer mock-secret');
   const input=JSON.parse(JSON.parse(r.body).messages[1].content);
-  return {status:200,json:{choices:[{message:{content:JSON.stringify(mockQuestion(input))}}],usage:{total_tokens:71}}};},
+  const reply=input.packets?{questions:input.packets.map((packet,i)=>({
+    ...mockQuestion(packet),
+    stem:'For unique simulated session '+count+' item '+i+', which invented comparison is the one described in the fabricated source?' 
+  }))}:mockQuestion(input);
+  return {status:200,json:{choices:[{message:{content:JSON.stringify(reply)}}],usage:{total_tokens:71}}};},
  base64ToArrayBuffer:()=>{},normalizePath:x=>x};
 const expose="\nmodule.exports.P={validatePyqExperimentalFeed,selectPyqExperimentalBlueprint,buildPyqExperimentalPacket,validatePyqExperimentalModel,generatePyqExperimentalDraft,PyqStyleController,MarrowDynamicRecallView,PYQ_EXPERIMENTAL_REMOTE};";
 const m={exports:{}};
@@ -154,10 +158,25 @@ async function run(){
  assert(css.includes('height: auto !important;'));
  assert(css.includes('max-height: none !important;'));
  assert(css.includes('white-space: pre-wrap !important;'));
- assert(screen.findText('Groq answer: C · Different'));
- assert(screen.findText('Generate another experimental MCQ'));
+ assert(screen.findText('Different from model key · You chose B · Model answer C'));
+ assert(screen.findText('Finish practice'));
+ assert(screen.findText('All four options explained'));
+ await ctrl.experimentalBookmark();
+ assert.equal(ctrl.experimentalBookmarked,true);
+ await ctrl.experimentalBookmark();
+ assert.equal(ctrl.experimentalBookmarked,false);
+ assert(rows.length>0);
  ctrl.experimentalQuestion=null;const home=new El();view.drawPyqStyle(home);
- assert(home.findText('Try one Experimental AI MCQ (unverified)'));
+ assert(home.findText('Generate 1 experimental MCQ'));
+ assert(home.findText('Generate 10 experimental MCQs'));
+ assert(home.findText('Generate 20 experimental MCQs'));
+ await ctrl.experimentalGenerate('IDX-ONE',10);
+ assert.equal(ctrl.experimentalQueue.length,10);
+ assert.equal(ctrl.experimentalQuestion.questionId,ctrl.experimentalQueue[0].questionId);
+ await ctrl.experimentalAnswer('C');
+ ctrl.experimentalNext();
+ assert.equal(ctrl.experimentalCursor,1);
+ assert.equal(ctrl.experimentalChoice,null);
  assert(home.findText('Check reviewed MCQ feed'));
  console.log('PASS expanded experimental intelligence: 35+ blueprints, standalone/held, rotation, duplicate rejection, multiline options, three-index source and isolated logs.');
 }
