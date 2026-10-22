@@ -241,6 +241,10 @@ class MarrowCardsPlugin extends Plugin {
     this.progressSyncPromise = null;
     this.progressSyncTimer = null;
     this.progressSyncStatus = 'Not configured';
+    this.pyqSyncTimer = null;
+    this.pyqSyncPromise = null;
+    this.pyqSyncStatus = 'Off';
+    this.pyqSyncReceipts = {};
 
     // Register the plugin with Obsidian before touching the vault.
     this.registerView(VIEW_TYPE, (leaf) => new MarrowCardsView(leaf, this));
@@ -256,11 +260,13 @@ class MarrowCardsPlugin extends Plugin {
       if (this.settings.autoSync && this.app.secretStorage?.getSecret?.(TOKEN_KEY)) void this.syncPacks(true);
       // Retry any offline progress upload while Obsidian remains open.
       this.scheduleDynamicProgressSync(true);
+      this.schedulePyqFeedbackSync(true);
     }, 30 * 60 * 1000));
     this.app.workspace.onLayoutReady(() => {
       void this.initPromise.then(() => {
         if (this.settings.autoSync && this.app.secretStorage?.getSecret?.(TOKEN_KEY)) void this.syncPacks(true);
         this.scheduleDynamicProgressSync(true);
+        this.schedulePyqFeedbackSync(true);
       });
     });
   }
@@ -282,6 +288,7 @@ class MarrowCardsPlugin extends Plugin {
 
   onunload() {
     if(this.progressSyncTimer!==null)window.clearTimeout(this.progressSyncTimer);
+    if(this.pyqSyncTimer!==null)window.clearTimeout(this.pyqSyncTimer);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(DYNAMIC_VIEW_TYPE);
   }
@@ -3174,8 +3181,108 @@ async function generatePyqStyleAuditCandidate(plugin,b,units,provider=callDynami
 }
 async function appendPyqStyleEvent(plugin,event){
   if(!safeId(plugin.settings.deviceId))throw new Error('Invalid device identity; cannot save MCQ attempt.');
-  return appendDynamicJsonl(plugin,PYQ_STYLE_EVENTS,event);
+  await appendDynamicJsonl(plugin,PYQ_STYLE_EVENTS,event);
+  if(event.type?.startsWith('experimental_'))plugin.schedulePyqFeedbackSync();
 }
+
+/* Private question-sync uses the existing private GitHub write credential, but
+   requires its own opt-in. Data is never written to the public plugin repository. */
+const PYQ_FEEDBACK_TYPES=new Set(['experimental_candidate_unverified',
+  'experimental_answered','experimental_bookmarked','experimental_unbookmarked',
+  'experimental_flagged','experimental_unflagged']);
+function pyqFeedbackRows(events,id){
+  return events.filter(e=>e?.deviceId===id && PYQ_FEEDBACK_TYPES.has(e.type) &&
+    /^\d{4}-\d{2}-\d{2}T/.test(String(e.at||''))).map(e=>{
+    const row={type:e.type,at:e.at,deviceId:id,questionId:e.questionId||null};
+    if(e.type==='experimental_candidate_unverified')
+      return {...row,homeIndexId:e.homeIndexId,question:e.question,
+        sourceKUs:(e.sourcePacket?.sourceKUs||[]).map(u=>({
+          kuId:u.kuId,indexId:u.indexId,sourceLocator:u.sourceLocator,
+          sourceExcerpt:u.sourceExcerpt,canonicalAnswer:u.canonicalAnswer}))};
+    if(e.type==='experimental_answered')
+      return {...row,selectedOptionId:e.selectedOptionId,
+        modelKeyOptionId:e.modelKeyOptionId,matchesModelKey:e.matchesModelKey};
+    return {...row,reason:e.reason||null};
+  }).sort((a,b)=>a.at.localeCompare(b.at)||String(a.questionId).localeCompare(String(b.questionId)));
+}
+function pyqUtf8Base64(text){
+  const bytes=new TextEncoder().encode(text),abc='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out='';
+  for(let i=0;i<bytes.length;i+=3){
+    const a=bytes[i],b=i+1<bytes.length?bytes[i+1]:0,c=i+2<bytes.length?bytes[i+2]:0;
+    out+=abc[a>>2]+abc[((a&3)<<4)|(b>>4)]+
+      (i+1<bytes.length?abc[((b&15)<<2)|(c>>6)]:'=')+
+      (i+2<bytes.length?abc[c&63]:'=');
+  }
+  return out;
+}
+MarrowCardsPlugin.prototype.schedulePyqFeedbackSync=function(now=false){
+  if(!this.settings.pyqSyncEnabled||!dynamicWriteToken(this))return;
+  if(this.pyqSyncTimer!==null)window.clearTimeout(this.pyqSyncTimer);
+  this.pyqSyncTimer=window.setTimeout(()=>{
+    this.pyqSyncTimer=null;void this.syncPyqFeedback();
+  },now?0:45000);
+};
+MarrowCardsPlugin.prototype.syncPyqFeedback=async function(){
+  if(!this.settings.pyqSyncEnabled){this.pyqSyncStatus='Off';return {status:'off'};}
+  const token=dynamicWriteToken(this);
+  if(!token){this.pyqSyncStatus='Set private write token in settings';return {status:'no-token'};}
+  if(this.pyqSyncPromise)return this.pyqSyncPromise;
+  this.pyqSyncPromise=(async()=>{
+    try{
+      if(this.initPromise)await this.initPromise;
+      const id=this.settings.deviceId;
+      if(!safeId(id))throw Error('Invalid device ID');
+      const rows=pyqFeedbackRows(await readDynamicEvents(this,PYQ_STYLE_EVENTS),id);
+      const days=new Map();
+      for(const row of rows){
+        const day=row.at.slice(0,10);
+        if(!days.has(day))days.set(day,[]);
+        days.get(day).push(row);
+      }
+      const headers={Authorization:'Bearer '+token,Accept:'application/vnd.github+json',
+        'X-GitHub-Api-Version':'2022-11-28'};
+      let count=0;
+      for(const [day,items] of [...days].sort((a,b)=>a[0].localeCompare(b[0]))){
+        const content=JSON.stringify({schemaVersion:1,
+          kind:'marrow-experimental-question-feedback',deviceId:id,day,rows:items},null,2)+'\n';
+        // Fast in-memory skip. On restarts, compare remote bytes for correctness.
+        if(this.pyqSyncReceipts[day]===content.length+':'+items.length)continue;
+        const path='exam-intelligence/feedback/by-device/'+id+'/'+day+'.json';
+        const url='https://api.github.com/repos/'+REPO+'/contents/'+path;
+        let ok=false;
+        for(let attempt=0;attempt<3;attempt++){
+          const old=await requestUrl({url,method:'GET',throw:false,headers});
+          if(old.status!==200&&old.status!==404)throw Error('Feedback GET HTTP '+old.status);
+          const sha=old.status===200?old.json?.sha:null;
+          if(old.status===200&&!/^[a-f0-9]{40}$/.test(String(sha||'')))
+            throw Error('Invalid remote feedback SHA');
+          if(old.status===200&&old.json?.encoding==='base64'){
+            const existing=new TextDecoder().decode(base64ToArrayBuffer(
+              String(old.json.content||'').replace(/\s/g,'')));
+            if(existing===content){ok=true;break;}
+          }
+          const payload={message:'feedback: sync PYQ questions '+day,
+            branch:'main',content:pyqUtf8Base64(content),...(sha?{sha}:{})};
+          const result=await requestUrl({url,method:'PUT',throw:false,headers:{
+            ...headers,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+          if([200,201].includes(result.status)){count++;ok=true;break;}
+          if(![409,422].includes(result.status))throw Error('Feedback PUT HTTP '+result.status);
+        }
+        if(!ok)throw Error('Feedback upload conflicted repeatedly');
+        this.pyqSyncReceipts[day]=content.length+':'+items.length;
+      }
+      this.pyqSyncStatus='Synced '+days.size+' day(s) · '+count+' update(s)';
+      return {status:'synced',updates:count};
+    }catch(e){
+      this.pyqSyncStatus='Pending retry: '+String(e.message||e).slice(0,110);
+      console.warn('[Marrow PYQ] Private feedback sync failed:',String(e.message||e));
+      return {status:'failed'};
+    }finally{this.pyqSyncPromise=null;}
+  })();
+  return this.pyqSyncPromise;
+};
+
 class PyqStyleController {
   constructor(view){this.view=view;this.feed=null;this.busy=false;this.error='';this.queue=[];
     this.cursor=0;this.current=null;this.selected=null;this.sessionId='';this.indexId='';this.history=[];this.status='home';this.startedAt=null;this.flagged=new Set();}
