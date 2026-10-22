@@ -3876,6 +3876,12 @@ async function pyqExperimentalCreateBatch(p,f,homeIndexId,history,count){
 PyqStyleController.prototype.experimentalGenerate=async function(homeIndexId,count=1){
   if(this.busy)return;
   this.busy=true;this.error='';this.experimentalFinished=false;
+  this.experimentalCancelled=false;
+  this.experimentalGenerating=count>1;
+  this.experimentalRequestedCount=count;
+  this.experimentalQueue=[];this.experimentalCursor=0;
+  this.experimentalQuestion=null;this.experimentalChoice=null;
+  this.experimentalWaitingForNext=false;
   this.experimentalProgress='Preparing '+count+' experimental question(s)…';this.view.draw();
   try{
     if(![1,10,20].includes(count))throw Error('Choose 1, 10 or 20 questions.');
@@ -3907,22 +3913,40 @@ PyqStyleController.prototype.experimentalGenerate=async function(homeIndexId,cou
       }
       generated={questions:q?[q]:[],lastError};
     }else generated=await pyqExperimentalCreateBatch(this,f,homeIndexId,history,count);
+    if(this.experimentalCancelled)return;
     if(!generated.questions.length)
       throw Error(generated.lastError||'No valid experimental MCQs were generated.');
-    this.experimentalQueue=generated.questions;this.experimentalCursor=0;
-    this.experimentalQuestion=generated.questions[0];this.experimentalChoice=null;
-    this.experimentalFlagged=false;this.experimentalBookmarked=false;
-    if(generated.questions.length<count)
-      this.error='Only '+generated.questions.length+' of '+count+
-        ' requested questions could be generated. '+generated.lastError.slice(0,110);
+    this.experimentalQueue=generated.questions;
+    if(this.experimentalWaitingForNext){
+      if(this.experimentalCursor+1<generated.questions.length){
+        this.experimentalCursor++;
+        this.experimentalQuestion=generated.questions[this.experimentalCursor];
+        this.experimentalWaitingForNext=false;
+      }else{
+        this.experimentalFinished=true;
+        this.experimentalWaitingForNext=false;
+      }
+    }else if(!this.experimentalQuestion){
+      this.experimentalCursor=0;this.experimentalQuestion=generated.questions[0];
+    }
+    if(this.experimentalQuestion && !this.experimentalChoice){
+      this.experimentalFlagged=false;this.experimentalBookmarked=false;
+    }
+    if(generated.questions.length<count){
+      this.error='Prepared '+generated.questions.length+' of '+count+
+        '. Groq could not complete the remaining questions within its free-tier limits.';
+    }
   }catch(e){
     this.error='Experimental MCQ unavailable: '+String(e.message||e).slice(0,240);
-  }finally{this.busy=false;this.experimentalProgress='';this.view.draw();}
+  }finally{this.experimentalGenerating=false;this.busy=false;this.experimentalProgress='';this.view.draw();}
 };
 PyqStyleController.prototype.experimentalNext=function(){
   if(this.busy||!this.experimentalChoice)return;
   if((this.experimentalCursor||0)+1>=(this.experimentalQueue?.length||1)){
     this.experimentalQuestion=null;this.experimentalChoice=null;
+    if(this.experimentalGenerating){
+      this.experimentalWaitingForNext=true;this.view.draw();return;
+    }
     this.experimentalFinished=true;this.view.draw();return;
   }
   this.experimentalCursor++;
@@ -3980,7 +4004,7 @@ function drawPyqExperimentalQuestion(body,p){
   const q=p.experimentalQuestion,flipped=Boolean(p.experimentalChoice);
   body.createEl('p',{cls:'marrow-hint',text:
     'EXPERIMENTAL · AI-generated, medically unverified · Question '+
-    ((p.experimentalCursor||0)+1)+'/'+(p.experimentalQueue?.length||1)+
+    ((p.experimentalCursor||0)+1)+'/'+(p.experimentalRequestedCount||p.experimentalQueue?.length||1)+
     ' · '+q.homeIndexId});
   const card=body.createDiv({cls:'marrow-pyq-flip-card'});
   card.createEl('p',{cls:'marrow-pyq-face',text:flipped?'BACK · ANSWER':'FRONT · QUESTION'});
@@ -4024,8 +4048,10 @@ function drawPyqExperimentalQuestion(body,p){
   const toolbar=body.createDiv({cls:'marrow-toolbar'});
   const leave=toolbar.createEl('button',{text:'Leave experimental practice'});
   leave.disabled=p.busy;leave.addEventListener('click',()=>{
+    p.experimentalCancelled=true;
     p.experimentalQuestion=null;p.experimentalChoice=null;p.experimentalQueue=[];
-    p.experimentalFinished=false;p.error='';p.view.draw();
+    p.experimentalFinished=false;p.experimentalWaitingForNext=false;
+    p.experimentalGenerating=false;p.error='';p.view.draw();
   });
 }
 MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
@@ -4036,9 +4062,21 @@ MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
   body.createEl('p',{cls:'marrow-hint',text:
     'Separate MCQ mode · Source-reviewed and opt-in Experimental AI MCQs. Experimental answers are AI-generated, unverified and kept separate from verified learning scores.'});
   if(p.error)body.createEl('p',{cls:'marrow-dynamic-error',text:p.error});
-  if(p.busy)body.createEl('p',{cls:'marrow-hint',text:p.experimentalProgress||'Working…'});
+  if(p.busy||p.experimentalGenerating)body.createEl('p',{cls:'marrow-hint',text:p.experimentalProgress||'Working…'});
   body.createEl('p',{cls:'marrow-hint',text:'Private feedback sync: '+(this.plugin.pyqSyncStatus||'Off')});
   if(p.experimentalQuestion){drawPyqExperimentalQuestion(body,p);return;}
+  if(p.experimentalWaitingForNext){
+    body.createEl('h4',{text:'Preparing the next question…'});
+    body.createEl('p',{cls:'marrow-hint',text:'The questions already generated are saved. Groq may need a free-tier cooldown.'});
+    const leave=body.createEl('button',{text:'Leave practice'});
+    leave.addEventListener('click',()=>{
+      p.experimentalCancelled=true;p.experimentalWaitingForNext=false;
+      p.experimentalGenerating=false;p.experimentalQueue=[];
+      p.experimentalQuestion=null;p.experimentalChoice=null;
+      p.status='home';this.draw();
+    });
+    return;
+  }
   if(p.experimentalFinished){
     body.createEl('h4',{text:'Experimental practice complete · '+(p.experimentalQueue?.length||1)+' questions.'});
     const again=body.createEl('button',{text:'Generate more questions',cls:'mod-cta'});
