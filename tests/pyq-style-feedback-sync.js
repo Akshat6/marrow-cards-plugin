@@ -39,7 +39,9 @@ const events=[
       sourceLocator:'Synthetic fixture',sourceExcerpt:'Fictional original note.',
       canonicalAnswer:'Imaginary A'}]},rawModelJson:{unsafe:'Never sync raw model output'}},
   {type:'experimental_answered',at:'2026-10-22T01:01:00Z',deviceId,
-    questionId:'TEST-Q1',selectedOptionId:'B',modelKeyOptionId:'A',matchesModelKey:false},
+    questionId:'TEST-Q1',selectedOptionId:'B',selectedSourceOptionId:'C',
+    modelKeyOptionId:'A',displayedCorrectOptionId:'D',
+    displayOptionOrder:['B','C','D','A'],matchesModelKey:false},
   {type:'experimental_bookmarked',at:'2026-10-22T01:02:00Z',deviceId,questionId:'TEST-Q1'},
   {type:'experimental_flagged',at:'2026-10-22T01:03:00Z',deviceId,
     questionId:'TEST-Q1',reason:'Student wants review'},
@@ -70,6 +72,11 @@ async function run(){
   const parsed=JSON.parse(uploads[0].decoded);
   assert.equal(parsed.rows.length,4);
   assert.equal(parsed.rows[0].sourceKUs[0].sourceExcerpt,'Fictional original note.');
+  assert.deepEqual(parsed.rows[1].displayOptionOrder,['B','C','D','A']);
+  assert.equal(parsed.rows[1].selectedOptionId,'B');
+  assert.equal(parsed.rows[1].selectedSourceOptionId,'C');
+  assert.equal(parsed.rows[1].modelKeyOptionId,'A');
+  assert.equal(parsed.rows[1].displayedCorrectOptionId,'D');
   assert(!uploads[0].decoded.includes('Never sync raw'));
   assert(!uploads[0].decoded.includes('rejected outputs'));
   await plugin.syncPyqFeedback();
