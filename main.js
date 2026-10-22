@@ -3455,6 +3455,41 @@ class PyqStyleController {
 const PYQ_EXPERIMENTAL_REMOTE='exam-intelligence/experimental/ai-mcq-full-v2.json';
 const PYQ_EXPERIMENTAL_KIND='marrow-pyq-style-experimental-ai-v2';
 const PYQ_EXPERIMENTAL_PROMPT='pyq-style-experimental-full-intelligence-v2';
+
+const PYQ_EXPERIMENTAL_GUIDANCE_REMOTE='exam-intelligence/feedback/generator-guidance-v1.json';
+const PYQ_STYLE_HINTS=Object.freeze({
+  MEANINGFUL_MULTI_KU:'Prefer actual connections between at least two source-supported knowledge units.',
+  SOURCE_BOUNDED_COMPARISON:'Prefer discriminating comparisons directly established by the source material.',
+  PLAUSIBLE_DISTRACTORS:'Use distinct believable distractors with explicit source refutations.',
+  CAUSAL_ANATOMY:'Prefer source-grounded anatomical cause-and-effect reasoning.',
+  CONCISE_STEMS:'Prefer compact stems with one clear question.',
+  AMBIGUOUS_MODEL_KEY:'Reject medically equivalent options and more than one defensible answer.',
+  QUALIFIER_LOSS:'Do not turn may, sometimes or usually into always or never.',
+  UNSUPPORTED_DISTRACTORS:'Avoid alternatives whose truth value cannot be proven using the cited KUs.',
+  NEAR_DUPLICATE_OPTIONS:'Avoid semantically equivalent alternatives even if wording differs.',
+  TRIVIAL_RECALL:'Avoid rote recall when a meaningful source-grounded reasoning task exists.'
+});
+async function pyqExperimentalLoadGuidance(plugin){
+  try{
+    const raw=JSON.parse(await plugin.fetchGithub(PYQ_EXPERIMENTAL_GUIDANCE_REMOTE));
+    if(raw?.schemaVersion!==1||raw.kind!=='marrow-pyq-style-feedback-guidance'||
+       !Number.isInteger(raw.multiKuSharePercent)||raw.multiKuSharePercent<0||
+       raw.multiKuSharePercent>80||!Array.isArray(raw.promoteCodes)||
+       !Array.isArray(raw.avoidCodes)||raw.promoteCodes.length>8||raw.avoidCodes.length>8)
+      return null;
+    if(![...raw.promoteCodes,...raw.avoidCodes].every(x=>Object.hasOwn(PYQ_STYLE_HINTS,x)))
+      return null;
+    return {multiKuSharePercent:raw.multiKuSharePercent,
+      promote:raw.promoteCodes.map(x=>PYQ_STYLE_HINTS[x]),
+      avoid:raw.avoidCodes.map(x=>PYQ_STYLE_HINTS[x])};
+  }catch(e){return null;} // Guidance is optional; KUs and original source protection are not.
+}
+function pyqApplyGuidance(packet,guidance){
+  if(guidance)packet.questionStyleGuidance={promote:guidance.promote,avoid:guidance.avoid,
+    note:'Style only; NOT a source of medical facts.'};
+  return packet;
+}
+
 function validatePyqExperimentalFeed(f, units){
   if(!f||f.schemaVersion!==2||f.kind!==PYQ_EXPERIMENTAL_KIND||
      f.status!=='USER_ACCEPTED_FOR_OPT_IN_EXPERIMENTAL_STUDY'||
@@ -3525,7 +3560,7 @@ function validatePyqExperimentalFeed(f, units){
   }
   return f;
 }
-function selectPyqExperimentalBlueprint(f,units,homeIndexId,events=[]){
+function selectPyqExperimentalBlueprint(f,units,homeIndexId,events=[],guidance=null){
   if(!safeId(homeIndexId))throw Error('Select exactly one home index.');
   validatePyqExperimentalFeed(f,units);
   if(!Array.isArray(events))throw Error('Invalid experimental selection history.');
@@ -3535,7 +3570,8 @@ function selectPyqExperimentalBlueprint(f,units,homeIndexId,events=[]){
   const prior=events.filter(e=>e?.type==='experimental_blueprint_selected'&&e.homeIndexId===homeIndexId);
   const byBlueprint=new Map(f.blueprints.map(b=>[b.blueprintId,b]));
   const integrated=prior.filter(e=>byBlueprint.get(e.blueprintId)?.evidenceLane!=='S').length;
-  const chooseIntegrated=integrated<(prior.length+1)*0.60;
+  const share=Number.isInteger(guidance?.multiKuSharePercent)?guidance.multiKuSharePercent/100:0.60;
+  const chooseIntegrated=integrated<(prior.length+1)*share;
   const preferred=eligible.filter(b=>chooseIntegrated?b.evidenceLane!=='S':b.evidenceLane==='S');
   const candidates=preferred.length?preferred:eligible;
   const selectedCounts=new Map(),familyCounts=new Map(),kuCounts=new Map();
@@ -3656,9 +3692,9 @@ function pyqExperimentalMessages(packet){
     {role:'user',content:JSON.stringify(packet)}
   ];
 }
-async function generatePyqExperimentalDraft(plugin,feed,units,homeIndexId,events=[],provider=callDynamicGroq){
-  const picked=selectPyqExperimentalBlueprint(feed,units,homeIndexId,events);
-  const packet=buildPyqExperimentalPacket(picked.blueprint,units,events);
+async function generatePyqExperimentalDraft(plugin,feed,units,homeIndexId,events=[],provider=callDynamicGroq,guidance=null){
+  const picked=selectPyqExperimentalBlueprint(feed,units,homeIndexId,events,guidance);
+  const packet=pyqApplyGuidance(buildPyqExperimentalPacket(picked.blueprint,units,events),guidance);
   const messages=pyqExperimentalMessages(packet);
   let raw;
   try {
@@ -3717,11 +3753,11 @@ async function pyqExperimentalCreateBatch(p,f,homeIndexId,history,count){
     const number=oneAtTime?1:Math.min(3,count-questions.length);
     const packets=[];
     for(let i=0;i<number;i++){
-      const picked=selectPyqExperimentalBlueprint(f,p.view.units,homeIndexId,history);
+      const picked=selectPyqExperimentalBlueprint(f,p.view.units,homeIndexId,history,p.pyqGuidance);
       const selected={type:'experimental_blueprint_selected',...picked.trace};
       await appendPyqStyleEvent(p.view.plugin,selected);
       history.push({...selected,at:new Date().toISOString()});
-      packets.push(buildPyqExperimentalPacket(picked.blueprint,p.view.units,history));
+      packets.push(pyqApplyGuidance(buildPyqExperimentalPacket(picked.blueprint,p.view.units,history),p.pyqGuidance));
     }
     requests++;
     let raw;
@@ -3777,19 +3813,20 @@ PyqStyleController.prototype.experimentalGenerate=async function(homeIndexId,cou
     const f=validatePyqExperimentalFeed(
       JSON.parse(await this.view.plugin.fetchGithub(PYQ_EXPERIMENTAL_REMOTE)),this.view.units);
     const history=await readDynamicEvents(this.view.plugin,PYQ_STYLE_EVENTS);
+    this.pyqGuidance=await pyqExperimentalLoadGuidance(this.view.plugin);
     let generated;
     if(count===1){
       // Keep historical single-question provider contract intact.
       let q=null,lastError='';
       for(let attempt=0;attempt<4&&!q;attempt++){
-        const selected=selectPyqExperimentalBlueprint(f,this.view.units,homeIndexId,history);
+        const selected=selectPyqExperimentalBlueprint(f,this.view.units,homeIndexId,history,this.pyqGuidance);
         const event={type:'experimental_blueprint_selected',...selected.trace};
         await appendPyqStyleEvent(this.view.plugin,event);
         const priorHistory=history.slice();
         history.push({...event,at:new Date().toISOString()});
         try{
           const trial=await generatePyqExperimentalDraft(this.view.plugin,f,
-            this.view.units,homeIndexId,priorHistory);
+            this.view.units,homeIndexId,priorHistory,callDynamicGroq,this.pyqGuidance);
           q=await pyqExperimentalSaveCandidate(this,f,homeIndexId,trial,history);
         }catch(e){
           lastError=String(e.message||e);
