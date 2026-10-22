@@ -27,7 +27,7 @@ const obsidian={
   const input=JSON.parse(JSON.parse(r.body).messages[1].content);
   const reply=input.packets?{questions:input.packets.map((packet,i)=>({
     ...mockQuestion(packet),
-    stem:'For unique simulated session '+count+' item '+i+', which invented comparison is the one described in the fabricated source?' 
+    stem:'For unique simulated session '+(1000+count)+' variant '+['alpha','bravo','charlie'][i]+', which invented comparison is the one described in the fabricated source?' 
   }))}:mockQuestion(input);
   return {status:200,json:{choices:[{message:{content:JSON.stringify(reply)}}],usage:{total_tokens:71}}};},
  base64ToArrayBuffer:()=>{},normalizePath:x=>x};
