@@ -151,8 +151,12 @@ async function run(){
  assert(!exported.rows.some(x=>x.homeIndexId==='IDX-TWO'));
  const long='First part of the imaginary choice that is deliberately very long.\\nSecond line after a forced wrap with details.\\nThird explanatory line.\\nFourth extended line.';
  ctrl.experimentalQuestion.options[0].text=long;
+ ctrl.experimentalChoice=null; // Front contains the options; back contains explanations.
+ const front=new El();view.drawPyqStyle(front);
+ assert(front.findText('A. '+long));
+ ctrl.experimentalChoice='B';
  const screen=new El();view.drawPyqStyle(screen);
- assert(screen.findText('A. '+long));
+ assert(!screen.findText('A. '+long)); // The answer is a distinct card face.
  const css=fs.readFileSync('styles.css','utf8');
  assert(css.includes('.marrow-pyq-style button.marrow-pyq-option {'));
  assert(css.includes('height: auto !important;'));
