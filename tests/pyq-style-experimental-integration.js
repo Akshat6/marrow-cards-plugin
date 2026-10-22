@@ -192,6 +192,10 @@ async function run(){
  ctrl.experimentalNext();
  assert.equal(ctrl.experimentalCursor,1);
  assert.equal(ctrl.experimentalChoice,null);
+ await ctrl.experimentalGenerate('IDX-ONE',20);
+ assert.equal(ctrl.experimentalQueue.length,20,'20-question request should fill twenty source-backed slots');
+ assert.equal(ctrl.experimentalRequestedCount,20);
+ assert.equal(ctrl.experimentalCursor,0);
  assert(home.findText('Check reviewed MCQ feed'));
  console.log('PASS expanded experimental intelligence: 35+ blueprints, standalone/held, rotation, duplicate rejection, multiline options, three-index source and isolated logs.');
 }
