@@ -39,7 +39,7 @@ const obsidian={
     'In imaginary fixture '+(1000+count)+' which synthetic association identifies the fictional category as distinct from similar categories?'});
   return {status:200,json:{choices:[{message:{content:JSON.stringify(reply)}}],usage:{total_tokens:71}}};},
  base64ToArrayBuffer:()=>{},normalizePath:x=>x};
-const expose="\nmodule.exports.P={validatePyqExperimentalFeed,selectPyqExperimentalBlueprint,buildPyqExperimentalPacket,validatePyqExperimentalModel,generatePyqExperimentalDraft,PyqStyleController,MarrowDynamicRecallView,PYQ_EXPERIMENTAL_REMOTE};";
+const expose="\nmodule.exports.P={validatePyqExperimentalFeed,selectPyqExperimentalBlueprint,buildPyqExperimentalPacket,validatePyqExperimentalModel,generatePyqExperimentalDraft,pyqExperimentalBuildOptionOrder,pyqExperimentalDisplayLetter,pyqExperimentalDisplayExplanation,pyqExperimentalOptionOrder,PyqStyleController,MarrowDynamicRecallView,PYQ_EXPERIMENTAL_REMOTE};";
 const m={exports:{}};
 vm.runInNewContext(source+expose,{module:m,exports:m.exports,
  require:x=>{if(x==='obsidian')return obsidian;throw Error(x)},
@@ -110,6 +110,18 @@ async function run(){
  assert.deepEqual([...packet.sourceIndexIds],['IDX-ONE','IDX-TWO']);
  assert.equal(P.buildPyqExperimentalPacket(bp3,units).sourceIndexIds.length,3);
  assert.equal(P.validatePyqExperimentalModel(mockQuestion(packet),packet).correctOptionId,'C');
+ const deterministic=P.pyqExperimentalBuildOptionOrder(mockQuestion(packet),()=>0.999);
+ assert.deepEqual([...deterministic],['B','C','D','A'],
+   'Existing shuffle utility must reorder source choices without changing the Groq key');
+ assert.equal(P.pyqExperimentalDisplayLetter(deterministic,'C'),'B');
+ assert.equal(P.pyqExperimentalDisplayExplanation('Option C is correct; Choice A is wrong.',deterministic),
+   'Option B is correct; Choice D is wrong.');
+ const unsafe=cp(mockQuestion(packet));unsafe.options[3].text='All of the above';
+ assert.deepEqual([...P.pyqExperimentalBuildOptionOrder(unsafe,()=>0.999)],['A','B','C','D'],
+   'Relative options cannot safely be shuffled');
+ const linked=cp(mockQuestion(packet));linked.answerExplanation='Both A and B are right.';
+ assert.deepEqual([...P.pyqExperimentalBuildOptionOrder(linked,()=>0.999)],['A','B','C','D'],
+   'Explanations with positional source-letter relationships must remain ordered');
  const mutes=[x=>x.homeIndexId='IDX-TWO',x=>x.sourceIndexIds=['IDX-TWO'],
  x=>x.sourceKuIds.pop(),x=>x.sourceImage='wrong.png',x=>x.reviewStatus='APPROVED',
  x=>x.testedKuIds=['KU-999999'],x=>x.options[1].text=x.options[0].text,
@@ -133,7 +145,17 @@ async function run(){
  await ctrl.experimentalGenerate('IDX-ONE');
  assert.equal(ctrl.error,'');assert.equal(ctrl.experimentalQuestion.correctOptionId,'C');
  assert.equal(count,1);
+ // Force an explicit display permutation: the model's C becomes visible A.
+ ctrl.experimentalOrderQuestionId=ctrl.experimentalQuestion.questionId;
+ ctrl.experimentalOptionOrder=['C','A','D','B'];
+ const originalModelOptions=ctrl.experimentalQuestion.options.map(o=>o.text);
+ const before=new El();view.drawPyqStyle(before);
+ assert(before.findText('A. Fictional answer C'));
+ assert(before.findText('B. Fictional answer A'));
+ assert.equal(ctrl.experimentalOptionOrder.join(','),'C,A,D,B','redraw must not reshuffle');
  await ctrl.experimentalAnswer('B');assert.equal(ctrl.experimentalChoice,'B');
+ assert.deepEqual(ctrl.experimentalQuestion.options.map(o=>o.text),originalModelOptions,
+   'Shuffling must not mutate original Groq options');
  await ctrl.experimentalFlag();assert.equal(ctrl.experimentalFlagged,true);
  const rows=[...saved.values()].join('\n').split('\n').filter(Boolean).map(x=>JSON.parse(x));
  assert(rows.some(x=>x.type==='experimental_blueprint_selected'));
@@ -143,6 +165,11 @@ async function run(){
  assert.equal(candidate.question.reviewStatus,'AI_GENERATED_UNVERIFIED');
  const answer=rows.find(x=>x.type==='experimental_answered');
  assert.equal(answer.matchesModelKey,false);
+ assert.equal(answer.selectedOptionId,'B');
+ assert.equal(answer.selectedSourceOptionId,'A');
+ assert.equal(answer.modelKeyOptionId,'C');
+ assert.equal(answer.displayedCorrectOptionId,'A');
+ assert.deepEqual([...answer.displayOptionOrder],['C','A','D','B']);
  assert.equal(answer.countedTowardVerifiedLearningScores,false);
  assert(rows.some(x=>x.type==='experimental_flagged'));
  assert(!rows.some(x=>x.type==='answered'||x.type==='question'));
@@ -161,18 +188,24 @@ async function run(){
  ctrl.experimentalQuestion.options[0].text=long;
  ctrl.experimentalChoice=null; // Front contains the options; back contains explanations.
  const front=new El();view.drawPyqStyle(front);
- assert(front.findText('A. '+long));
+ assert(front.findText('B. '+long));
  ctrl.experimentalChoice='B';
  const screen=new El();view.drawPyqStyle(screen);
- assert(!screen.findText('A. '+long)); // The answer is a distinct card face.
+ assert(!screen.findText('B. '+long)); // The answer is a distinct card face.
  const css=fs.readFileSync('styles.css','utf8');
  assert(css.includes('.marrow-pyq-style button.marrow-pyq-option {'));
  assert(css.includes('height: auto !important;'));
  assert(css.includes('max-height: none !important;'));
  assert(css.includes('white-space: pre-wrap !important;'));
- assert(screen.findText('Different from model key · You chose B · Model answer C'));
+ assert(screen.findText('Different from model key · You chose B · Model answer A'));
+ const preserved=ctrl.experimentalOptionOrder.join(',');
+ ctrl.experimentalBookmarked=true;view.drawPyqStyle(new El());
+ assert.equal(ctrl.experimentalOptionOrder.join(','),preserved,'bookmark redraw must retain visible letters');
+ ctrl.experimentalFlagged=true;view.drawPyqStyle(new El());
+ assert.equal(ctrl.experimentalOptionOrder.join(','),preserved,'flag redraw must retain visible letters');
  assert(screen.findText('Finish practice'));
  assert(screen.findText('All four options explained'));
+ ctrl.experimentalBookmarked=false; // Reset state for the existing bookmark-toggle test.
  await ctrl.experimentalBookmark();
  assert.equal(ctrl.experimentalBookmarked,true);
  await ctrl.experimentalBookmark();
