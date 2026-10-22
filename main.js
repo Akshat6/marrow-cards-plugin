@@ -2136,7 +2136,7 @@ async function callDynamicGroq(plugin, messages, kind, unitCount=1, completionTo
   if (response.status !== 200) {
     const body = response.json || {};
     const msg = body.error && body.error.message ? String(body.error.message).slice(0,200) : 'HTTP '+response.status;
-    throw new Error('Groq rejected the request: '+msg+'. Free-tier quotas may apply.');
+    throw new Error('Groq rejected the request (HTTP '+response.status+'): '+msg+'. Free-tier quotas may apply.');
   }
   const result = response.json;
   const content = result && result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content;
@@ -3236,7 +3236,10 @@ function pyqUtf8Base64(text){
   return out;
 }
 MarrowCardsPlugin.prototype.schedulePyqFeedbackSync=function(now=false){
-  if(!this.settings.pyqSyncEnabled||!dynamicWriteToken(this))return;
+  if(!this.settings.pyqSyncEnabled)return;
+  if(!dynamicWriteToken(this)){
+    this.pyqSyncStatus='Private write token needed (see settings)';return;
+  }
   if(this.pyqSyncTimer!==null)window.clearTimeout(this.pyqSyncTimer);
   this.pyqSyncTimer=window.setTimeout(()=>{
     this.pyqSyncTimer=null;void this.syncPyqFeedback();
@@ -3771,7 +3774,8 @@ async function pyqExperimentalCreateBatch(p,f,homeIndexId,history,count){
       await appendPyqStyleEvent(p.view.plugin,{type:'experimental_candidate_rejected',
         homeIndexId,blueprintIds:packets.map(x=>x.blueprintId),reason:lastError.slice(0,240)});
       // Do not pound an unavailable service or exhaust free-tier limits.
-      if(/key|token|cap|quota|rate|Groq rejected|network|HTTP |fetch failed/i.test(lastError))break;
+      if(/key|token|cap|quota|rate|HTTP (401|402|403|429)|fetch failed/i.test(lastError))break;
+      // A bad batched request can fall back to a bounded single-question request.
       oneAtTime=true;continue;
     }
     const rawItems=number===1?[raw]:Array.isArray(raw?.questions)?raw.questions:[];
@@ -3833,7 +3837,7 @@ PyqStyleController.prototype.experimentalGenerate=async function(homeIndexId,cou
           await appendPyqStyleEvent(this.view.plugin,{type:'experimental_candidate_rejected',
             homeIndexId,sourcePacket:e.experimentalPacket||null,
             rawModelJson:e.experimentalRaw||null,reason:lastError.slice(0,240)});
-          if(/key|token|cap|quota|rate|Groq rejected|network|HTTP /i.test(lastError))break;
+          if(/key|token|cap|quota|rate|HTTP (400|401|402|403|429)|network/i.test(lastError))break;
         }
       }
       generated={questions:q?[q]:[],lastError};
