@@ -1,7 +1,7 @@
 {
   "id": "marrow-cards",
   "name": "Marrow Cards",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "minAppVersion": "1.11.4",
   "description": "Marrow Cards: PYQ Review, Dynamic Recall and opt-in 1/10/20 Experimental AI MCQs with private feedback sync.",
   "author": "Marrow Cards",
