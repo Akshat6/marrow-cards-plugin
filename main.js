@@ -3200,7 +3200,8 @@ async function generatePyqStyleAuditCandidate(plugin,b,units,provider=callDynami
 async function appendPyqStyleEvent(plugin,event){
   if(!safeId(plugin.settings.deviceId))throw new Error('Invalid device identity; cannot save MCQ attempt.');
   await appendDynamicJsonl(plugin,PYQ_STYLE_EVENTS,event);
-  if(event.type?.startsWith('experimental_'))plugin.schedulePyqFeedbackSync();
+  if(event.type?.startsWith('experimental_') && typeof plugin.schedulePyqFeedbackSync==='function')
+    plugin.schedulePyqFeedbackSync();
 }
 
 /* Private question-sync uses the existing private GitHub write credential, but
