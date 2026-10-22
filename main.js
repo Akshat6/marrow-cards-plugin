@@ -3231,7 +3231,11 @@ function pyqFeedbackRows(events,id){
           sourceExcerpt:u.sourceExcerpt,canonicalAnswer:u.canonicalAnswer}))};
     if(e.type==='experimental_answered')
       return {...row,selectedOptionId:e.selectedOptionId,
-        modelKeyOptionId:e.modelKeyOptionId,matchesModelKey:e.matchesModelKey};
+        selectedSourceOptionId:e.selectedSourceOptionId||e.selectedOptionId,
+        modelKeyOptionId:e.modelKeyOptionId,
+        displayedCorrectOptionId:e.displayedCorrectOptionId||e.modelKeyOptionId,
+        displayOptionOrder:e.displayOptionOrder||['A','B','C','D'],
+        matchesModelKey:e.matchesModelKey};
     return {...row,reason:e.reason||null};
   }).sort((a,b)=>a.at.localeCompare(b.at)||String(a.questionId).localeCompare(String(b.questionId)));
 }
@@ -3973,15 +3977,57 @@ PyqStyleController.prototype.experimentalBookmark=async function(){
   }catch(e){this.error='Could not bookmark: '+String(e.message||e);}
   finally{this.busy=false;pyqRedrawKeepScroll(this.view);}
 };
+// Experimental PYQ MCQs are model-authored in canonical A-D order. Keep the
+// original model question/key/rationales intact for audit, and shuffle ONLY
+// the stable displayed mapping once for each question. Reuse the conservative
+// source-PYQ shuffle exclusions (positional/relative options).
+function pyqExperimentalBuildOptionOrder(q,random=Math.random){
+  const ids=['A','B','C','D'];
+  const card={question:q.stem,options:q.options.map(o=>o.text),explanation:''};
+  const explanatory=[q.answerExplanation,...q.optionRationales.map(r=>r.why)].join(' ');
+  // Phrases relying on the location of choices cannot safely be relabelled.
+  // Plain "Option A" references in explanations ARE safe: rewrite them for
+  // display without modifying the original model text.
+  const positional=/\b(?:first|second|third|fourth|previous|next|preceding|following|above|below)\s+(?:option|choice)s?\b|\b(?:both|either|neither)\s+(?:option\s+)?[a-d]\s+(?:and|or)\s+(?:option\s+)?[a-d]\b/i;
+  const bareLetter=/\b[A-D]\s+(?:is|was)\s+(?:the\s+)?(?:correct|incorrect|answer)\b/;
+  const frontText=[q.stem,...q.options.map(o=>o.text)].join(' ');
+  if(!canShuffleCard(card,ids.indexOf(q.correctOptionId)) ||
+     /\b(?:option|choice)\s+[a-d]\b/i.test(frontText) ||
+     positional.test(explanatory) || bareLetter.test(explanatory)) return ids;
+  return shuffleChoiceIndices(4,random).map(i=>ids[i]);
+}
+function pyqExperimentalOptionOrder(p){
+  const q=p.experimentalQuestion;
+  if(!q)return ['A','B','C','D'];
+  if(p.experimentalOrderQuestionId!==q.questionId ||
+     !Array.isArray(p.experimentalOptionOrder) || p.experimentalOptionOrder.length!==4){
+    p.experimentalOptionOrder=pyqExperimentalBuildOptionOrder(q);
+    p.experimentalOrderQuestionId=q.questionId;
+  }
+  return p.experimentalOptionOrder;
+}
+function pyqExperimentalDisplayLetter(order,sourceLetter){
+  const index=order.indexOf(sourceLetter);
+  return index<0?'?':'ABCD'[index];
+}
+function pyqExperimentalDisplayExplanation(text,order){
+  // Re-label explicit "Option A" / "Choice B" references on screen only.
+  // Never alter clinical fact text, original answer keys or synced source.
+  return String(text).replace(/\b(option|choice)\s+([A-D])\b/gi,
+    (_full,label,letter)=>label+' '+pyqExperimentalDisplayLetter(order,letter.toUpperCase()));
+}
 PyqStyleController.prototype.experimentalAnswer=async function(letter){
   if(this.busy||!this.experimentalQuestion||this.experimentalChoice||!['A','B','C','D'].includes(letter))return;
   this.busy=true;this.view.draw();
   try{
-    const q=this.experimentalQuestion;
+    const q=this.experimentalQuestion,order=pyqExperimentalOptionOrder(this);
+    const selectedSourceOptionId=order['ABCD'.indexOf(letter)];
+    const displayedCorrectOptionId=pyqExperimentalDisplayLetter(order,q.correctOptionId);
     await appendPyqStyleEvent(this.view.plugin,{type:'experimental_answered',questionId:q.questionId,
       homeIndexId:q.homeIndexId,sourceIndexIds:q.sourceIndexIds,sourceKuIds:q.sourceKuIds,
-      selectedOptionId:letter,modelKeyOptionId:q.correctOptionId,
-      matchesModelKey:letter===q.correctOptionId,clinicallyCertified:false,
+      selectedOptionId:letter,selectedSourceOptionId,modelKeyOptionId:q.correctOptionId,
+      displayedCorrectOptionId,displayOptionOrder:order.slice(),
+      matchesModelKey:selectedSourceOptionId===q.correctOptionId,clinicallyCertified:false,
       countedTowardVerifiedLearningScores:false});
     this.experimentalChoice=letter;
   }catch(e){this.error='Could not save experimental choice: '+e.message;}
@@ -4002,6 +4048,8 @@ PyqStyleController.prototype.experimentalFlag=async function(){
 };
 function drawPyqExperimentalQuestion(body,p){
   const q=p.experimentalQuestion,flipped=Boolean(p.experimentalChoice);
+  const order=pyqExperimentalOptionOrder(p);
+  const displayedCorrectOptionId=pyqExperimentalDisplayLetter(order,q.correctOptionId);
   body.createEl('p',{cls:'marrow-hint',text:
     'EXPERIMENTAL · AI-generated, medically unverified · Question '+
     ((p.experimentalCursor||0)+1)+'/'+(p.experimentalRequestedCount||p.experimentalQueue?.length||1)+
@@ -4010,25 +4058,28 @@ function drawPyqExperimentalQuestion(body,p){
   card.createEl('p',{cls:'marrow-pyq-face',text:flipped?'BACK · ANSWER':'FRONT · QUESTION'});
   card.createEl('h4',{text:q.stem});
   if(!flipped){
-    for(const option of q.options){
-      const btn=card.createEl('button',{cls:'marrow-pyq-option',text:option.id+'. '+option.text});
+    for(let i=0;i<order.length;i++){
+      const option=q.options.find(o=>o.id===order[i]),displayLetter='ABCD'[i];
+      const btn=card.createEl('button',{cls:'marrow-pyq-option',text:displayLetter+'. '+option.text});
       btn.disabled=p.busy;
-      btn.addEventListener('click',()=>void p.experimentalAnswer(option.id));
+      btn.addEventListener('click',()=>void p.experimentalAnswer(displayLetter));
     }
   }else{
-    const matched=p.experimentalChoice===q.correctOptionId;
+    const selectedSourceOptionId=order['ABCD'.indexOf(p.experimentalChoice)];
+    const matched=selectedSourceOptionId===q.correctOptionId;
     card.createEl('h3',{cls:'marrow-pyq-result',text:
       (matched?'Matched model key':'Different from model key')+
-      ' · You chose '+p.experimentalChoice+' · Model answer '+q.correctOptionId});
+      ' · You chose '+p.experimentalChoice+' · Model answer '+displayedCorrectOptionId});
     card.createEl('p',{cls:'marrow-hint',text:
       'Unverified model answer. The explanation below may contain mistakes.'});
-    card.createEl('p',{text:q.answerExplanation});
+    card.createEl('p',{text:pyqExperimentalDisplayExplanation(q.answerExplanation,order)});
     card.createEl('h4',{text:'All four options explained'});
-    for(const option of q.options){
+    for(let i=0;i<order.length;i++){
+      const option=q.options.find(o=>o.id===order[i]),displayLetter='ABCD'[i];
       const reason=q.optionRationales.find(r=>r.id===option.id);
       card.createEl('p',{cls:'marrow-pyq-rationale',text:
-        option.id+'. '+option.text+(option.id===q.correctOptionId?' · MODEL KEY':'')+
-        ' — '+(reason?.why||'Missing explanation')+
+        displayLetter+'. '+option.text+(option.id===q.correctOptionId?' · MODEL KEY':'')+
+        ' — '+pyqExperimentalDisplayExplanation(reason?.why||'Missing explanation',order)+
         ' ['+(reason?.kuIds||[]).join(', ')+']'});
     }
     const tools=card.createDiv({cls:'marrow-toolbar'});
