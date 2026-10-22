@@ -28,7 +28,8 @@ const obsidian={
   const reply=input.packets?{questions:input.packets.map((packet,i)=>({
     ...mockQuestion(packet),
     stem:'For unique simulated session '+(1000+count)+' variant '+['alpha','bravo','charlie'][i]+', which invented comparison is the one described in the fabricated source?' 
-  }))}:mockQuestion(input);
+  }))}:({...mockQuestion(input),stem:count===1?mockQuestion(input).stem:
+    'In imaginary fixture '+(1000+count)+' which synthetic association identifies the fictional category as distinct from similar categories?'});
   return {status:200,json:{choices:[{message:{content:JSON.stringify(reply)}}],usage:{total_tokens:71}}};},
  base64ToArrayBuffer:()=>{},normalizePath:x=>x};
 const expose="\nmodule.exports.P={validatePyqExperimentalFeed,selectPyqExperimentalBlueprint,buildPyqExperimentalPacket,validatePyqExperimentalModel,generatePyqExperimentalDraft,PyqStyleController,MarrowDynamicRecallView,PYQ_EXPERIMENTAL_REMOTE};";
