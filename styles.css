@@ -966,3 +966,44 @@
   overflow-wrap: anywhere;
   text-align: left;
 }
+
+
+/* Experimental MCQs use a clear front/back card, not a long options-then-answer scroll.
+   These selectors do not alter legacy PYQ Review or Dynamic Recall. */
+.marrow-dynamic .marrow-pyq-style .marrow-pyq-flip-card {
+  padding: 15px 14px 18px;
+  margin: 12px 0;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-l);
+  overflow-wrap: anywhere;
+}
+.marrow-dynamic .marrow-pyq-flip-card .marrow-pyq-face {
+  font-size: .8em;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+}
+.marrow-dynamic .marrow-pyq-flip-card h4 {
+  margin: 7px 0 16px;
+  line-height: 1.5;
+}
+.marrow-dynamic .marrow-pyq-flip-card .marrow-pyq-result {
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 10px 0;
+}
+.marrow-dynamic .marrow-pyq-flip-card .marrow-pyq-rationale {
+  padding: 10px 0;
+  margin: 5px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.marrow-dynamic .marrow-pyq-flip-card > button.mod-cta {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 15px 0 0;
+}

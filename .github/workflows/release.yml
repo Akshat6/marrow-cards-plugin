@@ -30,6 +30,7 @@ jobs:
           node tests/pyq-style-smoke.js
           node tests/pyq-style-multi-index-audit.js
           node tests/pyq-style-experimental-integration.js
+          node tests/pyq-style-feedback-sync.js
           node --check tests/dynamic-smoke.js
           node --check tests/dynamic-integration.js && node --check tests/dynamic-hierarchy-mobile.js && node --check tests/dynamic-progress-sync.js
           node --check tests/live-groq-eval.js
@@ -52,4 +53,4 @@ jobs:
           fi
           gh release create "$VERSION" main.js manifest.json styles.css \
             --title "$VERSION" --target "$GITHUB_SHA" \
-            --notes "Marrow Cards $VERSION expands opt-in Experimental AI MCQs from the two-blueprint pilot to a full private intelligence feed: 157 original Verified Anatomy KUs, 73 relationship analyses including held records, and source-locked standalone coverage. History-aware concept rotation, duplicate-stem rejection and auto-height 4–5 line MCQ options. These are UNVERIFIED experimental model answers, not clinical certification or predictions; old PYQ/Verified scores and vault histories remain isolated. Requires original KU download, read-only private GitHub token and Groq key. Back up Obsidian and keep 0.3.13 for rollback."
+            --notes "Marrow Cards $VERSION: opt-in Experimental AI PYQ-style practice for 1, 10 or 20 MCQs, with source-locked multi-KU generation, bounded retry, distinct front/back answer cards, bookmarks and reversible flags. New consent-gated automatic private per-device GitHub question feedback sync; versioned generator style guidance and ChatGPT review checkpoint in the private repository. No automatic clinical approval, no changes to original PYQs, verified scores or personal notes. Android/Groq live verification is still needed. Requires private repository credentials and Groq key; full question sync is OFF by default. Back up the vault before BRAT update; see docs/pyq-feedback-workflow.md."

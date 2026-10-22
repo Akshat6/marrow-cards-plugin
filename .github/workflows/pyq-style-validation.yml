@@ -25,6 +25,7 @@ jobs:
           node tests/pyq-style-smoke.js
           node tests/pyq-style-multi-index-audit.js
           node tests/pyq-style-experimental-integration.js
+          node tests/pyq-style-feedback-sync.js
           node tests/smoke.js
           node tests/dynamic-smoke.js
           node tests/dynamic-integration.js
