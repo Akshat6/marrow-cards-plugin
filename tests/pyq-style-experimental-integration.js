@@ -11,7 +11,7 @@ class El{
  findText(s){if(this.text===s)return this;for(const c of this.children){const n=c.findText(s);if(n)return n;}return null;}
 }
 class ItemView{constructor(leaf){this.app=leaf.app;this.contentEl=new El();}}
-let count=0,rateLimitAt=Infinity,rateLimitsHit=0;
+let count=0,rateLimitAt=Infinity,rateLimitsHit=0,usableAtRateLimit=false;
 function mockQuestion(p){return {
  blueprintId:p.blueprintId,homeIndexId:p.homeIndexId,sourceIndexIds:p.sourceIndexIds,
  sourceKuIds:p.sourceKuIds,stem:'Which fictional sample category matches the imaginary description provided?',
@@ -26,6 +26,8 @@ const obsidian={
  requestUrl:async r=>{count++;assert.equal(r.method,'POST');assert.equal(r.headers.Authorization,'Bearer mock-secret');
   if(count===rateLimitAt){
     rateLimitsHit++;
+    usableAtRateLimit=Boolean(ctrl.experimentalQuestion && !ctrl.busy &&
+      ctrl.experimentalQueue.length===2);
     return {status:429,headers:{'Retry-After':'0.001'},
       json:{error:{message:'Synthetic tokens per minute limit reached'}}};
   }
@@ -183,6 +185,7 @@ async function run(){
  rateLimitAt=count+2; // Force a genuine provider HTTP 429 on the second batch request.
  await ctrl.experimentalGenerate('IDX-ONE',10);
  assert.equal(rateLimitsHit,1,'an actual HTTP 429 must be retried after cooldown');
+ assert(usableAtRateLimit,'first two questions must already be answerable during provider cooldown');
  assert.equal(ctrl.error,'','a temporary token-per-minute rate limit is not a partial-session failure');
  assert.equal(ctrl.experimentalQueue.length,10);
  assert.equal(ctrl.experimentalRequestedCount,10);
