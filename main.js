@@ -3865,6 +3865,13 @@ PyqStyleController.prototype.experimentalNext=function(){
   this.experimentalChoice=null;this.experimentalFlagged=false;this.experimentalBookmarked=false;
   this.error='';this.view.draw();
 };
+function pyqRedrawKeepScroll(view){
+  const previous=view.contentEl?.querySelector?.('.marrow-pyq-style');
+  const offset=previous?.scrollTop;
+  view.draw();
+  const next=view.contentEl?.querySelector?.('.marrow-pyq-style');
+  if(next&&Number.isFinite(offset))next.scrollTop=offset;
+}
 PyqStyleController.prototype.experimentalBookmark=async function(){
   if(this.busy||!this.experimentalQuestion||!this.experimentalChoice)return;
   this.busy=true;
@@ -3875,7 +3882,7 @@ PyqStyleController.prototype.experimentalBookmark=async function(){
       questionId:q.questionId,homeIndexId:q.homeIndexId,blueprintId:q.blueprintId});
     this.experimentalBookmarked=next;
   }catch(e){this.error='Could not bookmark: '+String(e.message||e);}
-  finally{this.busy=false;this.view.draw();}
+  finally{this.busy=false;pyqRedrawKeepScroll(this.view);}
 };
 PyqStyleController.prototype.experimentalAnswer=async function(letter){
   if(this.busy||!this.experimentalQuestion||this.experimentalChoice||!['A','B','C','D'].includes(letter))return;
@@ -3902,7 +3909,7 @@ PyqStyleController.prototype.experimentalFlag=async function(){
       independentClinicalReviewCompleted:false});
     this.experimentalFlagged=!this.experimentalFlagged;
   }catch(e){this.error='Could not flag experimental question: '+e.message;}
-  finally{this.busy=false;this.view.draw();}
+  finally{this.busy=false;pyqRedrawKeepScroll(this.view);}
 };
 function drawPyqExperimentalQuestion(body,p){
   const q=p.experimentalQuestion,flipped=Boolean(p.experimentalChoice);
