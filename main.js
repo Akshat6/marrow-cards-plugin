@@ -3529,8 +3529,15 @@ function selectPyqExperimentalBlueprint(f,units,homeIndexId,events=[]){
   if(!safeId(homeIndexId))throw Error('Select exactly one home index.');
   validatePyqExperimentalFeed(f,units);
   if(!Array.isArray(events))throw Error('Invalid experimental selection history.');
-  const candidates=f.blueprints.filter(b=>b.homeIndexId===homeIndexId&&b.experimentalEnabled===true);
-  if(!candidates.length)throw Error('No source-backed experimental blueprint for this index.');
+  const eligible=f.blueprints.filter(b=>b.homeIndexId===homeIndexId&&b.experimentalEnabled===true);
+  if(!eligible.length)throw Error('No source-backed experimental blueprint for this index.');
+  // Source-supported multi-KU reasoning targets ~60% of selections.
+  const prior=events.filter(e=>e?.type==='experimental_blueprint_selected'&&e.homeIndexId===homeIndexId);
+  const byBlueprint=new Map(f.blueprints.map(b=>[b.blueprintId,b]));
+  const integrated=prior.filter(e=>byBlueprint.get(e.blueprintId)?.evidenceLane!=='S').length;
+  const chooseIntegrated=integrated<(prior.length+1)*0.60;
+  const preferred=eligible.filter(b=>chooseIntegrated?b.evidenceLane!=='S':b.evidenceLane==='S');
+  const candidates=preferred.length?preferred:eligible;
   const selectedCounts=new Map(),familyCounts=new Map(),kuCounts=new Map();
   const byId=new Map(f.blueprints.map(b=>[b.blueprintId,b]));
   for(const e of events){
@@ -3616,7 +3623,8 @@ function validatePyqExperimentalModel(raw,p){
      raw.sourceImage!==null||raw.sourceCardId!==null||
      !Array.isArray(raw.testedKuIds)||!raw.testedKuIds.length||
      !pyqStyleUniqueIds(raw.testedKuIds)||
-     raw.testedKuIds.some(id=>!p.sourceKuIds.includes(id)))
+     raw.testedKuIds.some(id=>!p.sourceKuIds.includes(id))||
+      (p.sourceKuIds.length>1&&raw.testedKuIds.length<2))
     throw Error('Groq changed protected home/source identity or response schema.');
   // Reuse mature A–D structure checks. The new one-home source list is retained.
   const q={questionId:'MCQ-EXPERIMENT-CHECK',indexId:p.homeIndexId,
@@ -3635,7 +3643,8 @@ function pyqExperimentalMessages(packet){
       'This is an explicitly user-chosen experimental mode, NOT clinically certified. Do not invent clinical facts, cases, diagrams, routes, procedures, or additional anatomy.',
       'Use analystPriority, conceptLabel, cognitiveOperation, operationRequirement, confusionTarget, analystAssessment and forbiddenTransformations to design a distinct source-bounded question. Analyst priorities are NOT future-exam probabilities.',
       'Use previousQuestionStemsForNoveltyOnly only to avoid repeated question stems and operations; those stems are NOT medical evidence.',
-      'If the integrated task is not feasible, prefer a truthful simpler source-grounded question to fabricating facts.',
+      'For multi-KU blueprints, meaningfully test at least two supplied source KUs; if impossible return unableToConstruct.',
+       'Never invent medical facts to achieve integration.',
       'Respect modal qualifiers (MAY versus always), anatomical level and laterality. Avoid obviously repeated or unsupported distractors when possible.',
       'A positive one-correct or a clearly worded one-incorrect stem is permitted, but correctOptionId must unequivocally identify one answer. Mark each rationale isCorrect as referring to the keyed choice, not to whether its medical statement is true.',
       'Return ONLY a JSON object with exactly keys blueprintId,homeIndexId,sourceIndexIds,sourceKuIds,stem,options,correctOptionId,optionRationales,answerExplanation,testedKuIds,sourceScope,externalKnowledgeUsed,sourceImage,sourceCardId.',
@@ -3679,6 +3688,7 @@ function pyqExperimentalBatchMessages(packets){
       'Copy each packet identity and original sourceScope, sourceImage null, sourceCardId null, externalKnowledgeUsed false.',
       'Use ONLY original Verified sourceKUs from that particular packet; do not use facts from another packet or outside medicine.',
       'Four alternatives A-D, only one unambiguously defensible model key. Every alternative needs why, isCorrect and source kuIds.',
+      'For multi-KU packets, actually test at least two source KUs or return unableToConstruct.',
       'Respect modal qualifiers and anatomy details. Prefer genuine reasoning, integration of two source KUs where supported, and plausible distinct alternatives.',
       'Do not claim actual historical PYQs or independent clinical certification.',
       'For any packet with inadequate evidence, output {"unableToConstruct":true} in that position, never invent a fact.',
