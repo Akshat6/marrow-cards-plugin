@@ -1,4 +1,4 @@
-# Experimental PYQ-style practice — feedback workflow (v0.3.16)
+# Experimental PYQ-style practice — feedback workflow (v0.3.17)
 
 ## What the student does
 1. Open Dynamic Recall > PYQ-style for a home index, then **Generate 1**, **10** or **20 experimental MCQs**.
@@ -13,7 +13,7 @@
 - Multi-KU relationships are prioritized at a default 60% source-supported selection target; multi-KU questions must declare at least two actually tested KUs. This does **not** prove meaningful integration or medical correctness; qualitative assessment follows from flags/bookmarks.
 - Optional private generator style guidance is loaded from \`exam-intelligence/feedback/generator-guidance-v1.json\`, schema 1. It accepts only whitelisted style codes and a 0–80% integration target; arbitrary generated medical facts are never accepted as guidance.
 
-## Correct-answer position and option shuffling (pending release)
+## Correct-answer position and option shuffling (v0.3.17)
 Experimental Groq MCQs retain the original model-authored A-D options, key, KU provenance and rationales. The plugin uses its existing Review option-shuffling helper for the **display only**, once per question. Display order persists while answering and when the answer face redraws after bookmark/flag interactions. Student taps map from the visible A-D letter to the original source option ID for grading, and explanations referring explicitly to “Option X” are re-labelled on screen. Position-dependent alternatives are conservatively left unshuffled. This is not a medical verification mechanism.
 
 The local `experimental_answered` record additionally stores `displayOptionOrder` (array of original option IDs in visible A-D order), `displayedCorrectOptionId`, and `selectedSourceOptionId`, alongside the original model key and the visible selected letter. The opt-in private feedback sync retains those mapping fields so reviewers can reconstruct exactly what the student saw; old events without mappings retain their original letter semantics. No approved card, KU or historic PYQ content is changed.
