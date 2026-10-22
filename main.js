@@ -1774,6 +1774,24 @@ class MarrowSettingsTab extends PluginSettingTab {
         this.display();
       }));
 
+    containerEl.createEl('h3',{text:'PYQ-style AI questions — private feedback sync'});
+    containerEl.createEl('p',{text:
+      'Optional: upload complete AI-generated MCQs, model answers, source KU excerpts, your choices, bookmarks and flags to the PRIVATE data repository. Never to the public plugin code. Uses the private Dynamic Recall progress write token configured below. Offline uploads retry while Obsidian is open. Do not enable on shared devices.'});
+    new Setting(containerEl).setName('Automatically sync full experimental questions')
+      .setDesc('Off by default. Separate from compact learning-progress sync.')
+      .addToggle(t=>t.setValue(this.plugin.settings.pyqSyncEnabled===true)
+        .onChange(async enabled=>{
+          this.plugin.settings.pyqSyncEnabled=enabled;
+          await this.plugin.saveData(this.plugin.settings);
+          if(enabled)this.plugin.schedulePyqFeedbackSync(true);
+          else this.plugin.pyqSyncStatus='Off';
+        }));
+    new Setting(containerEl).setName('Question feedback sync status')
+      .setDesc(this.plugin.pyqSyncStatus)
+      .addButton(b=>b.setButtonText('Sync now').onClick(async()=>{
+        await this.plugin.syncPyqFeedback();this.display();
+      }));
+
     containerEl.createEl('h3',{text:'Dynamic Recall — automatic private GitHub progress sync'});
     containerEl.createEl('p',{text:'Only compact KU IDs, index IDs, numeric scores and attempt counts are uploaded to '+REPO+'/progress/by-device/. No typed answers, questions, note excerpts, API keys, or raw logs are uploaded. Never writes to the public plugin repository. Requires a separate fine-grained token with Contents read/write permission for ONLY the private data repo. This token can modify content in that repository: keep it private and revoke it if a device is lost.'});
     let pendingProgressToken='';
@@ -3756,10 +3774,11 @@ PyqStyleController.prototype.experimentalGenerate=async function(homeIndexId,cou
         const selected=selectPyqExperimentalBlueprint(f,this.view.units,homeIndexId,history);
         const event={type:'experimental_blueprint_selected',...selected.trace};
         await appendPyqStyleEvent(this.view.plugin,event);
+        const priorHistory=history.slice();
         history.push({...event,at:new Date().toISOString()});
         try{
           const trial=await generatePyqExperimentalDraft(this.view.plugin,f,
-            this.view.units,homeIndexId,history.filter(e=>e!==event));
+            this.view.units,homeIndexId,priorHistory);
           q=await pyqExperimentalSaveCandidate(this,f,homeIndexId,trial,history);
         }catch(e){
           lastError=String(e.message||e);
@@ -3821,48 +3840,70 @@ PyqStyleController.prototype.experimentalAnswer=async function(letter){
   finally{this.busy=false;this.view.draw();}
 };
 PyqStyleController.prototype.experimentalFlag=async function(){
-  if(this.busy||!this.experimentalQuestion||this.experimentalFlagged)return;
+  if(this.busy||!this.experimentalQuestion||!this.experimentalChoice)return;
   this.busy=true;this.view.draw();
   try{
     const q=this.experimentalQuestion;
-    await appendPyqStyleEvent(this.view.plugin,{type:'experimental_flagged',questionId:q.questionId,
+    await appendPyqStyleEvent(this.view.plugin,{type:this.experimentalFlagged?'experimental_unflagged':'experimental_flagged',questionId:q.questionId,
       homeIndexId:q.homeIndexId,blueprintId:q.blueprintId,
       reason:'User marked AI-generated item for source/question review',
       independentClinicalReviewCompleted:false});
-    this.experimentalFlagged=true;
+    this.experimentalFlagged=!this.experimentalFlagged;
   }catch(e){this.error='Could not flag experimental question: '+e.message;}
   finally{this.busy=false;this.view.draw();}
 };
 function drawPyqExperimentalQuestion(body,p){
-  const q=p.experimentalQuestion;
-  body.createEl('p',{cls:'marrow-hint',text:'EXPERIMENTAL · AI-generated, not independently medically verified · Home '+q.homeIndexId+
-    ' · Sources '+q.sourceIndexIds.join(', ')});
-  body.createEl('h4',{text:q.stem});
-  for(const option of q.options){
-    const btn=body.createEl('button',{cls:'marrow-pyq-option',text:option.id+'. '+option.text});
-    btn.disabled=p.busy||Boolean(p.experimentalChoice);
-    btn.addEventListener('click',()=>void p.experimentalAnswer(option.id));
-  }
-  if(p.experimentalChoice){
-    body.createEl('h4',{text:'Groq answer: '+q.correctOptionId+
-      (p.experimentalChoice===q.correctOptionId?' · Matched':' · Different')});
-    body.createEl('p',{cls:'marrow-hint',text:'This is the model’s answer, not a medically certified correction.'});
-    body.createEl('p',{text:q.answerExplanation});
-    for(const r of q.optionRationales)
-      body.createEl('p',{cls:'marrow-hint',text:r.id+' — '+r.why+' ['+r.kuIds.join(', ')+']'});
-    const flag=body.createEl('button',{text:p.experimentalFlagged?'Flag saved':'Flag this AI question'});
-    flag.disabled=p.busy||p.experimentalFlagged;
+  const q=p.experimentalQuestion,flipped=Boolean(p.experimentalChoice);
+  body.createEl('p',{cls:'marrow-hint',text:
+    'EXPERIMENTAL · AI-generated, medically unverified · Question '+
+    ((p.experimentalCursor||0)+1)+'/'+(p.experimentalQueue?.length||1)+
+    ' · '+q.homeIndexId});
+  const card=body.createDiv({cls:'marrow-pyq-flip-card'});
+  card.createEl('p',{cls:'marrow-pyq-face',text:flipped?'BACK · ANSWER':'FRONT · QUESTION'});
+  card.createEl('h4',{text:q.stem});
+  if(!flipped){
+    for(const option of q.options){
+      const btn=card.createEl('button',{cls:'marrow-pyq-option',text:option.id+'. '+option.text});
+      btn.disabled=p.busy;
+      btn.addEventListener('click',()=>void p.experimentalAnswer(option.id));
+    }
+  }else{
+    const matched=p.experimentalChoice===q.correctOptionId;
+    card.createEl('h3',{cls:'marrow-pyq-result',text:
+      (matched?'Matched model key':'Different from model key')+
+      ' · You chose '+p.experimentalChoice+' · Model answer '+q.correctOptionId});
+    card.createEl('p',{cls:'marrow-hint',text:
+      'Unverified model answer. The explanation below may contain mistakes.'});
+    card.createEl('p',{text:q.answerExplanation});
+    card.createEl('h4',{text:'All four options explained'});
+    for(const option of q.options){
+      const reason=q.optionRationales.find(r=>r.id===option.id);
+      card.createEl('p',{cls:'marrow-pyq-rationale',text:
+        option.id+'. '+option.text+(option.id===q.correctOptionId?' · MODEL KEY':'')+
+        ' — '+(reason?.why||'Missing explanation')+
+        ' ['+(reason?.kuIds||[]).join(', ')+']'});
+    }
+    const tools=card.createDiv({cls:'marrow-toolbar'});
+    const bookmark=tools.createEl('button',{text:p.experimentalBookmarked?
+      '★ Bookmarked · Undo':'☆ Bookmark nice question'});
+    bookmark.disabled=p.busy;
+    bookmark.addEventListener('click',()=>void p.experimentalBookmark());
+    const flag=tools.createEl('button',{text:p.experimentalFlagged?
+      '⚑ Flagged · Undo':'⚑ Flag problematic question'});
+    flag.disabled=p.busy;
     flag.addEventListener('click',()=>void p.experimentalFlag());
+    const next=card.createEl('button',{cls:'mod-cta',
+      text:(p.experimentalCursor||0)+1<(p.experimentalQueue?.length||1)?
+        'Next question →':'Finish practice'});
+    next.disabled=p.busy;next.addEventListener('click',()=>p.experimentalNext());
   }
-  const row=body.createDiv({cls:'marrow-toolbar'});
-  const another=row.createEl('button',{text:'Generate another experimental MCQ',cls:'mod-cta'});
-  another.disabled=p.busy;another.addEventListener('click',()=>void p.experimentalGenerate(q.homeIndexId));
-  const exit=row.createEl('button',{text:'Return to PYQ-style options'});
-  exit.disabled=p.busy;exit.addEventListener('click',()=>{
-    p.experimentalQuestion=null;p.experimentalChoice=null;p.error='';p.view.draw();
+  const toolbar=body.createDiv({cls:'marrow-toolbar'});
+  const leave=toolbar.createEl('button',{text:'Leave experimental practice'});
+  leave.disabled=p.busy;leave.addEventListener('click',()=>{
+    p.experimentalQuestion=null;p.experimentalChoice=null;p.experimentalQueue=[];
+    p.experimentalFinished=false;p.error='';p.view.draw();
   });
 }
-
 MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
   if(!this.pyqState)this.pyqState=new PyqStyleController(this);
   const p=this.pyqState,indexId=this.selectedIndex;
@@ -3871,8 +3912,15 @@ MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
   body.createEl('p',{cls:'marrow-hint',text:
     'Separate MCQ mode · Source-reviewed and opt-in Experimental AI MCQs. Experimental answers are AI-generated, unverified and kept separate from verified learning scores.'});
   if(p.error)body.createEl('p',{cls:'marrow-dynamic-error',text:p.error});
-  if(p.busy)body.createEl('p',{cls:'marrow-hint',text:'Working…'});
+  if(p.busy)body.createEl('p',{cls:'marrow-hint',text:p.experimentalProgress||'Working…'});
+  body.createEl('p',{cls:'marrow-hint',text:'Private feedback sync: '+(this.plugin.pyqSyncStatus||'Off')});
   if(p.experimentalQuestion){drawPyqExperimentalQuestion(body,p);return;}
+  if(p.experimentalFinished){
+    body.createEl('h4',{text:'Experimental practice complete · '+(p.experimentalQueue?.length||1)+' questions.'});
+    const again=body.createEl('button',{text:'Generate more questions',cls:'mod-cta'});
+    again.addEventListener('click',()=>{p.experimentalFinished=false;this.draw();});
+    return;
+  }
   if(p.status==='home'){
     body.createEl('p',{cls:'marrow-hint',text:
       'Approved question-bank practice requires a reviewed feed. The separate opt-in Experimental AI MCQ mode uses only user-accepted original Verified KUs but model answers are not clinically certified.'});
@@ -3883,8 +3931,12 @@ MarrowDynamicRecallView.prototype.drawPyqStyle=function(el){
       const start=row.createEl('button',{text:'Practise '+n+' reviewed MCQs',cls:n===10?'mod-cta':''});
       start.disabled=p.busy;start.addEventListener('click',()=>void p.start(indexId,n));
     }
-    const experiment=body.createEl('button',{text:'Try one Experimental AI MCQ (unverified)',cls:'mod-cta'});
-    experiment.disabled=p.busy;experiment.addEventListener('click',()=>void p.experimentalGenerate(indexId));
+    const experimentRow=body.createDiv({cls:'marrow-toolbar'});
+    for(const n of [1,10,20]){
+      const experiment=experimentRow.createEl('button',{text:'Generate '+n+' experimental MCQ'+(n===1?'':'s'),cls:n===10?'mod-cta':''});
+      experiment.disabled=p.busy;
+      experiment.addEventListener('click',()=>void p.experimentalGenerate(indexId,n));
+    }
     const warning=body.createEl('p',{cls:'marrow-hint',text:'Experimental Groq questions are source-checked but NOT independently medically certified. Answers may be wrong. Your experimental choices remain separate from verified learning scores.'});
     const candidate=body.createEl('button',{text:'Generate ONE audit-only draft with Groq'});
     candidate.disabled=p.busy;candidate.addEventListener('click',()=>void p.auditCandidate(indexId));
