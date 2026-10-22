@@ -30,6 +30,7 @@ jobs:
           node tests/pyq-style-smoke.js
           node tests/pyq-style-multi-index-audit.js
           node tests/pyq-style-experimental-integration.js
+          node tests/pyq-style-feedback-sync.js
           node --check tests/dynamic-smoke.js
           node --check tests/dynamic-integration.js && node --check tests/dynamic-hierarchy-mobile.js && node --check tests/dynamic-progress-sync.js
           node --check tests/live-groq-eval.js
