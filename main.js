@@ -2136,7 +2136,18 @@ async function callDynamicGroq(plugin, messages, kind, unitCount=1, completionTo
   if (response.status !== 200) {
     const body = response.json || {};
     const msg = body.error && body.error.message ? String(body.error.message).slice(0,200) : 'HTTP '+response.status;
-    throw new Error('Groq rejected the request (HTTP '+response.status+'): '+msg+'. Free-tier quotas may apply.');
+    const error=new Error('Groq rejected the request (HTTP '+response.status+'): '+msg+'. Free-tier quotas may apply.');
+    error.groqHttpStatus=response.status;
+    if(response.status===429){
+      const header=Object.entries(response.headers||{}).find(([name])=>
+        String(name).toLowerCase()==='retry-after');
+      const seconds=Number(header?.[1]);
+      // Provider retry-after is seconds. Do not retry unbounded/daily exhaustion.
+      error.groqRetryAfterMs=Number.isFinite(seconds)&&seconds>0?
+        Math.ceil(seconds*1000):65000;
+      error.groqDailyLimit=/requests per day|tokens per day|daily|per-day|rpd|tpd/i.test(msg);
+    }
+    throw error;
   }
   const result = response.json;
   const content = result && result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content;
