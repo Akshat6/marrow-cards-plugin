@@ -205,6 +205,7 @@ async function run(){
  assert.equal(ctrl.experimentalOptionOrder.join(','),preserved,'flag redraw must retain visible letters');
  assert(screen.findText('Finish practice'));
  assert(screen.findText('All four options explained'));
+ ctrl.experimentalBookmarked=false; // Reset state for the existing bookmark-toggle test.
  await ctrl.experimentalBookmark();
  assert.equal(ctrl.experimentalBookmarked,true);
  await ctrl.experimentalBookmark();
