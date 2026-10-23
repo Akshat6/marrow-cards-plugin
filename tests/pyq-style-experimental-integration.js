@@ -94,6 +94,14 @@ view.draw=()=>{};view.units=units;view.selectedIndex='IDX-ONE';
 const ctrl=new P.PyqStyleController(view);view.pyqState=ctrl;
 async function run(){
  assert.equal(P.validatePyqExperimentalFeed(feed,units),feed);
+ const extra={...unit(4,'IDX-NEW'),verification:'Needs Review',reviewRequired:true,
+   reviewReason:'Synthetic source ambiguity',sourceExcerptType:'normalized-source-paraphrase',
+   studyActivation:{approved:true,approvalId:'SYN-ACT',scope:'DYNAMIC_RECALL_ONLY',approvedAt:'2026-01-01'}};
+ assert.equal(P.validatePyqExperimentalFeed(feed,[...units,extra]),feed,'Unrelated notes-only additions preserve existing experimental catalog');
+ bad('Declared Verified KU cannot become flagged',()=>P.validatePyqExperimentalFeed(feed,[{...extra,id:units[0].id},...units.slice(1)]));
+ const excludedCatalog=cp(feed);excludedCatalog.researchCatalog.allVerifiedKuIds=units.slice(1).map(u=>u.id);
+ bad('Blueprint may not use source outside declared catalog',()=>P.validatePyqExperimentalFeed(excludedCatalog,units));
+
  assert.equal(P.selectPyqExperimentalBlueprint(feed,units,'IDX-ONE').blueprint.blueprintId,'BP-TEST-ONE');
  bad('source index must not display question',()=>P.selectPyqExperimentalBlueprint(feed,units,'IDX-TWO'));
  const held=cp(bp1);held.blueprintId='BP-TEST-HELD';held.experimentalEnabled=false;
@@ -236,3 +244,4 @@ async function run(){
  console.log('PASS expanded experimental intelligence: 35+ blueprints, standalone/held, rotation, duplicate rejection, multiline options, three-index source and isolated logs.');
 }
 run().catch(e=>{console.error(e);process.exitCode=1;});
+
