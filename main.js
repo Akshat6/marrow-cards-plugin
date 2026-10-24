@@ -2690,7 +2690,7 @@ class MarrowDailyQuestView extends ItemView{
       new Notice('Daily Quest rules refreshed from private GitHub. Existing daily plan stays fixed until tomorrow.');
     }catch(e){this.error='Rules not changed: '+String(e.message||e);
       new Notice('Daily Quest: '+this.error);this.draw();}
-    finally{this.busy=false;}
+    finally{this.busy=false;this.draw();}
   }
   async start(){
     if(this.busy)return;
@@ -2797,7 +2797,7 @@ class MarrowDailyQuestView extends ItemView{
     const ordinal=items.findIndex(x=>x===item.key)+1;
     const topic=item.source?.indexTitle||
       this.plugin.indexes.find(x=>x.id===(item.type==='pyq'?
-        item.source?.indexIds?.find(id=>DAILY_QUEST_POLICY.indexIds.includes(id)):
+        item.source?.indexIds?.find(id=>this.policy.indexIds.includes(id)):
         item.source?.indexId))?.title||
       (item.type==='ku'?'Knowledge Unit':'Original PYQ');
     const badge=wrap.createDiv({cls:'marrow-quest-meta'});
