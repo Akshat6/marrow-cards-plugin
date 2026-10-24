@@ -88,6 +88,11 @@ const shortDue=dailyQuestSelect([largePool[0]],'2026-10-26',new Map([[
   largePool[0].key,{itemKey:largePool[0].key,type:'graded',grade:'again',at:'2026-10-25T12:00:00Z'}
 ]]),new Map(),new Map());
 assert.equal(shortDue.length,1,'Again returns at one day');
+const nextMorning=dailyQuestSelect([largePool[0]],'2026-10-26',new Map([[
+  largePool[0].key,{itemKey:largePool[0].key,type:'graded',grade:'again',
+    day:'2026-10-25',at:'2026-10-25T23:55:00+05:30'}
+]]),new Map(),new Map());
+assert.equal(nextMorning.length,1,'One-day spacing follows local dates, not 24 elapsed hours');
 assert.equal(dailyQuestSelect([largePool[0]],'2026-10-25',new Map([[
   largePool[0].key,{itemKey:largePool[0].key,type:'graded',grade:'good',at:'2026-10-24T12:00:00Z'}
 ]]),new Map(),new Map()).length,0,'No immediate non-due repeats');
