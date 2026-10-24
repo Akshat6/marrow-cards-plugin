@@ -2645,11 +2645,6 @@ class MarrowDailyQuestView extends ItemView{
     }catch(e){this.error=String(e.message||e);}
     this.screen='home';this.draw();
   }
-  getPlanItems(){
-    return this.plan?.items||dailyQuestSelect(this.pool,this.day,this.history,
-      this.plugin.stats,
-      dynamicReviewSummary(this.dynamicEvents||[]).totals);
-  }
   async start(){
     if(this.busy||this.error)return;
     this.busy=true;
@@ -2669,7 +2664,9 @@ class MarrowDailyQuestView extends ItemView{
     finally{this.busy=false;this.draw();}
   }
   current(){
-    const key=(this.plan?.items||[]).find(x=>!this.todayDone.has(x));
+    // Keep the just-graded card visible for its explanation until Next is tapped.
+    const key=this.answered&&this.currentKey?this.currentKey:
+      (this.plan?.items||[]).find(x=>!this.todayDone.has(x));
     if(!key)return null;
     const type=key.slice(0,1)==='p'?'pyq':'ku',id=key.slice(2);
     return {key,type,source:type==='pyq'?this.pyqs.get(id):this.kus.get(id)};
@@ -2743,7 +2740,10 @@ class MarrowDailyQuestView extends ItemView{
     const item=this.current();
     if(!item){this.screen='home';this.draw();return;}
     const ordinal=items.findIndex(x=>x===item.key)+1;
-    const topic=item.source?.indexTitle||this.plugin.indexes.find(x=>x.id===item.source?.indexId)?.title||
+    const topic=item.source?.indexTitle||
+      this.plugin.indexes.find(x=>x.id===(item.type==='pyq'?
+        item.source?.indexIds?.find(id=>DAILY_QUEST_POLICY.indexIds.includes(id)):
+        item.source?.indexId))?.title||
       (item.type==='ku'?'Knowledge Unit':'Original PYQ');
     const badge=wrap.createDiv({cls:'marrow-quest-meta'});
     badge.createSpan({text:item.type==='ku'?'KNOWLEDGE UNIT':'ORIGINAL PYQ'});
