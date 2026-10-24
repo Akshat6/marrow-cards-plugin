@@ -1,3 +1,13 @@
+# Daily Quest initial prototype — superseded by approved Phase 1
+
+The original mixed-KU prototype has been revised at the user's explicit direction on **2026-10-24**. **Do not rely on this file as the current product specification.** Canonical, detailed Phase 1 and new-chat runbook: [daily-quest-handoff.md](daily-quest-handoff.md).
+
+The current feature is **up to 10 approved, safely gradeable original PYQ MCQs per local day**, one block of ten, no knowledge units, no AI; new-to-Daily-Quest PYQs first and 1/4-day spacing thereafter. The initial 32-card eligible pool is a dated live-data snapshot. Remote policy `Akshat6/marrow-cards-data/daily-quest/policy.json` v1.1.0 controls current index whitelist, goal and intervals.
+
+Original research MVP description retained below **only as historical context**, not live behavior:
+
+---
+
 # Daily Quest — proposed lightweight Obsidian review mode (feature branch)
 
 A **third view inside the existing Marrow Cards plugin**. Not a new plugin, separate question bank, static .canvas board, or replacement for original PYQ Review / Knowledge Dynamic Recall.
