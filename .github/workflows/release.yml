@@ -7,6 +7,7 @@ on:
       - manifest.json
       - styles.css
       - tests/smoke.js
+      - tests/daily-quest.js
       - tests/dynamic-smoke.js
       - tests/dynamic-integration.js
       - tests/dynamic-flagged-units.js
@@ -25,6 +26,7 @@ jobs:
           set -euo pipefail
           node --check main.js
           node tests/smoke.js
+          node tests/daily-quest.js
           node --check tests/pyq-style-smoke.js
           node --check tests/pyq-style-multi-index-audit.js
           node --check tests/pyq-style-experimental-integration.js
