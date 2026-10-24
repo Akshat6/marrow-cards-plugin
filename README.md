@@ -14,7 +14,7 @@
 
 # Marrow Cards — Obsidian plugin for indexed MBBS review
 
-**Released plugin v0.3.11 (manifest checked 2026-10-22):** Existing PYQ Review stays available, with a new, separate **Dynamic Recall** mode for one index at a time. The 0–10 Groq grader, KU-linked history, manual score correction and batched generation have passed synthetic and a limited real Groq audit. **Android device tests remain pending.** Back up your vault and review [rollback instructions](docs/rollback-v0.3.0.md) before updating.
+**New 0.3.19 release candidate (2026-10-24):** The third view, **Daily Quest**, is PYQ-only and one 10-card session per day. The separate original PYQ Review and Groq Dynamic Recall modes remain available. This line is a code-branch description until the main GitHub release is verified; Android device tests remain pending. Back up your vault and review [rollback instructions](docs/rollback-v0.3.0.md) before a BRAT upgrade.
 
 
 An offline-first Obsidian flashcard reviewer for **user-approved** MBBS PYQs and personal facts. The public repository contains the **plugin code and instructions**. Approved cards and original images live in the separate, **private** `Akshat6/marrow-cards-data` repository. Android phone/tablet review logs are maintained per device and can sync through Syncthing.
