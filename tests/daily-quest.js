@@ -12,12 +12,25 @@ const fakeObsidian={
   requestUrl(){},base64ToArrayBuffer(){},normalizePath(s){return s;}
 };
 vm.runInNewContext(src+
-  '\nmodule.exports={DAILY_QUEST_POLICY,dailyQuestDay,dailyQuestCandidatePool,dailyQuestPriority,dailyQuestSelect,dailyQuestLatest,dailyQuestAppend,MarrowDailyQuestView};',
+  '\nmodule.exports={DAILY_QUEST_POLICY,validateDailyQuestPolicy,dailyQuestDay,dailyQuestCandidatePool,dailyQuestPriority,dailyQuestSelect,dailyQuestLatest,dailyQuestAppend,MarrowDailyQuestView};',
   {module:mod,require(n){if(n==='obsidian')return fakeObsidian;throw Error(n);},
     console,Date,Math,Promise,Set,Map});
-const {DAILY_QUEST_POLICY:policy,dailyQuestDay,dailyQuestCandidatePool,
+const {DAILY_QUEST_POLICY:policy,validateDailyQuestPolicy,dailyQuestDay,dailyQuestCandidatePool,
   dailyQuestPriority,dailyQuestSelect,dailyQuestLatest,dailyQuestAppend,MarrowDailyQuestView:View}=mod.exports;
 assert.equal(policy.goal,30);
+assert.equal(validateDailyQuestPolicy(policy),policy);
+assert.throws(()=>validateDailyQuestPolicy({...policy,indexIds:['INT-PULM']}),/Invalid Daily Quest/);
+assert.throws(()=>validateDailyQuestPolicy({...policy,goal:100}),/Invalid Daily Quest/);
+assert.throws(()=>validateDailyQuestPolicy({...policy,indexIds:[policy.indexIds[0],policy.indexIds[0]]}),/Invalid Daily Quest/);
+assert.throws(()=>validateDailyQuestPolicy({...policy,weakDays:-1}),/Invalid Daily Quest/);
+const modified=validateDailyQuestPolicy({...policy,version:'1.0.1',goal:40,pyqTarget:12,blockSize:10});
+assert.equal(modified.goal,40);
+const makePool=[...Array.from({length:20},(_,i)=>({key:'p:C-'+i,type:'pyq',id:'C-'+i})),
+  ...Array.from({length:50},(_,i)=>({key:'k:U-'+i,type:'ku',id:'U-'+i}))];
+const choice=dailyQuestSelect(makePool,'2026-10-24',new Map(),new Map(),new Map(),modified);
+assert.equal(choice.length,40);
+assert.equal(choice.filter(x=>x.startsWith('p:')).length,12);
+
 assert.equal(policy.blockSize,10);
 assert.equal(policy.pyqTarget,8);
 assert(policy.indexIds.includes('MED-PULM-08'));
