@@ -2520,7 +2520,7 @@ const DAILY_QUEST_POLICY=Object.freeze({
 });
 function validateDailyQuestPolicy(p){
   if(!p||p.schemaVersion!==1||p.kind!=='marrow-daily-quest-policy'||
-     typeof p.version!=='string'||!/^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$/.test(p.version)||
+     typeof p.version!=='string'||!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(p.version)||
      !Number.isInteger(p.goal)||p.goal<10||p.goal>50||
      !Number.isInteger(p.blockSize)||p.blockSize<5||p.blockSize>20||
      p.goal%p.blockSize!==0||!Number.isInteger(p.pyqTarget)||
