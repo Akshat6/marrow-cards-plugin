@@ -121,5 +121,49 @@ assert.equal(view.current().key,'k:KU-A');
     'Daily Quest must not write PYQ Review history');
   assert(!touched.some(x=>x.startsWith('MarrowCards/dynamic-recall/')),
     'Daily Quest must not write AI-grading history');
+
+  // Actual view transitions: one original MCQ, one KU, saved answer screen,
+  // automatic next item and completed dashboard. No medical facts in fixture.
+  class Node {
+    constructor(props={}){this.text=props.text||'';this.cls=props.cls||'';this.style={};
+      this.children=[];this.handlers={};this.disabled=false;}
+    empty(){this.children=[];}
+    addClass(){}
+    createDiv(x={}){const n=new Node(x);this.children.push(n);return n;}
+    createEl(_tag,x={}){const n=new Node(x);this.children.push(n);return n;}
+    createSpan(x={}){return this.createEl('span',x);}
+    addEventListener(k,v){this.handlers[k]=v;}
+    findText(t){if(this.text===t)return this;
+      for(const c of this.children){const f=c.findText(t);if(f)return f;}return null;}
+    findClass(cls){if(this.cls.split(' ').includes(cls))return this;
+      for(const c of this.children){const f=c.findClass(cls);if(f)return f;}return null;}
+  }
+  const fakePlugin={...mock,indexes:[],cards:[],stats:new Map(),loadCollection:async()=>{}};
+  const ui=new View({app:mock.app},fakePlugin);
+  ui.contentEl=new Node();
+  ui.day='2026-10-24';ui.plan={items:['p:PYQ-A','k:KU-A']};
+  ui.pyqs=new Map([['PYQ-A',card('PYQ-A',['MED-PULM-08'])]]);
+  ui.kus=new Map([['KU-A',ku('KU-A','ANAT-R3-069')]]);
+  ui.todayDone=new Set();ui.screen='study';ui.allEvents=[];
+  ui.draw();
+  const option=ui.contentEl.findClass('marrow-quest-option');
+  assert(option&&!option.disabled,'Approved MCQ option is tap-enabled');
+  option.handlers.click();
+  await new Promise(resolve=>setTimeout(resolve,10));
+  assert.equal(ui.answered,true);
+  assert(ui.contentEl.findText('SOURCE ANSWER'),'Answer remains after saving');
+  assert(ui.contentEl.findText('Next card →'),'Next button remains accessible');
+  ui.contentEl.findText('Next card →').handlers.click();
+  assert(ui.contentEl.findText('Synthetic retrieval target'),
+    'Next screen should be the KU prompt');
+  ui.contentEl.findText('Reveal answer').handlers.click();
+  assert(ui.contentEl.findText('Synthetic reference answer'));
+  ui.contentEl.findText('Got it').handlers.click();
+  await new Promise(resolve=>setTimeout(resolve,10));
+  assert(ui.contentEl.findText('Finish today'),
+    'Two completed items must allow returning to the dashboard');
+  ui.contentEl.findText('Finish today').handlers.click();
+  assert(ui.contentEl.findText('Completed for today ✓'));
+
   console.log('Daily Quest scope, selection, stable plan, explanation and isolated logs passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
