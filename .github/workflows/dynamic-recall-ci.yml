@@ -27,6 +27,8 @@ jobs:
         run: node tests/dynamic-progress-sync.js
       - name: Verify real-Groq test harness without a secret or API calls
         run: node tests/live-groq-eval.js --dry-run
+      - name: Daily Quest lightweight reviewer regression
+        run: node tests/daily-quest.js
       - name: Verify semantic version and unchanged plugin ID
         run: |
           node -e "const m=require('./manifest.json'); if(!/^\\d+\\.\\d+\\.\\d+$/.test(m.version)||m.id !== 'marrow-cards') process.exit(1)"
