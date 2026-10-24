@@ -1028,7 +1028,7 @@
 .marrow-quest-top h2{margin:10px 0;font-size:clamp(26px,5.5vw,37px);letter-spacing:-.045em;line-height:1.1}
 .marrow-quest-eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);font-weight:750}
 .marrow-quest-muted{color:var(--text-muted);font-size:13px;line-height:1.5;margin:8px 0 14px}
-.marrow-quest-actions{display:flex;justify-content:flex-end}
+.marrow-quest-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 .marrow-daily button{touch-action:manipulation;min-height:43px;white-space:normal;text-align:center}
 .marrow-daily .marrow-quest-subtle{background:transparent;border:1px solid var(--background-modifier-border);font-size:12px;padding:7px 14px;border-radius:12px}
 .marrow-quest-overview{padding:22px 20px;margin:8px 0 14px;border:1px solid var(--background-modifier-border);border-radius:20px;background:var(--background-secondary)}
