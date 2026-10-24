@@ -1019,3 +1019,45 @@
   overflow-wrap: anywhere;
 }
 .marrow-dynamic-source-warning p { margin: 0.35em 0 0; }
+
+
+/* Daily Quest — intentionally isolated from TPYQ Review and Dynamic Recall. */
+.marrow-daily{overflow-y:auto;height:100%;padding:0 12px 24px;box-sizing:border-box}
+.marrow-quest-shell{max-width:720px;margin:0 auto;padding:22px 8px 32px;color:var(--text-normal)}
+.marrow-quest-top{position:relative;padding:20px 18px 12px}
+.marrow-quest-top h2{margin:10px 0;font-size:clamp(26px,5.5vw,37px);letter-spacing:-.045em;line-height:1.1}
+.marrow-quest-eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);font-weight:750}
+.marrow-quest-muted{color:var(--text-muted);font-size:13px;line-height:1.5;margin:8px 0 14px}
+.marrow-quest-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.marrow-daily button{touch-action:manipulation;min-height:43px;white-space:normal;text-align:center}
+.marrow-daily .marrow-quest-subtle{background:transparent;border:1px solid var(--background-modifier-border);font-size:12px;padding:7px 14px;border-radius:12px}
+.marrow-quest-overview{padding:22px 20px;margin:8px 0 14px;border:1px solid var(--background-modifier-border);border-radius:20px;background:var(--background-secondary)}
+.marrow-quest-number{font-weight:800;font-size:35px;letter-spacing:-.045em;line-height:1.15}
+.marrow-quest-small{color:var(--text-muted);font-size:12px;margin:5px 0 18px}
+.marrow-quest-track{height:10px;border-radius:999px;overflow:hidden;background:var(--background-modifier-border)}
+.marrow-quest-track-fill{height:100%;background:var(--interactive-accent);border-radius:inherit;transition:width .18s ease}
+.marrow-quest-metrics{display:flex;gap:9px;flex-wrap:wrap;margin-top:17px;color:var(--text-muted);font-size:12px}
+.marrow-quest-metrics span{padding:7px 12px;border-radius:999px;background:var(--background-primary)}
+.marrow-quest-primary{display:block;width:100%;min-height:52px!important;border-radius:15px!important;margin:17px 0 10px;padding:12px 18px!important;background:var(--interactive-accent)!important;color:var(--text-on-accent)!important;font-size:16px;font-weight:700}
+.marrow-quest-primary:disabled{opacity:.5;cursor:default}
+.marrow-quest-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--text-muted);font-size:11px;font-weight:700;letter-spacing:.09em;margin:20px 7px 4px}
+.marrow-quest-card{padding:22px 18px;margin-top:12px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);border-radius:20px}
+.marrow-quest-card h3{font-size:clamp(17px,4.4vw,22px);font-weight:650;line-height:1.48;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0 18px}
+.marrow-quest-option{display:block;width:100%;text-align:left!important;line-height:1.5;white-space:pre-wrap!important;overflow-wrap:anywhere;min-height:50px;border-radius:12px!important;padding:12px 15px!important;margin:9px 0;border:1px solid var(--background-modifier-border)!important;background:var(--background-primary)!important;color:var(--text-normal)!important}
+.marrow-quest-option:disabled{opacity:.9;cursor:default}
+.marrow-quest-option:not(:disabled):active{transform:scale(.995)}
+.marrow-quest-image{display:block;max-width:100%;max-height:310px;object-fit:contain;margin:12px auto;border-radius:10px}
+.marrow-quest-answer{margin:12px 0 14px;padding:18px 19px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);border-radius:16px}
+.marrow-quest-answer p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.62}
+.marrow-quest-grade{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:10px}
+.marrow-quest-grade button{min-height:50px;border-radius:14px;font-size:15px;font-weight:650}
+.marrow-quest-again{border:1px solid var(--background-modifier-border)!important;background:var(--background-secondary)!important;color:var(--text-normal)!important}
+.marrow-quest-good{background:var(--interactive-accent)!important;color:var(--text-on-accent)!important}
+.marrow-quest-warning{margin:12px 0;padding:12px;border:1px solid var(--color-orange);border-radius:10px;font-size:13px;overflow-wrap:anywhere}
+@media(max-width:600px){
+ .marrow-daily{padding:0 6px 24px}
+ .marrow-quest-shell{padding:10px 5px 24px}
+ .marrow-quest-top{padding:10px 9px 7px}
+ .marrow-quest-overview{padding:18px 16px}
+ .marrow-quest-card{padding:18px 14px}
+}
