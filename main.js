@@ -2562,8 +2562,12 @@ function dailyQuestPriority(item,day,history,_pyqStats,_kuStats,policy=DAILY_QUE
   const self=history.get(item.key);
   // Coverage-first: no repeat if an unseen original MCQ is available.
   const gap=self?.grade==='again'?policy.weakDays:policy.goodDays;
-  const age=self&&Number.isFinite(Date.parse(self.at))?
-    (Date.parse(day+'T12:00:00')-Date.parse(self.at))/86400000:0;
+  // Calendar-day spacing: an Again answered late at night is due tomorrow,
+  // irrespective of when the student opens Obsidian on that next date.
+  const previousDay=self?.day&&/^\d{4}-\d{2}-\d{2}$/.test(self.day)?self.day:
+    self?.at&&Number.isFinite(Date.parse(self.at))?dailyQuestDay(new Date(self.at)):null;
+  const age=previousDay?
+    (Date.parse(day+'T00:00:00Z')-Date.parse(previousDay+'T00:00:00Z'))/86400000:0;
   let seed=0;for(const char of day+item.key)seed=(seed*33+char.charCodeAt(0))>>>0;
   const tie=(seed%1000)/10000;
   if(!self)return -200+tie;
