@@ -2501,16 +2501,16 @@ async function saveDynamicAnalysisReports(plugin, units, attempts, catalog=[], c
 
 
 // ---------------------------------------------------------------------------
-// Daily Quest: independent, offline first, rapid self-recall. A view, not a
-// third copy of PYQ/KU source data. Only item IDs and local outcomes are saved.
+// Daily Quest phase one: independent, offline-first, original PYQ MCQs only.
+// No Knowledge Units, model generation or edits to source card data.
 // ---------------------------------------------------------------------------
 const DAILY_QUEST_VIEW_TYPE='marrow-daily-quest';
 const DAILY_QUEST_ROOT=ROOT+'/daily-quest';
 const DAILY_QUEST_ATTEMPTS=DAILY_QUEST_ROOT+'/attempts';
 const DAILY_QUEST_DAYS=DAILY_QUEST_ROOT+'/days';
 const DAILY_QUEST_POLICY=Object.freeze({
-  schemaVersion:1,kind:'marrow-daily-quest-policy',version:'1.0.0',
-  goal:30,pyqTarget:8,blockSize:10,weakDays:1,goodDays:4,
+  schemaVersion:1,kind:'marrow-daily-quest-policy',version:'1.1.0',
+  goal:10,pyqTarget:10,blockSize:10,weakDays:1,goodDays:4,
   indexIds:[
     'ANAT-R3-067','ANAT-R3-068','ANAT-R3-069','ANAT-R3-070','ANAT-R3-074',
     'PED-RESP-04',
@@ -2524,7 +2524,7 @@ function validateDailyQuestPolicy(p){
      !Number.isInteger(p.goal)||p.goal<10||p.goal>50||
      !Number.isInteger(p.blockSize)||p.blockSize<5||p.blockSize>20||
      p.goal%p.blockSize!==0||!Number.isInteger(p.pyqTarget)||
-     p.pyqTarget<0||p.pyqTarget>p.goal||
+     p.pyqTarget!==p.goal||
      !Number.isInteger(p.weakDays)||p.weakDays<0||p.weakDays>14||
      !Number.isInteger(p.goodDays)||p.goodDays<1||p.goodDays>60||
      !Array.isArray(p.indexIds)||p.indexIds.length<1||p.indexIds.length>100||
@@ -2537,17 +2537,15 @@ function dailyQuestDay(date=new Date()){
   return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),
     String(date.getDate()).padStart(2,'0')].join('-');
 }
-function dailyQuestCandidatePool(cards,units,policy=DAILY_QUEST_POLICY){
+function dailyQuestCandidatePool(cards,_units,policy=DAILY_QUEST_POLICY){
   const allow=new Set(policy.indexIds);
   const result=[];
   for(const c of cards||[]){
-    // Only original approved items at actual source indexes, not INT aliases.
-    if(!isCard(c)||['unverified','source_incomplete'].includes(c.answerStatus))continue;
+    // Phase one: approved original PYQ with answerable options and a resolvable key.
+    if(c?.type!=='pyq'||!isCard(c)||
+      ['unverified','source_incomplete'].includes(c.answerStatus)||
+      correctOptionIndex(c)<0)continue;
     if(c.indexIds.some(id=>allow.has(id)))result.push({key:'p:'+c.id,type:'pyq',id:c.id});
-  }
-  for(const u of units||[]){
-    if(validDynamicStudyUnit(u)&&allow.has(u.indexId))
-      result.push({key:'k:'+u.id,type:'ku',id:u.id});
   }
   return result;
 }
@@ -2560,47 +2558,28 @@ function dailyQuestLatest(events){
   }
   return map;
 }
-function dailyQuestPriority(item,day,history,pyqStats,kuStats,policy=DAILY_QUEST_POLICY){
+function dailyQuestPriority(item,day,history,_pyqStats,_kuStats,policy=DAILY_QUEST_POLICY){
   const self=history.get(item.key);
-  const score=item.type==='pyq'?pyqStats.get(item.id):kuStats.get(item.id);
-  const lastAt=self?.at||score?.last;
-  const havePrevious=Boolean(lastAt&&Number.isFinite(Date.parse(lastAt)));
-  // Existing PYQ right/wrong and AI-assessed KU scores inform *selection*;
-  // Daily Quest self-ratings never overwrite those independent scores.
-  const weak=self?self.grade==='again':
-    item.type==='pyq'?Boolean(score&&score.wrong>score.right):
-      Boolean(score&&(score.lastGrade==='wrong'||score.lastGrade==='partial'||
-        (Number.isInteger(score.lastScore)&&score.lastScore<=7)));
-  const gap=weak?policy.weakDays:policy.goodDays;
-  const age=havePrevious?(Date.parse(day+'T12:00:00')-Date.parse(lastAt))/86400000:0;
-  let tier=havePrevious?(age>=gap?-100-Math.min(age-gap,45):100+gap-age):0;
-  // Rotate ties deterministically by day rather than favoring alphabetical IDs.
+  // Coverage-first: no repeat if an unseen original MCQ is available.
+  const gap=self?.grade==='again'?policy.weakDays:policy.goodDays;
+  const age=self&&Number.isFinite(Date.parse(self.at))?
+    (Date.parse(day+'T12:00:00')-Date.parse(self.at))/86400000:0;
   let seed=0;for(const char of day+item.key)seed=(seed*33+char.charCodeAt(0))>>>0;
-  return tier+(seed%1000)/10000;
+  const tie=(seed%1000)/10000;
+  if(!self)return -200+tie;
+  if(age>=gap)return -100-Math.min(age-gap,45)+tie;
+  // Not due: do not force an early repeat just to meet a numerical quota.
+  return 100+gap-age+tie;
 }
 function dailyQuestSelect(pool,day,history,pyqStats,kuStats,policy=DAILY_QUEST_POLICY){
-  const ranked=pool.slice().sort((a,b)=>
-    dailyQuestPriority(a,day,history,pyqStats,kuStats,policy)-
-    dailyQuestPriority(b,day,history,pyqStats,kuStats,policy));
-  const pyq=ranked.filter(x=>x.type==='pyq');
-  const ku=ranked.filter(x=>x.type==='ku');
-  const chosen=[...pyq.slice(0,policy.pyqTarget),...ku.slice(0,policy.goal-policy.pyqTarget)];
-  const selected=new Set(chosen.map(x=>x.key));
-  for(const item of ranked)if(chosen.length<policy.goal&&!selected.has(item.key)){
-    chosen.push(item);selected.add(item.key);
-  }
-  // Interleave the sources; avoid a monotonous run of eight PYQs.
-  const p=chosen.filter(x=>x.type==='pyq'), k=chosen.filter(x=>x.type==='ku');
-  const arranged=[];
-  while(p.length||k.length){
-    if(k.length)arranged.push(k.shift());
-    if(k.length)arranged.push(k.shift());
-    if(p.length)arranged.push(p.shift());
-  }
-  return arranged.slice(0,policy.goal).map(x=>x.key);
+  return pool.filter(item=>item.type==='pyq'&&
+      dailyQuestPriority(item,day,history,pyqStats,kuStats,policy)<0)
+    .sort((a,b)=>dailyQuestPriority(a,day,history,pyqStats,kuStats,policy)-
+      dailyQuestPriority(b,day,history,pyqStats,kuStats,policy))
+    .slice(0,policy.goal).map(item=>item.key);
 }
 async function dailyQuestAppend(plugin,itemKey,grade,day){
-  if(!/^(?:p|k):[A-Za-z0-9_-]{1,100}$/.test(itemKey)||
+  if(!/^p:[A-Za-z0-9_-]{1,100}$/.test(itemKey)||
      !['good','again'].includes(grade)||!String(day).match(/^\d{4}-\d{2}-\d{2}$/))
     throw new Error('Invalid Daily Quest attempt');
   const now=new Date().toISOString();
@@ -2619,21 +2598,10 @@ async function dailyQuestAppend(plugin,itemKey,grade,day){
   return plugin.dailyQuestWriteQueue;
 }
 
-function dailyQuestSourceWarning(container,unit,reveal=false){
-  if(unit.verification==='Verified')return;
-  const box=container.createDiv({cls:'marrow-quest-warning'});
-  if(dynamicNeedsReview(unit)){
-    box.createEl('strong',{text:'Flagged for review — verify the source answer'});
-    box.createEl('p',{text:'This reference is provisional; a Daily Quest self-rating does not validate its medical accuracy.'});
-    if(reveal&&unit.reviewReason)box.createEl('p',{text:'Reason: '+unit.reviewReason});
-  }else box.createEl('p',{text:'Source-extracted reference — not independently verified.'});
-  if(reveal&&unit.sourceLocator)box.createEl('p',{text:'Check: '+unit.sourceLocator});
-}
-
 class MarrowDailyQuestView extends ItemView{
   constructor(leaf,plugin){
     super(leaf);this.plugin=plugin;this.day='';this.plan=null;
-    this.pool=[];this.pyqs=new Map();this.kus=new Map();this.history=new Map();
+    this.pool=[];this.pyqs=new Map();this.history=new Map();
     this.todayDone=new Set();this.allEvents=[];this.screen='home';
     this.revealed=false;this.answered=false;this.choice=null;this.optionOrder=[];
     this.currentKey='';this.busy=false;this.error='';this.policy=DAILY_QUEST_POLICY;
@@ -2646,15 +2614,12 @@ class MarrowDailyQuestView extends ItemView{
     try{
       if(this.plugin.initPromise)await this.plugin.initPromise;
       await this.plugin.loadCollection();
-      const file=this.app.vault.getAbstractFileByPath(DYNAMIC_UNITS_FILE);
-      const units=file?validateDynamicUnits(JSON.parse(await this.app.vault.read(file))).units:[];
       const policyFile=this.app.vault.getAbstractFileByPath(DAILY_QUEST_ROOT+'/policy.json');
       this.policy=policyFile?
         validateDailyQuestPolicy(JSON.parse(await this.app.vault.read(policyFile))):
         DAILY_QUEST_POLICY;
       this.pyqs=new Map(this.plugin.cards.map(c=>[c.id,c]));
-      this.kus=new Map(units.map(u=>[u.id,u]));
-      this.pool=dailyQuestCandidatePool(this.plugin.cards,units,this.policy);
+      this.pool=dailyQuestCandidatePool(this.plugin.cards,[],this.policy);
       this.allEvents=await readDynamicEvents(this.plugin,DAILY_QUEST_ATTEMPTS);
       this.history=dailyQuestLatest(this.allEvents);
       this.day=dailyQuestDay();
@@ -2665,7 +2630,7 @@ class MarrowDailyQuestView extends ItemView{
         const parsed=JSON.parse(await this.app.vault.read(prior));
         if(parsed?.kind!=='marrow-daily-quest-day'||parsed.day!==this.day||
            !Array.isArray(parsed.items)||!parsed.items.every(x=>typeof x==='string'&&
-             /^(?:p|k):[A-Za-z0-9_-]{1,100}$/.test(x))||
+             /^p:[A-Za-z0-9_-]{1,100}$/.test(x))||
            new Set(parsed.items).size!==parsed.items.length)
           throw new Error('Saved Daily Quest plan is invalid; no overwrite was attempted.');
         this.plan=parsed;
@@ -2700,11 +2665,11 @@ class MarrowDailyQuestView extends ItemView{
     this.busy=true;
     try{
       if(!this.plan){
-        const events=await readDynamicEvents(this.plugin,DYNAMIC_ATTEMPTS);
-        const summaries=dynamicReviewSummary(events);
         const items=dailyQuestSelect(this.pool,this.day,this.history,
-          this.plugin.stats,summaries.totals,this.policy);
-        if(!items.length){this.error='No eligible cards downloaded for Daily Quest.';return;}
+          this.plugin.stats,new Map(),this.policy);
+        if(!items.length){this.error=this.pool.length?
+          'All available PYQs are reviewed and none are due. Add approved indexes or return next review day.':
+          'No eligible original MCQs downloaded. Refresh approved PYQ packs first.';return;}
         this.plan={schemaVersion:1,kind:'marrow-daily-quest-day',day:this.day,items};
         await this.plugin.ensureFolder(DAILY_QUEST_DAYS);
         await this.plugin.writeJson(DAILY_QUEST_DAYS+'/'+this.day+'.json',this.plan);
@@ -2718,8 +2683,7 @@ class MarrowDailyQuestView extends ItemView{
     const key=this.answered&&this.currentKey?this.currentKey:
       (this.plan?.items||[]).find(x=>!this.todayDone.has(x));
     if(!key)return null;
-    const type=key.slice(0,1)==='p'?'pyq':'ku',id=key.slice(2);
-    return {key,type,source:type==='pyq'?this.pyqs.get(id):this.kus.get(id)};
+    return {key,type:'pyq',source:this.pyqs.get(key.slice(2))};
   }
   async record(grade){
     const item=this.current();
@@ -2780,47 +2744,40 @@ class MarrowDailyQuestView extends ItemView{
       bar.style.width=(items.length?Math.round(100*done/items.length):0)+'%';
       const figures=overview.createDiv({cls:'marrow-quest-metrics'});
       figures.createSpan({text:String(this.streak())+'-day streak'});
-      figures.createSpan({text:String(this.policy.blockSize)+' cards per block'});
+      figures.createSpan({text:'Original PYQs only'});
       const remaining=Math.max(0,items.length-done);
       const button=wrap.createEl('button',{cls:'marrow-quest-primary',
         text:!this.plan?'Start '+this.policy.blockSize+' cards':remaining?'Continue · '+Math.min(this.policy.blockSize,remaining)+' cards':'Completed for today ✓'});
       button.disabled=this.busy||Boolean(this.error)||Boolean(this.plan&&!remaining)||!this.pool.length;
       button.addEventListener('click',()=>void this.start());
       wrap.createEl('p',{cls:'marrow-quest-muted',text:
-        'Today’s cards come from eligible Anatomy, Pediatrics and Medicine through Respiratory Failure & ARDS. Ratings stay separate from TPYQ and Dynamic Recall.'});
+        'Up to ten new or due original MCQs daily. Initial scope: selected Anatomy, Pediatrics and Medicine through Respiratory Failure & ARDS. No AI or Knowledge Units. Ratings stay separate.'});
       if(!this.pool.length)wrap.createEl('p',{cls:'marrow-quest-warning',text:
-        'Download PYQ packs and Knowledge Units first in the existing Marrow Cards views.'});
+        'Download approved PYQ packs using Marrow Cards → Check GitHub → Refresh local.'});
       return;
     }
     const item=this.current();
     if(!item){this.screen='home';this.draw();return;}
     const ordinal=items.findIndex(x=>x===item.key)+1;
     const topic=item.source?.indexTitle||
-      this.plugin.indexes.find(x=>x.id===(item.type==='pyq'?
-        item.source?.indexIds?.find(id=>this.policy.indexIds.includes(id)):
-        item.source?.indexId))?.title||
-      (item.type==='ku'?'Knowledge Unit':'Original PYQ');
+      this.plugin.indexes.find(x=>x.id===item.source?.indexIds?.find(
+        id=>this.policy.indexIds.includes(id)))?.title||'Original PYQ';
     const badge=wrap.createDiv({cls:'marrow-quest-meta'});
-    badge.createSpan({text:item.type==='ku'?'KNOWLEDGE UNIT':'ORIGINAL PYQ'});
+    badge.createSpan({text:'ORIGINAL PYQ'});
     badge.createSpan({text:ordinal+' / '+items.length});
     wrap.createEl('p',{cls:'marrow-quest-muted',text:topic});
     const card=wrap.createDiv({cls:'marrow-quest-card'});
-    if(!item.source){
-      card.createEl('p',{text:'This card is no longer installed. Your saved daily plan was not overwritten.'});
+    if(!item.source||correctOptionIndex(item.source)<0){
+      card.createEl('p',{text:'This original MCQ cannot be safely graded or is no longer installed. Your daily plan was not overwritten.'});
       return;
     }
     if(item.key!==this.currentKey){
       this.currentKey=item.key;this.choice=null;this.revealed=false;this.answered=false;
-      const correct=item.type==='pyq'?correctOptionIndex(item.source):-1;
-      this.optionOrder=item.type==='pyq'&&Array.isArray(item.source.options)?
-        (canShuffleCard(item.source,correct)?
-          shuffleChoiceIndices(item.source.options.length):
-          item.source.options.map((_,i)=>i)):[];
+      // Match original PYQ option letters, without shuffling in Daily Quest.
+      this.optionOrder=Array.isArray(item.source.options)?
+        item.source.options.map((_,i)=>i):[];
     }
-    if(item.type==='ku'){
-      card.createEl('h3',{text:item.source.promptTarget});
-      dailyQuestSourceWarning(card,item.source,false);
-    }else{
+    {
       card.createEl('h3',{text:getQuestion(item.source)});
       for(const fileName of item.source.images||[]){
         const f=this.app.vault.getAbstractFileByPath(MEDIA+'/'+fileName);
@@ -2846,16 +2803,9 @@ class MarrowDailyQuestView extends ItemView{
       return;
     }
     const answer=wrap.createDiv({cls:'marrow-quest-answer'});
-    answer.createEl('span',{cls:'marrow-quest-eyebrow',text:
-      item.type==='ku'?dynamicReferenceLabel(item.source):'SOURCE ANSWER'});
+    answer.createEl('span',{cls:'marrow-quest-eyebrow',text:'SOURCE ANSWER'});
     answer.createEl('p',{text:item.source.answer});
-    if(item.type==='ku'){
-      dailyQuestSourceWarning(answer,item.source,true);
-      if(item.source.sourceLocator)answer.createEl('p',{cls:'marrow-quest-muted',
-        text:'Source: '+item.source.sourceLocator});
-    }else if(item.source.explanation){
-      answer.createEl('p',{text:item.source.explanation});
-    }
+    if(item.source.explanation)answer.createEl('p',{text:item.source.explanation});
     if(this.choice!==null){
       answer.createEl('p',{cls:'marrow-quest-muted',text:
         this.choice===correctOptionIndex(item.source)?'Correct answer':'Not correct this time'});
