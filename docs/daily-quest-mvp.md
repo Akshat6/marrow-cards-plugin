@@ -31,7 +31,7 @@ Current eligible pool: **576 KUs and 32 approved distinct PYQs = 608 items**. Co
 
 ## GitHub change mechanism
 
-Initial scheduling policy is centralized in DAILY_QUEST_POLICY in the public plugin main.js. ChatGPT can update the rule in GitHub, but **a code update requires a tested BRAT release on both devices**. A future private GitHub JSON policy-sync route could avoid code releases; it is not in this MVP. This mode does not create external notifications or operate while Obsidian is closed.
+A validated JSON selection policy is now in the **private data repository**, at daily-quest/policy.json; the plugin caches it at MarrowCards/daily-quest/policy.json after you tap **Update selection rules**. It covers daily goal (10–50 in whole blocks), PYQ quota, block size, weak/good review intervals and source index whitelist. ChatGPT can change it on GitHub when requested; tapping Update selection rules in Obsidian fetches the new policy without a BRAT code release. Cached rules work offline; a pre-existing daily plan stays fixed until the next calendar day. The embedded DAILY_QUEST_POLICY provides safe defaults. New selection algorithms or UI code still require tested BRAT plugin updates on both devices. This mode does not create external notifications or operate while Obsidian is closed.
 
 ## Acceptance / release
 
