@@ -2603,6 +2603,17 @@ async function dailyQuestAppend(plugin,itemKey,grade,day){
   return plugin.dailyQuestWriteQueue;
 }
 
+function dailyQuestSourceWarning(container,unit,reveal=false){
+  if(unit.verification==='Verified')return;
+  const box=container.createDiv({cls:'marrow-quest-warning'});
+  if(dynamicNeedsReview(unit)){
+    box.createEl('strong',{text:'Flagged for review — verify the source answer'});
+    box.createEl('p',{text:'This reference is provisional; a Daily Quest self-rating does not validate its medical accuracy.'});
+    if(reveal&&unit.reviewReason)box.createEl('p',{text:'Reason: '+unit.reviewReason});
+  }else box.createEl('p',{text:'Source-extracted reference — not independently verified.'});
+  if(reveal&&unit.sourceLocator)box.createEl('p',{text:'Check: '+unit.sourceLocator});
+}
+
 class MarrowDailyQuestView extends ItemView{
   constructor(leaf,plugin){
     super(leaf);this.plugin=plugin;this.day='';this.plan=null;
@@ -2769,7 +2780,7 @@ class MarrowDailyQuestView extends ItemView{
     }
     if(item.type==='ku'){
       card.createEl('h3',{text:item.source.promptTarget});
-      drawDynamicSourceNotice(card,item.source,false);
+      dailyQuestSourceWarning(card,item.source,false);
     }else{
       card.createEl('h3',{text:getQuestion(item.source)});
       for(const fileName of item.source.images||[]){
@@ -2800,7 +2811,7 @@ class MarrowDailyQuestView extends ItemView{
       item.type==='ku'?dynamicReferenceLabel(item.source):'SOURCE ANSWER'});
     answer.createEl('p',{text:item.source.answer});
     if(item.type==='ku'){
-      drawDynamicSourceNotice(answer,item.source,true);
+      dailyQuestSourceWarning(answer,item.source,true);
       if(item.source.sourceLocator)answer.createEl('p',{cls:'marrow-quest-muted',
         text:'Source: '+item.source.sourceLocator});
     }else if(item.source.explanation){
