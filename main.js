@@ -2646,7 +2646,10 @@ class MarrowDailyQuestView extends ItemView{
     this.screen='home';this.draw();
   }
   async start(){
-    if(this.busy||this.error)return;
+    if(this.busy)return;
+    // A view can remain open across midnight; never carry yesterday's plan forward.
+    if(this.day!==dailyQuestDay()){await this.refresh();return;}
+    if(this.error)return;
     this.busy=true;
     try{
       if(!this.plan){
@@ -2677,6 +2680,8 @@ class MarrowDailyQuestView extends ItemView{
     this.busy=true;
     try{
       await dailyQuestAppend(this.plugin,item.key,grade,this.day);
+      const event={type:'graded',itemKey:item.key,grade,day:this.day,at:new Date().toISOString()};
+      this.allEvents.push(event);this.history.set(item.key,event);
       this.todayDone.add(item.key);this.answered=true;
     }catch(e){this.error='Answer not saved: '+String(e.message||e);
       new Notice(this.error);}
